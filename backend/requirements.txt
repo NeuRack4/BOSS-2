@@ -1,0 +1,26 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Supabase
+supabase>=2.11.0
+
+# OpenAI
+openai==1.57.2
+
+# Embedding (BAAI/bge-m3)
+sentence-transformers>=3.0.0
+
+# Redis (Upstash REST)
+upstash-redis==1.1.0
+
+# Celery (스케쥴러 - 나중 사용)
+celery==5.4.0
+redis==5.2.1
+croniter==3.0.3
+
+# Utilities
+python-dotenv==1.0.1
+numpy==2.2.0
+tiktoken==0.8.0
