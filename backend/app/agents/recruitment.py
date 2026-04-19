@@ -86,6 +86,7 @@ async def _maybe_save_artifact(account_id: str, message: str, reply: str) -> Non
                 "domain": "recruitment",
                 "title": title,
                 "description": f"{artifact_type} 생성됨",
+                "metadata": {"artifact_id": result.data[0]["id"]},
             }).execute()
 
             # RAG 인덱싱 (백그라운드)

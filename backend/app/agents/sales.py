@@ -84,6 +84,7 @@ async def _maybe_save_artifact(account_id: str, message: str, reply: str) -> Non
                 "domain": "sales",
                 "title": title,
                 "description": f"{artifact_type} 생성됨",
+                "metadata": {"artifact_id": result.data[0]["id"]},
             }).execute()
 
             from app.rag.embedder import index_artifact

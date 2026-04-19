@@ -393,12 +393,24 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
             items={sorted}
             pendingIds={pendingIds}
             onToggle={handleToggleStatus}
+            onNavigate={(id) => {
+              onClose();
+              window.dispatchEvent(
+                new CustomEvent("boss:focus-node", { detail: { id } }),
+              );
+            }}
           />
         ) : (
           <CalendarView
             items={domainFiltered}
             cursor={cursor}
             setCursor={setCursor}
+            onNavigate={(id) => {
+              onClose();
+              window.dispatchEvent(
+                new CustomEvent("boss:focus-node", { detail: { id } }),
+              );
+            }}
           />
         )}
       </div>
@@ -434,10 +446,12 @@ const ListView = ({
   items,
   pendingIds,
   onToggle,
+  onNavigate,
 }: {
   items: ScheduleItem[];
   pendingIds: Set<string>;
   onToggle: (id: string, current: string) => void;
+  onNavigate: (id: string) => void;
 }) => {
   if (items.length === 0) {
     return (
@@ -454,7 +468,7 @@ const ListView = ({
           return (
             <li
               key={i.id}
-              className="flex items-center gap-3 rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-2"
+              className="flex items-center gap-3 rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-2 hover:border-[#bfae8a] hover:bg-[#ebe0ca]/70 transition-colors"
             >
               <span
                 className={cn(
@@ -463,7 +477,12 @@ const ListView = ({
                 )}
                 aria-hidden
               />
-              <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onNavigate(i.id)}
+                title="노드로 이동"
+                className="min-w-0 flex-1 text-left"
+              >
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm text-[#2e2719]">
                     {i.title}
@@ -483,7 +502,7 @@ const ListView = ({
                     {itemDateLine(i)}
                   </span>
                 </div>
-              </div>
+              </button>
               <StatusToggle
                 item={i}
                 pending={pendingIds.has(i.id)}
@@ -540,10 +559,12 @@ const CalendarView = ({
   items,
   cursor,
   setCursor,
+  onNavigate,
 }: {
   items: ScheduleItem[];
   cursor: Date;
   setCursor: (d: Date) => void;
+  onNavigate: (id: string) => void;
 }) => {
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -682,22 +703,26 @@ const CalendarView = ({
                 {selectedItems.map((i) => {
                   const dom = primaryDomain(i);
                   return (
-                    <li
-                      key={i.id}
-                      className="flex items-center gap-2 rounded border border-[#ddd0b4] bg-[#ebe0ca]/40 px-2 py-1.5"
-                    >
-                      <span
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full",
-                          dom ? DOMAIN_DOT[dom] : "bg-[#bfae8a]",
-                        )}
-                      />
-                      <span className="flex-1 truncate text-xs text-[#2e2719]">
-                        {i.title}
-                      </span>
-                      <span className="text-[10px] text-[#8c7e66]">
-                        {itemDateLine(i).replace(/^.*?: /, "")}
-                      </span>
+                    <li key={i.id}>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(i.id)}
+                        title="노드로 이동"
+                        className="flex w-full items-center gap-2 rounded border border-[#ddd0b4] bg-[#ebe0ca]/40 px-2 py-1.5 text-left hover:border-[#bfae8a] hover:bg-[#ebe0ca]/70 transition-colors"
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            dom ? DOMAIN_DOT[dom] : "bg-[#bfae8a]",
+                          )}
+                        />
+                        <span className="flex-1 truncate text-xs text-[#2e2719]">
+                          {i.title}
+                        </span>
+                        <span className="text-[10px] text-[#8c7e66]">
+                          {itemDateLine(i).replace(/^.*?: /, "")}
+                        </span>
+                      </button>
                     </li>
                   );
                 })}

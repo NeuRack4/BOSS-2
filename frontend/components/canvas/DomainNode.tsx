@@ -97,7 +97,7 @@ export const DomainNode = ({ data, selected }: NodeProps) => {
   return (
     <div
       className={cn(
-        "group/node relative w-[266px] overflow-hidden rounded-xl border-2 backdrop-blur transition-all shadow-md hover:shadow-lg",
+        "group/node relative w-[310px] overflow-hidden rounded-xl border-2 backdrop-blur transition-all shadow-md hover:shadow-lg",
         style.accent,
         selected && "ring-2 ring-primary/40",
       )}
@@ -126,22 +126,22 @@ export const DomainNode = ({ data, selected }: NodeProps) => {
           )}
           aria-hidden="true"
         >
-          <Icon className="h-[19px] w-[19px]" />
+          <Icon className="h-[22px] w-[22px]" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[19px] font-semibold tracking-tight text-[#2e2719]">
+          <h3 className="truncate text-[22px] font-semibold tracking-tight text-[#2e2719]">
             {displayTitle}
           </h3>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 text-[#8c7e66]">
           {count > 0 && (
-            <span className="font-mono text-[13px] tabular-nums">
+            <span className="font-mono text-[15px] tabular-nums">
               {count.toString().padStart(2, "0")}
             </span>
           )}
           <ChevronDown
             className={cn(
-              "h-[18px] w-[18px] transition-transform duration-300",
+              "h-[20px] w-[20px] transition-transform duration-300",
               expanded && "rotate-180",
             )}
           />

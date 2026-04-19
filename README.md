@@ -1,6 +1,6 @@
 # BOSS-2
 
-![version](https://img.shields.io/badge/version-0.4.0-blue)
+![version](https://img.shields.io/badge/version-0.5.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -38,8 +38,11 @@
 - **오케스트레이터 채팅**: 대화만으로 모든 기능 제어
 - **자율 스케쥴러**: 생성물마다 Celery Beat 태스크 연결
 - **일정 관리 모달**: `schedule` + 기간성 artifact(start/end/due)를 달력·리스트로 통합 관리
-- **노드 호버 상세**: 선택한 노드의 부모/자식 관계, metadata, 상태를 우측 패널에 즉시 표시
-- **RAG + 하이브리드 서치**: pgvector 벡터 검색 + BM25 키워드 검색
+- **전역 검색 팔레트** (`⌘K` / `Ctrl+K`): 제목·본문·메모·metadata 하이브리드(벡터+FTS) 검색, 결과 클릭 시 캔버스가 해당 노드로 포커스 이동
+- **노드 상세 모달**: 노드 클릭 시 부모/자식 관계, 서브도메인, metadata, ID 와 함께 **타임라인 메모**(생성/편집/삭제) — 작성된 메모는 자동 임베딩되어 검색·대화 컨텍스트에 합류
+- **Hover Inspector**: 노드 호버 시 관계·metadata 패널 표시, 최소화 상태 localStorage 유지
+- **활동이력 / 일정 → 캔버스 점프**: `ActivityModal`·`ScheduleManagerModal` 항목 클릭 시 `boss:focus-node` 이벤트로 해당 노드로 이동
+- **RAG + 하이브리드 서치**: pgvector 벡터 검색 + BM25 키워드 검색 (RRF 병합, artifact/memo/schedule/log/hub 전 범위 인덱싱)
 - **계정별 장기 기억**: Supabase Auth 계정마다 독립 메모리 + context 압축
 - **실시간 업데이트**: Supabase Realtime으로 캔버스 즉시 반영
 
@@ -66,13 +69,15 @@ BOSS-2/
 │   │   ├── memory/              # 장기 기억 + context 압축
 │   │   ├── rag/                 # 임베딩 + 하이브리드 서치
 │   │   ├── scheduler/           # Celery 태스크
-│   │   ├── routers/             # API 엔드포인트
+│   │   ├── routers/             # API 엔드포인트 (chat / activity / artifacts / schedules / evaluations / summary / memos / search)
 │   │   └── models/              # Pydantic 스키마
+│   ├── scripts/
+│   │   └── backfill_embeddings.py   # 전체 artifact/schedule/log/hub 임베딩 백필
 │   ├── celeryconfig.py
 │   └── requirements.txt
 │
 ├── supabase/
-│   ├── migrations/              # DB 스키마 (001~005, 순서대로 실행)
+│   ├── migrations/              # DB 스키마 (001~007, 순서대로 실행)
 │   └── seed/                    # mock 데이터 + cleanup
 │
 ├── .gitignore
@@ -94,15 +99,20 @@ cp .env.example .env
 
 ```bash
 # supabase/migrations/ 파일을 Supabase MCP 또는 SQL Editor에서 순서대로 실행
-#   001_extensions.sql        (pgcrypto, uuid-ossp, vector, pg_trgm)
-#   002_schema.sql            (11개 테이블)
-#   003_indexes.sql           (ivfflat, GIN, btree)
-#   004_rls.sql               (Row Level Security)
-#   005_functions_triggers.sql (bootstrap, hybrid_search, memory_search)
+#   001_extensions.sql                        (pgcrypto, uuid-ossp, vector, pg_trgm)
+#   002_schema.sql                            (11개 테이블)
+#   003_indexes.sql                           (ivfflat, GIN, btree)
+#   004_rls.sql                               (Row Level Security)
+#   005_functions_triggers.sql                (bootstrap, hybrid_search, memory_search)
+#   006_expand_embeddings_source_type.sql     (schedule/log/hub source_type + upsert_embedding RPC)
+#   007_memos.sql                             (memos 테이블 + RLS + 'memo' source_type)
 #
 # (선택) mock 데이터 시드 / 제거
 #   supabase/seed/seed_mock_data.sql
 #   supabase/seed/cleanup_mock_data.sql
+#
+# (선택) 검색용 임베딩 백필 — 기존 artifact/schedule/log/hub 에 한 번 실행
+#   cd backend && python scripts/backfill_embeddings.py
 ```
 
 ### 3. Backend 실행
@@ -144,4 +154,9 @@ npm run dev
 
 ## Version
 
-현재 버전: **0.4.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.
+현재 버전: **0.5.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.
+
+## Branch Policy
+
+- **default branch: `dev`** — 모든 feature 브랜치는 `dev` 로 PR.
+- `main` 은 릴리스 스냅샷 용도.
