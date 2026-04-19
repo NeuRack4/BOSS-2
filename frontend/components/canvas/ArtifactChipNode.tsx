@@ -420,7 +420,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
   const card = (
     <div
       className={cn(
-        "group/node relative w-[218px] overflow-visible rounded-[11px] bg-[#fffaf2]/95 backdrop-blur transition-all hover:shadow-lg",
+        "group/node relative w-[260px] overflow-visible rounded-[11px] bg-[#fffaf2]/95 backdrop-blur transition-all hover:shadow-lg",
         !isCross && "border " + primaryColor.border,
         shapeBorder,
         selected && "ring-2 ring-primary/40",
@@ -455,7 +455,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
             />
           ))}
         </div>
-        <p className="flex-1 truncate text-[14px] font-medium leading-tight text-[#2e2719]">
+        <p className="flex-1 truncate text-[16px] font-medium leading-tight text-[#2e2719]">
           {shortTitle}
         </p>
         <div
@@ -606,7 +606,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
     ) : null;
 
   return (
-    <div className="relative w-[218px]">
+    <div className="relative w-[260px]">
       {wrappedCard}
       {confirmPopup}
     </div>

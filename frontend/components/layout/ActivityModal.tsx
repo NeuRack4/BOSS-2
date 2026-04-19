@@ -18,6 +18,7 @@ type Activity = {
   title: string;
   description: string;
   created_at: string;
+  metadata: { artifact_id?: string } | null;
 };
 
 const DOMAIN_ICONS: Record<Domain, ReactNode> = {
@@ -81,7 +82,7 @@ export const ActivityModal = ({ open, onClose }: Props) => {
       }
       const { data } = await supabase
         .from("activity_logs")
-        .select("id,type,domain,title,description,created_at")
+        .select("id,type,domain,title,description,created_at,metadata")
         .order("created_at", { ascending: false })
         .limit(200);
       if (cancelled) return;
@@ -93,6 +94,32 @@ export const ActivityModal = ({ open, onClose }: Props) => {
       cancelled = true;
     };
   }, [open]);
+
+  const handleNavigate = async (a: Activity) => {
+    let artifactId = a.metadata?.artifact_id ?? null;
+    if (!artifactId) {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("artifacts")
+          .select("id")
+          .eq("account_id", user.id)
+          .eq("title", a.title)
+          .contains("domains", [a.domain])
+          .order("created_at", { ascending: false })
+          .limit(1);
+        artifactId = (data as { id: string }[] | null)?.[0]?.id ?? null;
+      }
+    }
+    if (!artifactId) return;
+    onClose();
+    window.dispatchEvent(
+      new CustomEvent("boss:focus-node", { detail: { id: artifactId } }),
+    );
+  };
 
   return (
     <Modal
@@ -117,7 +144,12 @@ export const ActivityModal = ({ open, onClose }: Props) => {
             <div className="space-y-0">
               {activities.map((a, i) => (
                 <div key={a.id}>
-                  <div className="flex items-start gap-3 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate(a)}
+                    title="노드로 이동"
+                    className="flex w-full items-start gap-3 py-3 text-left rounded-md px-2 -mx-2 hover:bg-[#ebe0ca]/60 transition-colors"
+                  >
                     <div
                       className={cn(
                         "mt-0.5 shrink-0",
@@ -153,7 +185,7 @@ export const ActivityModal = ({ open, onClose }: Props) => {
                     <span className="mt-0.5 shrink-0 text-[11px] text-[#8c7e66]">
                       {formatTime(a.created_at)}
                     </span>
-                  </div>
+                  </button>
                   {i < activities.length - 1 && <Separator />}
                 </div>
               ))}

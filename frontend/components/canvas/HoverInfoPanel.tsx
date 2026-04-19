@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { Minus, Square } from "lucide-react";
+
 type Domain = "recruitment" | "marketing" | "sales" | "documents";
 type Kind = "anchor" | "domain" | "artifact" | "schedule" | "log";
 
@@ -112,22 +115,57 @@ const formatDate = (iso: string): string => {
   }
 };
 
+const STORAGE_KEY = "boss2:hover-panel:minimized";
+
 export const HoverInfoPanel = ({ node }: Props) => {
+  const [minimized, setMinimized] = useState(false);
+
+  useEffect(() => {
+    try {
+      setMinimized(localStorage.getItem(STORAGE_KEY) === "1");
+    } catch {}
+  }, []);
+
+  const toggle = () => {
+    setMinimized((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
+
   return (
     <div className="pointer-events-none absolute top-4 left-4 z-10 w-[320px]">
       <div className="pointer-events-auto rounded-lg border border-[#ddd0b4] bg-[#fffaf2]/95 shadow-xl backdrop-blur">
-        <div className="flex items-center justify-between border-b border-[#ddd0b4] px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b border-[#ddd0b4] px-3 py-2">
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#8c7e66]">
             Hover Inspector
           </p>
-          {node && (
-            <span className="rounded-sm border border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
-              {node.kind}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {node && !minimized && (
+              <span className="rounded-sm border border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
+                {node.kind}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={toggle}
+              title={minimized ? "펼치기" : "최소화"}
+              className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+              aria-label={minimized ? "expand" : "minimize"}
+            >
+              {minimized ? (
+                <Square className="h-3 w-3" />
+              ) : (
+                <Minus className="h-3 w-3" />
+              )}
+            </button>
+          </div>
         </div>
 
-        {!node ? (
+        {minimized ? null : !node ? (
           <div className="px-3 py-6 text-center text-[11px] text-[#8c7e66]">
             노드 위에 마우스를 올려보세요
           </div>

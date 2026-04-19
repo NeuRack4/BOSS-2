@@ -28,6 +28,7 @@ import { SummaryModal } from "./modals/SummaryModal";
 import { LogDetailModal } from "./modals/LogDetailModal";
 import { ConfirmModal } from "./modals/ConfirmModal";
 import { DateRangeModal, type DateRangeValue } from "./modals/DateRangeModal";
+import { NodeDetailModal, type NodeDetailData } from "./modals/NodeDetailModal";
 import { useChat } from "@/components/chat/ChatContext";
 import { useFilter } from "./FilterContext";
 import { createClient } from "@/lib/supabase/client";
@@ -89,10 +90,10 @@ const NODE_SIZE: Record<
   "anchor" | "domain" | "chip" | "chip_schedule",
   { w: number; h: number }
 > = {
-  anchor: { w: 872, h: 176 },
-  domain: { w: 266, h: 64 },
-  chip: { w: 218, h: 44 },
-  chip_schedule: { w: 218, h: 70 },
+  anchor: { w: 980, h: 198 },
+  domain: { w: 310, h: 76 },
+  chip: { w: 260, h: 52 },
+  chip_schedule: { w: 260, h: 82 },
 };
 
 const sizeFor = (kind: Kind): { w: number; h: number } =>
@@ -107,7 +108,7 @@ const sizeFor = (kind: Kind): { w: number; h: number } =>
 const flowTypeFor = (kind: Kind) =>
   kind === "anchor" ? "anchor" : kind === "domain" ? "domain" : "chip";
 
-const QUADRANT_HUB_OFFSET = 215;
+const QUADRANT_HUB_OFFSET = 260;
 
 type QuadrantConfig = { sign_x: 1 | -1; sign_y: 1 | -1 };
 
@@ -210,7 +211,13 @@ const layoutRadial = (
 
   // Main hub: keep children within their quadrant (180° outward cone).
   // Deeper generations recurse inside their own slice — sub-clusters stay in-domain.
-  const outwardAngle = Math.atan2(config.sign_y, config.sign_x);
+  // HORIZONTAL_BIAS: y 성분을 줄여 outward 벡터를 수평축 쪽으로 당김
+  // (0 = 순수 대각 45°, 1 = 완전 수평). 캔버스가 좌우로 더 퍼지게 해준다.
+  const HORIZONTAL_BIAS = 0.5;
+  const outwardAngle = Math.atan2(
+    config.sign_y * (1 - HORIZONTAL_BIAS),
+    config.sign_x,
+  );
   place(hub.id, hubCX, hubCY, outwardAngle, Math.PI, RADIAL_BASE_RADIUS);
 };
 
@@ -409,7 +416,8 @@ type ModalState =
       artifactId: string;
       title: string;
       initial: DateRangeValue;
-    };
+    }
+  | { type: "node-detail"; node: NodeDetailData };
 
 export const FlowCanvas = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -441,6 +449,21 @@ export const FlowCanvas = () => {
     window.addEventListener("boss:reset-layout", handler);
     return () => window.removeEventListener("boss:reset-layout", handler);
   }, [resetLayout]);
+
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      flowRef.current?.fitView({
+        nodes: [{ id }],
+        padding: 0.35,
+        duration: 600,
+        maxZoom: 1.8,
+      });
+    };
+    window.addEventListener("boss:focus-node", onFocus);
+    return () => window.removeEventListener("boss:focus-node", onFocus);
+  }, []);
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
@@ -718,9 +741,6 @@ export const FlowCanvas = () => {
       const flowEdges: Edge[] = edgeRows
         .filter((e) => e.parent_id !== anchorId)
         .map((e) => {
-          const src = nodeOpacity.get(e.parent_id) ?? 1;
-          const tgt = nodeOpacity.get(e.child_id) ?? 1;
-          const factor = Math.min(src, tgt);
           const base = RELATION_STYLE[e.relation];
           const { sourceHandle, targetHandle } = pickHandles(
             e.parent_id,
@@ -736,7 +756,7 @@ export const FlowCanvas = () => {
             animated: false,
             style: {
               ...base,
-              opacity: ((base.opacity as number) ?? 1) * factor,
+              opacity: 0,
             } as React.CSSProperties,
             data: { relation: e.relation },
           };
@@ -1160,116 +1180,120 @@ export const FlowCanvas = () => {
     [],
   );
 
-  const ZOOM_FOCUS_THRESHOLD = 0.7;
+  const buildDetail = useCallback(
+    (targetId: string): NodeDetailData | null => {
+      const node = nodes.find((n) => n.id === targetId);
+      if (!node) return null;
+      const d = node.data as unknown as ArtifactRow;
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    const flow = flowRef.current;
-    if (!flow) return;
-    const currentZoom = flow.getZoom();
-    if (currentZoom >= ZOOM_FOCUS_THRESHOLD) return;
-    flow.fitView({
-      nodes: [{ id: node.id }],
-      padding: 0.2,
-      duration: 600,
-      maxZoom: 4,
-    });
-  }, []);
+      const dataById = new Map(
+        nodes.map((n) => [n.id, n.data as unknown as ArtifactRow]),
+      );
+      const parents: Array<{
+        id: string;
+        title: string;
+        kind: Kind;
+        relation: string;
+      }> = [];
+      const children: Array<{
+        id: string;
+        title: string;
+        kind: Kind;
+        relation: string;
+      }> = [];
+      for (const e of edges) {
+        const relation =
+          (e.data as { relation?: Relation } | undefined)?.relation ??
+          "contains";
+        if (e.target === targetId) {
+          const p = dataById.get(e.source);
+          if (p)
+            parents.push({
+              id: p.id,
+              title: p.title,
+              kind: p.kind,
+              relation,
+            });
+        }
+        if (e.source === targetId) {
+          const c = dataById.get(e.target);
+          if (c)
+            children.push({
+              id: c.id,
+              title: c.title,
+              kind: c.kind,
+              relation,
+            });
+        }
+      }
+
+      const containsParents = new Map<string, string[]>();
+      for (const e of edges) {
+        const rel = (e.data as { relation?: Relation } | undefined)?.relation;
+        if (rel !== "contains") continue;
+        const arr = containsParents.get(e.target) ?? [];
+        arr.push(e.source);
+        containsParents.set(e.target, arr);
+      }
+      const findSubDomain = (
+        start: string,
+      ): { id: string; title: string } | null => {
+        const queue: string[] = [start];
+        const seen = new Set<string>();
+        while (queue.length) {
+          const id = queue.shift()!;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const data = dataById.get(id);
+          if (data?.kind === "domain" && data.type === "category") {
+            return { id: data.id, title: data.title };
+          }
+          for (const p of containsParents.get(id) ?? []) {
+            if (!seen.has(p)) queue.push(p);
+          }
+        }
+        return null;
+      };
+      const subDomain = findSubDomain(targetId);
+
+      return {
+        id: d.id,
+        kind: d.kind,
+        type: d.type,
+        title: d.title,
+        content: d.content,
+        status: d.status,
+        domains: d.domains,
+        subDomain,
+        metadata: d.metadata,
+        created_at: d.created_at,
+        parents,
+        children,
+      };
+    },
+    [nodes, edges],
+  );
+
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const data = node.data as unknown as ArtifactRow;
+      if (data.kind === "anchor") return;
+      const detail = buildDetail(node.id);
+      if (!detail) return;
+      setModal({ type: "node-detail", node: detail });
+    },
+    [buildDetail],
+  );
 
   const menuItems = useMemo(
     () => (menu ? buildMenuItems(menu) : []),
     [menu, buildMenuItems],
   );
 
-  const hoveredData = useMemo(() => {
-    if (!stickyHoveredId) return null;
-    const node = nodes.find((n) => n.id === stickyHoveredId);
-    if (!node) return null;
-    const d = node.data as unknown as ArtifactRow;
-
-    const dataById = new Map(
-      nodes.map((n) => [n.id, n.data as unknown as ArtifactRow]),
-    );
-    const parents: Array<{
-      id: string;
-      title: string;
-      kind: Kind;
-      relation: string;
-    }> = [];
-    const children: Array<{
-      id: string;
-      title: string;
-      kind: Kind;
-      relation: string;
-    }> = [];
-    for (const e of edges) {
-      const relation =
-        (e.data as { relation?: Relation } | undefined)?.relation ?? "contains";
-      if (e.target === stickyHoveredId) {
-        const p = dataById.get(e.source);
-        if (p)
-          parents.push({
-            id: p.id,
-            title: p.title,
-            kind: p.kind,
-            relation,
-          });
-      }
-      if (e.source === stickyHoveredId) {
-        const c = dataById.get(e.target);
-        if (c)
-          children.push({
-            id: c.id,
-            title: c.title,
-            kind: c.kind,
-            relation,
-          });
-      }
-    }
-
-    const containsParents = new Map<string, string[]>();
-    for (const e of edges) {
-      const rel = (e.data as { relation?: Relation } | undefined)?.relation;
-      if (rel !== "contains") continue;
-      const arr = containsParents.get(e.target) ?? [];
-      arr.push(e.source);
-      containsParents.set(e.target, arr);
-    }
-    const findSubDomain = (
-      start: string,
-    ): { id: string; title: string } | null => {
-      const queue: string[] = [start];
-      const seen = new Set<string>();
-      while (queue.length) {
-        const id = queue.shift()!;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        const data = dataById.get(id);
-        if (data?.kind === "domain" && data.type === "category") {
-          return { id: data.id, title: data.title };
-        }
-        for (const p of containsParents.get(id) ?? []) {
-          if (!seen.has(p)) queue.push(p);
-        }
-      }
-      return null;
-    };
-    const subDomain = findSubDomain(stickyHoveredId);
-
-    return {
-      id: d.id,
-      kind: d.kind,
-      type: d.type,
-      title: d.title,
-      content: d.content,
-      status: d.status,
-      domains: d.domains,
-      subDomain,
-      metadata: d.metadata,
-      created_at: d.created_at,
-      parents,
-      children,
-    };
-  }, [stickyHoveredId, nodes, edges]);
+  const hoveredData = useMemo(
+    () => (stickyHoveredId ? buildDetail(stickyHoveredId) : null),
+    [stickyHoveredId, buildDetail],
+  );
 
   return (
     <div className="relative flex-1 h-full overflow-hidden">
@@ -1293,7 +1317,7 @@ export const FlowCanvas = () => {
           instance.setCenter(0, 0, { zoom: 1.2 });
         }}
         colorMode="light"
-        minZoom={0.2}
+        minZoom={0.3}
         maxZoom={4}
         proOptions={{ hideAttribution: true }}
       >
@@ -1373,6 +1397,13 @@ export const FlowCanvas = () => {
           initial={modal.initial}
           onClose={() => setModal({ type: "none" })}
           onSubmit={(value) => handleSetDateRange(modal.artifactId, value)}
+        />
+      )}
+      {modal.type === "node-detail" && (
+        <NodeDetailModal
+          open
+          node={modal.node}
+          onClose={() => setModal({ type: "none" })}
         />
       )}
     </div>

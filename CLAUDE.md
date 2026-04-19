@@ -4,6 +4,11 @@
 
 소상공인 자율 운영 AI 플랫폼. 오케스트레이터 챗봇이 채용/마케팅/매출/서류 도메인 에이전트를 라우팅하고, Celery Beat 스케쥴러로 자동 실행한다.
 
+## Git / Branch Policy
+
+- **default branch: `dev`** — 모든 feature 브랜치는 반드시 `dev` 를 base 로 PR 한다. `main` 은 릴리스 스냅샷 전용.
+- 버전 bump PR 타이틀은 `chore: vX.Y.Z — …`, 기능은 `feat: …`, 수정은 `fix: …` 관례.
+
 ## Tech Stack
 
 - **Frontend**: Next.js 16 App Router, React Flow, Shadcn/ui, Tailwind CSS
@@ -33,8 +38,10 @@
 
 - 벡터 검색: pgvector (BAAI/bge-m3, 1024dim) — `app/core/embedder.py`
 - 키워드 검색: PostgreSQL Full-Text Search (BM25 근사)
-- 최종 결과: RRF(Reciprocal Rank Fusion)로 병합
-- 임베딩 대상: 생성물(artifacts), 장기 기억, 업로드 문서
+- 최종 결과: RRF(Reciprocal Rank Fusion)로 병합 — DB 함수 `public.hybrid_search`
+- 임베딩 대상: artifacts(kind=artifact/schedule/log/domain-hub), memos, 장기 기억, 업로드 문서
+- 공용 upsert: `public.upsert_embedding(account_id, source_type, source_id, content, embedding)` — runtime `index_artifact` / 메모 CRUD / `scripts/backfill_embeddings.py` 모두 이 RPC 사용. `source_id` 유니크 인덱스로 upsert 안전.
+- `source_type` 허용값: `recruitment | marketing | sales | documents | memory | document | schedule | log | hub | memo` (006 · 007 마이그레이션으로 확장).
 
 ### Scheduler 구조
 
@@ -56,12 +63,15 @@ artifacts             — account_id(auth.uid), domains text[] (recruitment|mark
                         metadata(jsonb: pinned, position, cron, ...), created_at
 artifact_edges        — parent_id, child_id, relation(contains|derives_from|scheduled_by|revises|logged_from)
 evaluations           — artifact_id, account_id, rating(up|down), feedback
-embeddings            — account_id, source_type, source_id, embedding(vector 1024), fts
+embeddings            — account_id, source_type, source_id, embedding(vector 1024), fts, content
+                        (source_type 확장: schedule | log | hub | memo — 006/007 마이그레이션 기준)
 memory_short          — account_id, messages(jsonb), turn_count
 memory_long           — account_id, content, embedding(vector 1024), importance
-activity_logs         — account_id, type, domain, title, description, metadata
+activity_logs         — account_id, type, domain, title, description, metadata(jsonb: artifact_id 포함)
 schedules             — account_id, artifact_id, domain, cron_expr, is_active, last_run, next_run
 task_logs             — schedule_id, account_id, status, result, error, executed_at
+memos                 — account_id, artifact_id(FK→artifacts), content, created_at, updated_at
+                        (artifact별 타임라인 메모. CRUD 시 embeddings 에 source_type='memo' 자동 upsert)
 ```
 
 - `artifacts`는 캔버스의 모든 노드를 하나의 테이블로 통합한 DAG 구조.
@@ -146,10 +156,19 @@ task_logs             — schedule_id, account_id, status, result, error, execut
 
 ### UI Layer (캔버스 바깥)
 
-- **`HoverInfoPanel`** (`components/canvas/`) — 노드 호버/선택 시 우측 패널에 부모/자식(`artifact_edges` 기반), metadata, 도메인·상태 표시.
-- **`ScheduleManagerModal`** (`components/layout/`) — Header `일정 관리` 버튼에서 오픈. 달력 뷰 ↔ 리스트 뷰 토글. `kind='schedule'` ∪ (`metadata.start_date`/`end_date`/`due_date` 중 하나 이상 있는 `kind='artifact'`) 통합 조회. 월 단위 내비게이션, 지연/진행 중/예정/일시정지 배지.
+- **`HoverInfoPanel`** (`components/canvas/`) — 노드 호버/선택 시 상단-좌측 패널에 부모/자식(`artifact_edges` 기반), metadata, 도메인·상태 표시. 최소화 토글 상태는 `localStorage` 키 `boss2:hover-panel:minimized` 에 저장.
+- **`NodeDetailModal`** (`components/canvas/modals/`) — 노드 클릭 시 오픈 (anchor 제외). 좌측: content / sub-domain / metadata / parents·children / ID. 우측: **타임라인 메모** (작성·편집·삭제, 작성 즉시 `source_type='memo'` 로 임베딩 → 검색/대화 컨텍스트 합류).
+- **`SearchPalette`** (`components/search/`) — `⌘K` / `Ctrl+K` 로 오픈. Header 중앙 검색바 클릭으로도 호출. 200ms debounce 후 `GET /api/search` 호출, RRF 점수 순 결과. ↑↓/Enter 키보드 탐색, 선택 시 `boss:focus-node` CustomEvent 발행 → `FlowCanvas` 가 `fitView` 로 포커스.
+- **`ScheduleManagerModal`** (`components/layout/`) — Header `일정 관리` 버튼에서 오픈. 달력 뷰 ↔ 리스트 뷰 토글. `kind='schedule'` ∪ (`metadata.start_date`/`end_date`/`due_date` 중 하나 이상 있는 `kind='artifact'`) 통합 조회. 항목 클릭 시 `boss:focus-node` 발행.
 - **`DateRangeModal`** (`components/canvas/modals/`) — artifact의 `start_date`+`end_date`(기간) ↔ `due_date`(마감) metadata 설정. 컨텍스트 메뉴에서 호출.
-- **`ActivityModal`** (`components/layout/`) — `/activity` 페이지 대체. Header `활동이력` 버튼에서 오픈 (캔버스 이탈 없음).
+- **`ActivityModal`** (`components/layout/`) — `/activity` 페이지 대체. Header `활동이력` 버튼에서 오픈. 항목 클릭 시 `metadata.artifact_id`(없으면 title+domain fallback)로 노드 포커스.
+
+### Custom Events (frontend 전역)
+
+| 이벤트              | 발행 위치                                                  | 구독 위치    | 페이로드         |
+| ------------------- | ---------------------------------------------------------- | ------------ | ---------------- |
+| `boss:reset-layout` | Header `정렬` 버튼                                         | `FlowCanvas` | —                |
+| `boss:focus-node`   | `SearchPalette` / `ActivityModal` / `ScheduleManagerModal` | `FlowCanvas` | `{ id: string }` |
 
 ## Mock Data
 
@@ -176,20 +195,33 @@ task_logs             — schedule_id, account_id, status, result, error, execut
 3. Backend 먼저 개발 → Frontend 연동
 4. 새 도메인 Agent 추가 시 → orchestrator의 intent 분류 프롬프트도 업데이트
 
-### Migration File Layout (v0.3.0 기준)
+### Migration File Layout (v0.5.0 기준)
 
 ```
 supabase/
 ├── migrations/
-│   ├── 001_extensions.sql           # pgcrypto, uuid-ossp, vector, pg_trgm
-│   ├── 002_schema.sql               # 11개 테이블 (public 스키마)
-│   ├── 003_indexes.sql              # ivfflat + GIN + btree
-│   ├── 004_rls.sql                  # Row Level Security
-│   └── 005_functions_triggers.sql   # bootstrap_workspace, hybrid_search, memory_search
+│   ├── 001_extensions.sql                       # pgcrypto, uuid-ossp, vector, pg_trgm
+│   ├── 002_schema.sql                           # 11개 테이블 (public 스키마)
+│   ├── 003_indexes.sql                          # ivfflat + GIN + btree
+│   ├── 004_rls.sql                              # Row Level Security
+│   ├── 005_functions_triggers.sql               # bootstrap_workspace, hybrid_search, memory_search
+│   ├── 006_expand_embeddings_source_type.sql    # schedule/log/hub source_type + upsert_embedding RPC + source_id uniq
+│   └── 007_memos.sql                            # memos 테이블 + RLS + 'memo' source_type + updated_at 트리거
 └── seed/
     ├── seed_mock_data.sql           # test@test.com 용 mock 시드
     └── cleanup_mock_data.sql        # '[MOCK]%' 일괄 제거
 ```
+
+### 임베딩 백필
+
+- 마이그레이션 006 적용 후, 기존 artifact/schedule/log/hub 에 임베딩을 채우려면:
+  ```
+  cd backend
+  python scripts/backfill_embeddings.py                  # 미인덱싱 행만
+  python scripts/backfill_embeddings.py --force          # 전체 재인덱싱
+  python scripts/backfill_embeddings.py --account-id <UUID>
+  ```
+- 신규 artifact/memo 는 runtime 에서 자동 인덱싱되므로 백필은 1회성.
 
 ## Available Slash Commands
 

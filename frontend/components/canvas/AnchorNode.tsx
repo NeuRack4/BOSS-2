@@ -25,7 +25,7 @@ export const AnchorNode = (_: NodeProps) => {
       <div className="anchor-ring anchor-ring-delay pointer-events-none absolute inset-0 rounded-xl bg-[#b85a4a]/20" />
 
       <div
-        className="relative w-[872px] overflow-hidden rounded-3xl border border-[#b85a4a]/50 bg-[#fbf6eb]/95 backdrop-blur transition-all hover:shadow-lg hover:shadow-[#b85a4a]/15 nodrag nopan"
+        className="relative w-[980px] overflow-hidden rounded-3xl border border-[#b85a4a]/50 bg-[#fbf6eb]/95 backdrop-blur transition-all hover:shadow-lg hover:shadow-[#b85a4a]/15 nodrag nopan"
         role="article"
         aria-label="BOSS"
       >
@@ -50,7 +50,7 @@ export const AnchorNode = (_: NodeProps) => {
             onKeyDown={handleKeyDown}
             placeholder="BOSS에게 무엇이든 시켜보세요..."
             className={cn(
-              "min-w-0 flex-1 bg-transparent text-[25px] text-[#2e2719]",
+              "min-w-0 flex-1 bg-transparent text-[28px] text-[#2e2719]",
               "placeholder:text-[#8c7e66]",
               "focus:outline-none",
             )}

@@ -1,6 +1,6 @@
 [project]
 name = "boss2-backend"
-version = "0.3.0"
+version = "0.5.0"
 description = "BOSS-2 backend — FastAPI + Supabase + Celery + OpenAI + BAAI/bge-m3"
 requires-python = ">=3.12"
 
