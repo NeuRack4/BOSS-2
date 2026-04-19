@@ -149,6 +149,67 @@ begin
     (acc, m_combined, roi_id, 'derives_from'),
     (acc, s_report,   roi_id, 'derives_from');
 
+  -- 7) 기간/마감이 명시된 artifact들 (metadata.start_date / end_date / due_date)
+  --    일정 관리 모달에서 schedule과 함께 노출된다.
+  declare
+    da_interview uuid; da_post_close uuid;
+    da_campaign uuid; da_summer_event uuid;
+    da_promo uuid;
+    da_contract_renew uuid; da_vat_filing uuid; da_overdue uuid;
+  begin
+    -- recruitment: 면접(다가오는 마감) + 공고(진행 기간)
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['recruitment'], 'artifact', 'interview_schedule',
+       '[MOCK] 바리스타 면접 (2차)', '4/22 오후 2시, 매장 회의실. 3명 예정.', 'active',
+       '{"due_date":"2026-04-22"}') returning id into da_interview;
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['recruitment'], 'artifact', 'job_posting_window',
+       '[MOCK] 주말 알바 공고 게시 기간', '4/15 ~ 4/30 채용 사이트 노출', 'active',
+       '{"start_date":"2026-04-15","end_date":"2026-04-30"}') returning id into da_post_close;
+    insert into public.artifact_edges(account_id, parent_id, child_id, relation) values
+      (acc, recruit_id, da_interview,  'contains'),
+      (acc, recruit_id, da_post_close, 'contains');
+
+    -- marketing: 5월 캠페인 + 여름 이벤트
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['marketing'], 'artifact', 'campaign_window',
+       '[MOCK] 5월 신메뉴 런칭 캠페인', '인스타+검색광고 통합 집행', 'active',
+       '{"start_date":"2026-05-01","end_date":"2026-05-31"}') returning id into da_campaign;
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['marketing'], 'artifact', 'event_window',
+       '[MOCK] 여름 오픈 4주년 이벤트', '6월 말~7월 초 기간 한정 할인/경품', 'draft',
+       '{"start_date":"2026-06-25","end_date":"2026-07-10"}') returning id into da_summer_event;
+    insert into public.artifact_edges(account_id, parent_id, child_id, relation) values
+      (acc, market_id, da_campaign,     'contains'),
+      (acc, market_id, da_summer_event, 'contains');
+
+    -- sales: 신메뉴 프로모션
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['sales'], 'artifact', 'promotion_window',
+       '[MOCK] 망고 라떼 1+1 프로모션', '시즌 한정 1+1, 재구매 유도', 'active',
+       '{"start_date":"2026-04-20","end_date":"2026-05-05"}') returning id into da_promo;
+    insert into public.artifact_edges(account_id, parent_id, child_id, relation) values
+      (acc, sales_id, da_promo, 'contains');
+
+    -- documents: 계약 갱신 + 부가세 신고 + (종료된) 미제출 서류
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['documents'], 'artifact', 'contract_renewal',
+       '[MOCK] 임대차 계약 갱신 마감', '건물주 확인 필요. 14일 전 통지 의무.', 'active',
+       '{"due_date":"2026-05-15"}') returning id into da_contract_renew;
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['documents'], 'artifact', 'tax_due',
+       '[MOCK] 1분기 부가세 신고 마감', '홈택스 전자신고 기한', 'active',
+       '{"due_date":"2026-04-25"}') returning id into da_vat_filing;
+    insert into public.artifacts(account_id, domains, kind, type, title, content, status, metadata) values
+      (acc, array['documents'], 'artifact', 'overdue_doc',
+       '[MOCK] 3월 카드 매출 증빙 제출', '세무사 요청 자료. 기한 초과.', 'active',
+       '{"due_date":"2026-04-10"}') returning id into da_overdue;
+    insert into public.artifact_edges(account_id, parent_id, child_id, relation) values
+      (acc, docs_id, da_contract_renew, 'contains'),
+      (acc, docs_id, da_vat_filing,     'contains'),
+      (acc, docs_id, da_overdue,        'contains');
+  end;
+
   insert into public.activity_logs(account_id, type, domain, title, description) values
     (acc, 'artifact_created', 'recruitment', '[MOCK] 채용 공고 생성',     '주말 알바 공고 초안 생성됨'),
     (acc, 'agent_run',        'marketing',   '[MOCK] 인스타 포스트 발행', '5월 신메뉴 게시물 자동 발행'),

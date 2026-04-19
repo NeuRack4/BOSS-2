@@ -64,10 +64,10 @@ export const HistoryModal = ({ open, onClose, artifactId, title }: Props) => {
     >
       {loading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+          <Loader2 className="h-5 w-5 animate-spin text-[#8c7e66]" />
         </div>
       ) : !logs || logs.length === 0 ? (
-        <p className="py-8 text-center text-[12px] text-zinc-500">
+        <p className="py-8 text-center text-[12px] text-[#8c7e66]">
           실행 이력이 없습니다.
         </p>
       ) : (
@@ -78,21 +78,21 @@ export const HistoryModal = ({ open, onClose, artifactId, title }: Props) => {
               return (
                 <li
                   key={log.id}
-                  className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+                  className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/50 px-3 py-2"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#8c7e66]">
                       {log.domain}
                     </span>
-                    <span className="font-mono text-[10px] text-zinc-500">
+                    <span className="font-mono text-[10px] text-[#8c7e66]">
                       {log.created_at?.replace("T", " ").slice(0, 19)}
                     </span>
                   </div>
-                  <p className="mt-1 text-[12px] text-zinc-200">
+                  <p className="mt-1 text-[12px] text-[#2e2719]">
                     {log.description || log.title}
                   </p>
                   {preview && (
-                    <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11px] text-zinc-400">
+                    <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11px] text-[#5a5040]">
                       {preview}
                     </p>
                   )}

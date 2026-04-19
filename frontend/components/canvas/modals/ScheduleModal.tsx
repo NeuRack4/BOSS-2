@@ -52,7 +52,7 @@ export const ScheduleModal = ({
     <Modal open={open} onClose={onClose} title={title} widthClass="w-[520px]">
       <div className="space-y-3">
         <div>
-          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-500">
+          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-[#8c7e66]">
             프리셋
           </p>
           <div className="grid grid-cols-2 gap-1.5">
@@ -64,12 +64,12 @@ export const ScheduleModal = ({
                 className={cn(
                   "rounded border px-2 py-1.5 text-left text-[11px] transition-colors",
                   cron === p.cron
-                    ? "border-emerald-400 bg-emerald-500/10 text-emerald-200"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800",
+                    ? "border-[#7f8f54] bg-[#7f8f54]/12 text-[#6a7843]"
+                    : "border-[#ddd0b4] bg-[#ebe0ca]/40 text-[#2e2719] hover:bg-[#ebe0ca]",
                 )}
               >
                 <div className="font-medium">{p.label}</div>
-                <div className="mt-0.5 font-mono text-[9px] text-zinc-500">
+                <div className="mt-0.5 font-mono text-[9px] text-[#8c7e66]">
                   {p.cron}
                 </div>
               </button>
@@ -77,17 +77,17 @@ export const ScheduleModal = ({
           </div>
         </div>
         <div>
-          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-500">
+          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-[#8c7e66]">
             cron 표현식 (커스텀)
           </p>
           <input
             type="text"
             value={cron}
             onChange={(e) => setCron(e.target.value)}
-            className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-[12px] text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="w-full rounded border border-[#ddd0b4] bg-[#f2e9d5] px-2 py-1.5 font-mono text-[12px] text-[#2e2719] focus:outline-none focus:ring-1 focus:ring-[#bfae8a]"
             placeholder="분 시 일 월 요일"
           />
-          <p className="mt-1 font-mono text-[9px] text-zinc-500">
+          <p className="mt-1 font-mono text-[9px] text-[#8c7e66]">
             형식: 분(0-59) 시(0-23) 일(1-31) 월(1-12) 요일(0-6)
           </p>
         </div>
@@ -99,7 +99,7 @@ export const ScheduleModal = ({
             size="sm"
             onClick={handleSubmit}
             disabled={pending || !cron.trim()}
-            className="bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+            className="bg-[#7f8f54] text-[#fbf6eb] hover:bg-[#6a7843]"
           >
             {pending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

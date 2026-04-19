@@ -144,7 +144,7 @@ export const FloatingFilterPanel = () => {
     <div
       ref={panelRef}
       className={cn(
-        "fixed z-40 select-none rounded-xl border border-zinc-800 bg-zinc-950/95 text-zinc-100 shadow-2xl backdrop-blur",
+        "fixed z-40 select-none rounded-xl border border-[#ddd0b4] bg-[#fffaf2]/95 text-[#2e2719] shadow-xl backdrop-blur",
         "transition-shadow",
       )}
       style={{
@@ -158,22 +158,22 @@ export const FloatingFilterPanel = () => {
     >
       {/* Header (drag handle) */}
       <div
-        className="flex cursor-grab items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 active:cursor-grabbing"
+        className="flex cursor-grab items-center justify-between border-b border-[#ddd0b4] bg-[#ebe0ca]/60 px-3 py-2 active:cursor-grabbing"
         onPointerDown={handleDragStart}
         onPointerMove={handleDragMove}
         onPointerUp={handleDragEnd}
         onPointerCancel={handleDragEnd}
       >
         <div className="flex items-center gap-1.5">
-          <GripVertical className="h-3.5 w-3.5 text-zinc-500" />
-          <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400" />
-          <span className="text-xs font-semibold text-zinc-200">필터</span>
+          <GripVertical className="h-3.5 w-3.5 text-[#8c7e66]" />
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#8c7e66]" />
+          <span className="text-xs font-semibold text-[#2e2719]">필터</span>
         </div>
         <button
           type="button"
           onClick={() => setMinimized((m) => !m)}
           onPointerDown={(e) => e.stopPropagation()}
-          className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+          className="rounded p-1 text-[#8c7e66] transition-colors hover:bg-[#ebe0ca] hover:text-[#2e2719]"
           aria-label={minimized ? "펼치기" : "최소화"}
         >
           {minimized ? (
@@ -190,10 +190,10 @@ export const FloatingFilterPanel = () => {
           {/* Row 1: time slider */}
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] font-medium text-zinc-400">
+              <span className="text-[11px] font-medium text-[#8c7e66]">
                 생성 시간
               </span>
-              <span className="text-[11px] tabular-nums text-zinc-300">
+              <span className="text-[11px] tabular-nums text-[#2e2719]">
                 {rangeLabel(timeRangeDays)}
               </span>
             </div>
@@ -206,16 +206,16 @@ export const FloatingFilterPanel = () => {
               onChange={(e) =>
                 setTimeRangeDays(SLIDER_STEPS[Number(e.target.value)])
               }
-              className="h-1.5 w-full cursor-pointer accent-emerald-500"
+              className="h-1.5 w-full cursor-pointer accent-[#7f8f54]"
               aria-label="시간 범위 필터"
             />
-            <div className="mt-0.5 flex select-none justify-between px-0.5 text-[10px] text-zinc-500">
+            <div className="mt-0.5 flex select-none justify-between px-0.5 text-[10px] text-[#8c7e66]">
               {SLIDER_STEPS.map((s, i) => (
                 <span
                   key={i}
                   className={cn(
                     "tabular-nums",
-                    i === currentIndex && "font-semibold text-emerald-400",
+                    i === currentIndex && "font-semibold text-[#6a7843]",
                   )}
                 >
                   {labelForStep(s)}
@@ -227,10 +227,10 @@ export const FloatingFilterPanel = () => {
           {/* Row 2: domain toggles */}
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] font-medium text-zinc-400">
+              <span className="text-[11px] font-medium text-[#8c7e66]">
                 도메인
               </span>
-              <span className="text-[11px] text-zinc-500">
+              <span className="text-[11px] text-[#8c7e66]">
                 {selectedDomains.size}/{ALL_DOMAINS.length} 선택
               </span>
             </div>
@@ -246,8 +246,8 @@ export const FloatingFilterPanel = () => {
                     className={cn(
                       "rounded-md border px-1.5 py-1 text-xs font-medium transition-colors",
                       active
-                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
-                        : "border-zinc-700 bg-zinc-900 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300",
+                        ? "border-[#7f8f54]/50 bg-[#7f8f54]/15 text-[#6a7843]"
+                        : "border-[#ddd0b4] bg-[#ebe0ca] text-[#8c7e66] hover:border-[#bfae8a] hover:text-[#2e2719]",
                     )}
                   >
                     {DOMAIN_LABEL[d]}
@@ -265,8 +265,8 @@ export const FloatingFilterPanel = () => {
             className={cn(
               "flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
               showArchive
-                ? "border-amber-500/50 bg-amber-500/15 text-amber-300"
-                : "border-zinc-700 bg-zinc-900 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300",
+                ? "border-[#8e5572]/50 bg-[#8e5572]/15 text-[#764463]"
+                : "border-[#ddd0b4] bg-[#ebe0ca] text-[#8c7e66] hover:border-[#bfae8a] hover:text-[#2e2719]",
             )}
           >
             <span>📦</span>

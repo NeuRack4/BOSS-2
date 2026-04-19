@@ -39,7 +39,7 @@ export const ConfirmModal = ({
 
   return (
     <Modal open={open} onClose={onClose} title={title} widthClass="w-[400px]">
-      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-200">
+      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#2e2719]">
         {message}
       </p>
       <div className="mt-4 flex justify-end gap-2">
@@ -52,8 +52,8 @@ export const ConfirmModal = ({
           disabled={pending}
           className={
             destructive
-              ? "bg-rose-500 text-zinc-50 hover:bg-rose-400"
-              : "bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+              ? "bg-[#b85a4a] text-[#fbf6eb] hover:bg-[#9a4a3a]"
+              : "bg-[#7f8f54] text-[#fbf6eb] hover:bg-[#6a7843]"
           }
         >
           {pending ? (

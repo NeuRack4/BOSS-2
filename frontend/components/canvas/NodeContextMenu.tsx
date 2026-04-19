@@ -45,7 +45,7 @@ export const NodeContextMenu = ({ x, y, items, onClose }: Props) => {
   return (
     <div
       ref={ref}
-      className="fixed z-[90] w-[200px] overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl"
+      className="fixed z-[90] w-[200px] overflow-hidden rounded-lg border border-[#ddd0b4] bg-[#fffaf2] py-1 shadow-xl"
       style={{
         left: Math.min(x, maxX),
         top: Math.min(y, maxY),
@@ -65,10 +65,10 @@ export const NodeContextMenu = ({ x, y, items, onClose }: Props) => {
           className={cn(
             "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors",
             item.disabled
-              ? "cursor-not-allowed text-zinc-600"
+              ? "cursor-not-allowed text-[#bfae8a]"
               : item.destructive
-                ? "text-rose-300 hover:bg-rose-500/10"
-                : "text-zinc-200 hover:bg-zinc-800",
+                ? "text-[#b85a4a] hover:bg-[#b85a4a]/10"
+                : "text-[#2e2719] hover:bg-[#ebe0ca]",
           )}
         >
           {item.label}

@@ -339,26 +339,26 @@ export const ChatOverlay = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm animate-in fade-in duration-150"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) closeChat();
       }}
     >
       <div
-        className="relative flex h-[70vh] w-[70vw] max-w-[1100px] overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl animate-in zoom-in-95 duration-150"
+        className="relative flex h-[70vh] w-[70vw] max-w-[1100px] overflow-hidden rounded-2xl border border-[#ddd0b4] bg-[#fffaf2] shadow-xl animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-label="Orchestrator chat"
       >
         {/* Left: sessions panel */}
-        <aside className="flex w-[260px] shrink-0 flex-col border-r border-neutral-800 bg-neutral-900/40">
-          <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+        <aside className="flex w-[260px] shrink-0 flex-col border-r border-[#ddd0b4] bg-[#ebe0ca]/50">
+          <div className="flex items-center justify-between border-b border-[#ddd0b4] px-3 py-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#8c7e66]">
               이전 대화
             </span>
             <button
               type="button"
               onClick={requestNewSession}
-              className="flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-zinc-200 transition-colors hover:bg-neutral-800"
+              className="flex items-center gap-1 rounded-md border border-[#ddd0b4] bg-[#fffaf2] px-2 py-1 text-xs text-[#2e2719] transition-colors hover:bg-[#ebe0ca]"
               aria-label="새 대화"
             >
               <MessageSquarePlus className="h-3.5 w-3.5" />새 대화
@@ -366,12 +366,12 @@ export const ChatOverlay = () => {
           </div>
           <ScrollArea className="flex-1 px-2 py-2">
             {sessionsLoading && sortedSessions.length === 0 && (
-              <div className="px-2 py-4 text-center text-xs text-zinc-500">
+              <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
                 불러오는 중...
               </div>
             )}
             {!sessionsLoading && sortedSessions.length === 0 && (
-              <div className="px-2 py-4 text-center text-xs text-zinc-500">
+              <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
                 아직 대화가 없어요
               </div>
             )}
@@ -386,15 +386,15 @@ export const ChatOverlay = () => {
                       className={cn(
                         "group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors",
                         active
-                          ? "bg-neutral-800 text-zinc-50"
-                          : "text-zinc-300 hover:bg-neutral-800/60",
+                          ? "bg-[#ddd0b4] text-[#2e2719]"
+                          : "text-[#5a5040] hover:bg-[#ddd0b4]/60",
                       )}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-medium">
                           {s.title || "새 대화"}
                         </div>
-                        <div className="text-[11px] text-zinc-500">
+                        <div className="text-[11px] text-[#8c7e66]">
                           {formatRelative(s.updated_at)}
                         </div>
                       </div>
@@ -412,7 +412,7 @@ export const ChatOverlay = () => {
                             deleteSession(s.id);
                           }
                         }}
-                        className="invisible rounded p-1 text-zinc-500 hover:bg-neutral-700 hover:text-zinc-200 group-hover:visible"
+                        className="invisible rounded p-1 text-[#8c7e66] hover:bg-[#bfae8a]/30 hover:text-[#2e2719] group-hover:visible"
                         aria-label="세션 삭제"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -428,20 +428,20 @@ export const ChatOverlay = () => {
         {/* Right: chat area */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/60 px-5 py-3">
+          <div className="flex items-center justify-between border-b border-[#ddd0b4] bg-[#ebe0ca]/50 px-5 py-3">
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-              <span className="text-sm font-semibold text-zinc-100">
+              <div className="h-2 w-2 animate-pulse rounded-full bg-[#7f8f54]" />
+              <span className="text-sm font-semibold text-[#2e2719]">
                 Orchestrator
               </span>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-[#8c7e66]">
                 · AI 운영 어시스턴트
               </span>
             </div>
             <button
               type="button"
               onClick={closeChat}
-              className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-neutral-800 hover:text-zinc-100"
+              className="rounded-md p-1.5 text-[#8c7e66] transition-colors hover:bg-[#ddd0b4] hover:text-[#2e2719]"
               aria-label="닫기"
             >
               <X className="h-4 w-4" />
@@ -460,16 +460,16 @@ export const ChatOverlay = () => {
                     )}
                   >
                     {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
-                        <Bot className="h-3.5 w-3.5 text-emerald-400" />
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
+                        <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
                       </div>
                     )}
                     <div
                       className={cn(
                         "max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
                         msg.role === "user"
-                          ? "rounded-br-sm bg-zinc-100 text-zinc-900"
-                          : "rounded-bl-sm bg-zinc-800 text-zinc-100",
+                          ? "rounded-br-sm bg-[#2e2719] text-[#fbf6eb]"
+                          : "rounded-bl-sm bg-[#ebe0ca] text-[#2e2719]",
                       )}
                     >
                       {msg.content}
@@ -486,9 +486,9 @@ export const ChatOverlay = () => {
                           onClick={() => handleChoiceClick(choice, i)}
                           className={cn(
                             "h-auto justify-start whitespace-normal py-1.5 px-2.5 text-left text-xs font-normal leading-snug",
-                            "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50",
+                            "border-[#ddd0b4] bg-[#fffaf2] text-[#2e2719] hover:bg-[#ebe0ca] hover:text-[#2e2719]",
                             isOtherChoice(choice) &&
-                              "col-span-2 border-dashed text-zinc-400",
+                              "col-span-2 border-dashed text-[#8c7e66]",
                           )}
                         >
                           {choice}
@@ -500,11 +500,11 @@ export const ChatOverlay = () => {
               ))}
               {loading && (
                 <div className="flex justify-start gap-2">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
-                    <Bot className="h-3.5 w-3.5 text-emerald-400" />
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
+                    <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
                   </div>
-                  <div className="rounded-2xl rounded-bl-sm bg-zinc-800 px-3 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                  <div className="rounded-2xl rounded-bl-sm bg-[#ebe0ca] px-3 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#8c7e66]" />
                   </div>
                 </div>
               )}
@@ -513,9 +513,9 @@ export const ChatOverlay = () => {
           </ScrollArea>
 
           {/* Input */}
-          <div className="border-t border-neutral-800 bg-neutral-900/40 px-5 py-4">
+          <div className="border-t border-[#ddd0b4] bg-[#ebe0ca]/40 px-5 py-4">
             <div className="mx-auto max-w-3xl">
-              <div className="relative rounded-xl border border-neutral-800 bg-neutral-900">
+              <div className="relative rounded-xl border border-[#ddd0b4] bg-[#fffaf2]">
                 <div className="overflow-y-auto">
                   <Textarea
                     ref={textareaRef}
@@ -527,8 +527,8 @@ export const ChatOverlay = () => {
                     onKeyDown={handleKeyDown}
                     placeholder="메시지를 입력하세요..."
                     className={cn(
-                      "w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-white",
-                      "placeholder:text-sm placeholder:text-neutral-500",
+                      "w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-[#2e2719]",
+                      "placeholder:text-sm placeholder:text-[#8c7e66]",
                       "focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
                       "min-h-[60px]",
                     )}
@@ -540,11 +540,11 @@ export const ChatOverlay = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-neutral-800"
+                      className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca]"
                       aria-label="첨부"
                     >
-                      <Paperclip className="h-4 w-4 text-white" />
-                      <span className="hidden text-xs text-zinc-400 transition-opacity group-hover:inline">
+                      <Paperclip className="h-4 w-4 text-[#5a5040]" />
+                      <span className="hidden text-xs text-[#8c7e66] transition-opacity group-hover:inline">
                         첨부
                       </span>
                     </button>
@@ -552,7 +552,7 @@ export const ChatOverlay = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="flex items-center justify-between gap-1 rounded-lg border border-dashed border-zinc-700 px-2 py-1 text-sm text-zinc-400 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
+                      className="flex items-center justify-between gap-1 rounded-lg border border-dashed border-[#ddd0b4] px-2 py-1 text-sm text-[#8c7e66] transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca]"
                     >
                       <PlusIcon className="h-4 w-4" />
                       Project
@@ -562,17 +562,17 @@ export const ChatOverlay = () => {
                       onClick={() => send(input)}
                       disabled={loading || !input.trim()}
                       className={cn(
-                        "flex items-center justify-between gap-1 rounded-lg border border-zinc-700 px-1.5 py-1.5 text-sm transition-colors hover:border-zinc-600 hover:bg-zinc-800 disabled:opacity-50",
+                        "flex items-center justify-between gap-1 rounded-lg border border-[#ddd0b4] px-1.5 py-1.5 text-sm transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca] disabled:opacity-50",
                         input.trim()
-                          ? "bg-white text-black hover:bg-zinc-100"
-                          : "text-zinc-400",
+                          ? "bg-[#2e2719] text-[#fbf6eb] hover:bg-[#3d3423]"
+                          : "text-[#8c7e66]",
                       )}
                       aria-label="보내기"
                     >
                       <ArrowUpIcon
                         className={cn(
                           "h-4 w-4",
-                          input.trim() ? "text-black" : "text-zinc-400",
+                          input.trim() ? "text-[#fbf6eb]" : "text-[#8c7e66]",
                         )}
                       />
                     </button>

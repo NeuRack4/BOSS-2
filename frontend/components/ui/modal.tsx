@@ -32,22 +32,22 @@ export const Modal = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         className={cn(
-          "rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl",
+          "rounded-xl border border-[#ddd0b4] bg-[#fffaf2] shadow-xl",
           widthClass,
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+        <div className="flex items-center justify-between border-b border-[#ddd0b4] px-4 py-3">
+          <h3 className="text-sm font-semibold text-[#2e2719]">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="rounded p-1 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
             aria-label="close"
           >
             <X className="h-4 w-4" />

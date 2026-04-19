@@ -1,6 +1,6 @@
 # BOSS-2
 
-![version](https://img.shields.io/badge/version-0.3.0-blue)
+![version](https://img.shields.io/badge/version-0.4.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -34,9 +34,11 @@
 
 ## Key Features
 
-- **자유 캔버스**: React Flow 기반 드래그 가능한 노드 뷰
+- **자유 캔버스**: React Flow 기반 드래그 가능한 노드 뷰 (Sand/Paper 테마)
 - **오케스트레이터 채팅**: 대화만으로 모든 기능 제어
 - **자율 스케쥴러**: 생성물마다 Celery Beat 태스크 연결
+- **일정 관리 모달**: `schedule` + 기간성 artifact(start/end/due)를 달력·리스트로 통합 관리
+- **노드 호버 상세**: 선택한 노드의 부모/자식 관계, metadata, 상태를 우측 패널에 즉시 표시
 - **RAG + 하이브리드 서치**: pgvector 벡터 검색 + BM25 키워드 검색
 - **계정별 장기 기억**: Supabase Auth 계정마다 독립 메모리 + context 압축
 - **실시간 업데이트**: Supabase Realtime으로 캔버스 즉시 반영
@@ -142,4 +144,4 @@ npm run dev
 
 ## Version
 
-현재 버전: **0.3.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.
+현재 버전: **0.4.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.

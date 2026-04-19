@@ -34,8 +34,8 @@ type Props = {
 
 const TAB_CLS = (active: boolean) =>
   active
-    ? "border-emerald-400 text-emerald-300"
-    : "border-transparent text-zinc-500 hover:text-zinc-300";
+    ? "border-[#7f8f54] text-[#6a7843]"
+    : "border-transparent text-[#8c7e66] hover:text-[#2e2719]";
 
 export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
   const [tab, setTab] = useState<"summary" | "history">("summary");
@@ -78,7 +78,7 @@ export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
 
   return (
     <Modal open={open} onClose={onClose} title={title} widthClass="w-[580px]">
-      <div className="mb-3 flex gap-4 border-b border-zinc-800">
+      <div className="mb-3 flex gap-4 border-b border-[#ddd0b4]">
         <button
           type="button"
           onClick={() => setTab("summary")}
@@ -97,31 +97,31 @@ export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
 
       {loading ? (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+          <Loader2 className="h-5 w-5 animate-spin text-[#8c7e66]" />
         </div>
       ) : !data ? (
-        <p className="py-8 text-center text-[12px] text-zinc-500">
+        <p className="py-8 text-center text-[12px] text-[#8c7e66]">
           데이터를 불러올 수 없습니다.
         </p>
       ) : tab === "summary" ? (
         <div className="space-y-3">
-          <div className="whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-200">
+          <div className="whitespace-pre-wrap rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/50 px-3 py-2.5 text-[12px] leading-relaxed text-[#2e2719]">
             {data.summary}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/40 px-3 py-2">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+            <div className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-2">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-[#8c7e66]">
                 활동 로그
               </p>
-              <p className="mt-0.5 text-lg font-semibold text-zinc-100">
+              <p className="mt-0.5 text-lg font-semibold text-[#2e2719]">
                 {data.counts.logs}
               </p>
             </div>
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/40 px-3 py-2">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+            <div className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-2">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-[#8c7e66]">
                 아티팩트
               </p>
-              <p className="mt-0.5 text-lg font-semibold text-zinc-100">
+              <p className="mt-0.5 text-lg font-semibold text-[#2e2719]">
                 {data.counts.artifacts}
               </p>
             </div>
@@ -130,7 +130,7 @@ export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
       ) : (
         <ScrollArea className="h-[360px] pr-2">
           {data.logs.length === 0 ? (
-            <p className="py-8 text-center text-[12px] text-zinc-500">
+            <p className="py-8 text-center text-[12px] text-[#8c7e66]">
               최근 30일 활동이 없습니다.
             </p>
           ) : (
@@ -138,19 +138,19 @@ export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
               {data.logs.map((log, i) => (
                 <li
                   key={i}
-                  className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+                  className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/50 px-3 py-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-[#8c7e66]">
                       {log.domain} · {log.type}
                     </span>
-                    <span className="font-mono text-[9px] text-zinc-500">
+                    <span className="font-mono text-[9px] text-[#8c7e66]">
                       {log.created_at?.slice(0, 10)}
                     </span>
                   </div>
-                  <p className="mt-1 text-[12px] text-zinc-200">{log.title}</p>
+                  <p className="mt-1 text-[12px] text-[#2e2719]">{log.title}</p>
                   {log.description && (
-                    <p className="mt-0.5 text-[11px] text-zinc-400">
+                    <p className="mt-0.5 text-[11px] text-[#5a5040]">
                       {log.description}
                     </p>
                   )}

@@ -95,7 +95,7 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {message && <p className="text-sm text-emerald-500">{message}</p>}
+          {message && <p className="text-sm text-[#6a7843]">{message}</p>}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

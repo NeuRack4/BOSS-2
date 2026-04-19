@@ -35,3 +35,12 @@ export const updateStoredPosition = (
   all[id] = position;
   saveStoredPositions(all);
 };
+
+export const clearStoredPositions = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* non-fatal */
+  }
+};

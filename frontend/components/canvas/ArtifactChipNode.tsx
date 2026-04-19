@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Handle, Position, NodeProps } from "@xyflow/react";
+import { Handle, Position, NodeProps, useStoreApi } from "@xyflow/react";
 import {
   ChevronDown,
   Clock,
@@ -31,20 +31,20 @@ const SCHEDULE_LABEL: Record<ScheduleDisplay, string> = {
 
 const SCHEDULE_STYLES: Record<ScheduleDisplay, string> = {
   waiting:
-    "border-cyan-500/40 bg-cyan-500/5 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.18)] hover:bg-cyan-500/10",
+    "border-[#c47865]/40 bg-[#c47865]/8 text-[#a35c4a] hover:bg-[#c47865]/12",
   running:
-    "border-emerald-400/60 bg-emerald-500/10 text-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.35)] animate-pulse hover:bg-emerald-500/15",
+    "border-[#7f8f54]/60 bg-[#7f8f54]/12 text-[#6a7843] shadow-[0_0_14px_rgba(127,143,84,0.25)] animate-pulse hover:bg-[#7f8f54]/18",
   paused:
-    "border-zinc-700 bg-zinc-900/60 text-zinc-500 opacity-70 hover:opacity-90 hover:border-zinc-600",
+    "border-[#ddd0b4] bg-[#ebe0ca]/60 text-[#8c7e66] opacity-80 hover:opacity-100 hover:border-[#bfae8a]",
   delayed:
-    "border-zinc-700 bg-zinc-900/50 text-zinc-500 opacity-60 animate-pulse hover:opacity-90 hover:border-amber-500/40",
+    "border-[#c9801e]/55 bg-[#c9801e]/10 text-[#c9801e] opacity-85 animate-pulse hover:opacity-100 hover:border-[#c9801e]/80",
 };
 
 const SCHEDULE_DOT: Record<ScheduleDisplay, string> = {
-  waiting: "bg-cyan-400",
-  running: "bg-emerald-400",
-  paused: "bg-zinc-600",
-  delayed: "bg-zinc-700",
+  waiting: "bg-[#c47865]",
+  running: "bg-[#7f8f54]",
+  paused: "bg-[#bfae8a]",
+  delayed: "bg-[#c9801e]",
 };
 
 const deriveScheduleDisplay = (
@@ -61,12 +61,12 @@ const deriveScheduleDisplay = (
 };
 
 const STATUS_DOT: Record<string, string> = {
-  active: "bg-emerald-500",
-  draft: "bg-zinc-400",
-  paused: "bg-amber-500",
-  success: "bg-emerald-500",
-  failed: "bg-rose-500",
-  running: "bg-sky-500 animate-pulse",
+  active: "bg-[#7f8f54]",
+  draft: "bg-[#bfae8a]",
+  paused: "bg-[#bfae8a]",
+  success: "bg-[#7f8f54]",
+  failed: "bg-[#b85a4a]",
+  running: "bg-[#c47865] animate-pulse",
 };
 
 const KIND_ICON: Record<Kind, React.ComponentType<{ className?: string }>> = {
@@ -86,33 +86,41 @@ const DOMAIN_COLOR: Record<
   { hex: string; border: string; handle: string; icon: string }
 > = {
   recruitment: {
-    hex: "#60a5fa",
-    border: "border-blue-400/40",
-    handle: "!bg-blue-400",
-    icon: "text-blue-500",
+    hex: "#c47865",
+    border: "border-[#c47865]/55",
+    handle: "!bg-[#c47865]",
+    icon: "text-[#a35c4a]",
   },
   marketing: {
-    hex: "#c084fc",
-    border: "border-purple-400/40",
-    handle: "!bg-purple-400",
-    icon: "text-purple-500",
+    hex: "#d89a2b",
+    border: "border-[#d89a2b]/55",
+    handle: "!bg-[#d89a2b]",
+    icon: "text-[#a87620]",
   },
   sales: {
-    hex: "#34d399",
-    border: "border-emerald-400/40",
-    handle: "!bg-emerald-400",
-    icon: "text-emerald-500",
+    hex: "#7f8f54",
+    border: "border-[#7f8f54]/55",
+    handle: "!bg-[#7f8f54]",
+    icon: "text-[#6a7843]",
   },
   documents: {
-    hex: "#fbbf24",
-    border: "border-amber-400/40",
-    handle: "!bg-amber-400",
-    icon: "text-amber-500",
+    hex: "#8e5572",
+    border: "border-[#8e5572]/55",
+    handle: "!bg-[#8e5572]",
+    icon: "text-[#764463]",
   },
 };
 
+const ZOOM_FOCUS_THRESHOLD = 0.7;
+
 export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
+  const store = useStoreApi();
   const [expanded, setExpanded] = useState(false);
+  const toggleExpand = () => {
+    const zoom = store.getState().transform[2];
+    if (zoom < ZOOM_FOCUS_THRESHOLD) return;
+    setExpanded((v) => !v);
+  };
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localStatus, setLocalStatus] = useState<Status | null>(null);
@@ -278,24 +286,24 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
 
   const rateButtonIcon =
     localRating === "up" ? (
-      <ThumbsUp className="h-3 w-3 text-emerald-400" />
+      <ThumbsUp className="h-[14px] w-[14px] text-[#6a7843]" />
     ) : localRating === "down" ? (
-      <ThumbsDown className="h-3 w-3 text-rose-400" />
+      <ThumbsDown className="h-[14px] w-[14px] text-[#b85a4a]" />
     ) : (
-      <Circle className="h-3 w-3 text-zinc-500" />
+      <Circle className="h-[14px] w-[14px] text-[#8c7e66]" />
     );
 
   const shortTitle = title.replace(/^\[MOCK\]\s*/, "").trim() || title;
 
   const detailPanel = expanded ? (
-    <div className="absolute left-1/2 top-full z-40 mt-2 w-[220px] -translate-x-1/2 space-y-1.5 rounded-md border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 shadow-2xl">
-      <p className="text-[11px] font-semibold leading-tight text-zinc-100">
+    <div className="absolute left-1/2 top-full z-40 mt-2 w-[220px] -translate-x-1/2 space-y-1.5 rounded-md border border-[#ddd0b4] bg-[#fffaf2]/97 px-2.5 py-2 shadow-xl">
+      <p className="text-[13px] font-semibold leading-tight text-[#2e2719]">
         {shortTitle}
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge
           variant="outline"
-          className="rounded-full border-zinc-700 bg-zinc-900 px-1.5 py-0 text-[9px] uppercase tracking-[0.15em] text-zinc-400"
+          className="rounded-full border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0 text-[11px] uppercase tracking-[0.15em] text-[#8c7e66]"
         >
           {KIND_BADGE[kind]}
         </Badge>
@@ -303,35 +311,37 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
           domains.map((d) => (
             <span
               key={d}
-              className="rounded-full px-1.5 py-0 text-[9px] font-mono uppercase tracking-wider"
+              className="rounded-full px-1.5 py-0 text-[11px] font-mono uppercase tracking-wider"
               style={{
                 color: DOMAIN_COLOR[d].hex,
                 border: `1px solid ${DOMAIN_COLOR[d].hex}66`,
-                background: `${DOMAIN_COLOR[d].hex}11`,
+                background: `${DOMAIN_COLOR[d].hex}14`,
               }}
             >
               {d}
             </span>
           ))}
         {!isCross && type && (
-          <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-[#8c7e66]">
             {type}
           </span>
         )}
       </div>
       {cron && (
-        <p className="font-mono text-[10px] text-zinc-400">
-          cron: <span className="text-zinc-100">{cron}</span>
-          {nextRun && <span className="text-zinc-500"> · next: {nextRun}</span>}
+        <p className="font-mono text-[12px] text-[#8c7e66]">
+          cron: <span className="text-[#2e2719]">{cron}</span>
+          {nextRun && (
+            <span className="text-[#8c7e66]"> · next: {nextRun}</span>
+          )}
         </p>
       )}
       {executedAt && (
-        <p className="font-mono text-[10px] text-zinc-400">
-          executed: <span className="text-zinc-100">{executedAt}</span>
+        <p className="font-mono text-[12px] text-[#8c7e66]">
+          executed: <span className="text-[#2e2719]">{executedAt}</span>
         </p>
       )}
       {content && (
-        <p className="whitespace-pre-wrap break-words text-[10px] leading-snug text-zinc-300">
+        <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[#5a5040]">
           {content}
         </p>
       )}
@@ -340,12 +350,12 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
 
   const evalPopover = popoverOpen ? (
     <div
-      className="nodrag absolute left-1/2 top-full z-50 mt-1 w-[220px] -translate-x-1/2 space-y-2 rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 shadow-2xl"
+      className="nodrag absolute left-1/2 top-full z-50 mt-1 w-[220px] -translate-x-1/2 space-y-2 rounded-lg border border-[#ddd0b4] bg-[#fffaf2] p-2.5 shadow-xl"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between">
-        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-400">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#8c7e66]">
           평가
         </p>
         <div className="flex gap-1">
@@ -355,8 +365,8 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded border transition-colors",
               localRating === "up"
-                ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
-                : "border-zinc-700 text-zinc-400 hover:bg-zinc-800",
+                ? "border-[#7f8f54] bg-[#7f8f54]/20 text-[#6a7843]"
+                : "border-[#ddd0b4] text-[#8c7e66] hover:bg-[#ebe0ca]",
             )}
             aria-label="thumbs up"
           >
@@ -368,8 +378,8 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded border transition-colors",
               localRating === "down"
-                ? "border-rose-400 bg-rose-500/20 text-rose-300"
-                : "border-zinc-700 text-zinc-400 hover:bg-zinc-800",
+                ? "border-[#b85a4a] bg-[#b85a4a]/20 text-[#b85a4a]"
+                : "border-[#ddd0b4] text-[#8c7e66] hover:bg-[#ebe0ca]",
             )}
             aria-label="thumbs down"
           >
@@ -381,13 +391,13 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         value={localFeedback}
         onChange={(e) => setLocalFeedback(e.target.value)}
         placeholder="피드백 (선택) — 다음 실행에 반영돼요"
-        className="h-16 w-full resize-none rounded border border-zinc-700 bg-zinc-950 text-zinc-100 px-2 py-1.5 text-[11px] placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+        className="h-16 w-full resize-none rounded border border-[#ddd0b4] bg-[#f2e9d5] text-[#2e2719] px-2 py-1.5 text-[13px] placeholder:text-[#8c7e66] focus:outline-none focus:ring-1 focus:ring-[#bfae8a]"
       />
       <div className="flex gap-1.5">
         <button
           type="button"
           onClick={() => setPopoverOpen(false)}
-          className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800"
+          className="flex-1 rounded border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[12px] font-medium text-[#5a5040] hover:bg-[#ddd0b4]"
         >
           취소
         </button>
@@ -395,7 +405,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
           type="button"
           onClick={handleSave}
           disabled={!localRating || saving}
-          className="flex-1 rounded bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-900 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded bg-[#2e2719] px-2 py-1 text-[12px] font-medium text-[#fbf6eb] hover:bg-[#3d3423] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
             <Loader2 className="mx-auto h-3 w-3 animate-spin" />
@@ -410,7 +420,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
   const card = (
     <div
       className={cn(
-        "group/node relative w-[180px] overflow-visible rounded-[11px] bg-zinc-900/90 backdrop-blur transition-all hover:shadow-lg",
+        "group/node relative w-[218px] overflow-visible rounded-[11px] bg-[#fffaf2]/95 backdrop-blur transition-all hover:shadow-lg",
         !isCross && "border " + primaryColor.border,
         shapeBorder,
         selected && "ring-2 ring-primary/40",
@@ -422,27 +432,30 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggleExpand}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setExpanded((v) => !v);
+            toggleExpand();
           }
         }}
-        className="flex w-full cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors hover:bg-zinc-800/40"
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#ebe0ca]/60"
       >
         <div
           className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            STATUS_DOT[status] ?? "bg-zinc-300",
+            "h-[8px] w-[8px] shrink-0 rounded-full",
+            STATUS_DOT[status] ?? "bg-[#bfae8a]",
           )}
         />
         <div className="flex shrink-0 items-center -space-x-1">
           {(isCross ? domains : [primary]).map((d) => (
-            <Icon key={d} className={cn("h-3 w-3", DOMAIN_COLOR[d].icon)} />
+            <Icon
+              key={d}
+              className={cn("h-[14px] w-[14px]", DOMAIN_COLOR[d].icon)}
+            />
           ))}
         </div>
-        <p className="flex-1 truncate text-[11px] font-medium leading-tight text-zinc-100">
+        <p className="flex-1 truncate text-[14px] font-medium leading-tight text-[#2e2719]">
           {shortTitle}
         </p>
         <div
@@ -460,13 +473,13 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
               setPopoverOpen((v) => !v);
             }
           }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-zinc-700/60"
+          className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded hover:bg-[#ddd0b4]/80"
         >
           {rateButtonIcon}
         </div>
         <ChevronDown
           className={cn(
-            "h-3 w-3 shrink-0 text-zinc-500 transition-transform",
+            "h-[14px] w-[14px] shrink-0 text-[#8c7e66] transition-transform",
             expanded && "rotate-180",
           )}
         />
@@ -486,13 +499,13 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
             }
           }}
           className={cn(
-            "nodrag flex cursor-pointer items-center justify-center gap-1.5 border-t px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-all",
+            "nodrag flex cursor-pointer items-center justify-center gap-2 border-t px-2 py-2 font-mono text-[13px] uppercase tracking-[0.18em] transition-all",
             SCHEDULE_STYLES[scheduleDisplay],
           )}
         >
           <span
             className={cn(
-              "h-1.5 w-1.5 rounded-full",
+              "h-[8px] w-[8px] rounded-full",
               SCHEDULE_DOT[scheduleDisplay],
             )}
           />
@@ -508,7 +521,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         type="target"
         position={Position.Left}
         className={cn(
-          "!h-1.5 !w-1.5 !border-2 !border-zinc-950",
+          "!h-1.5 !w-1.5 !border-2 !border-[#fbf6eb]",
           primaryColor.handle,
         )}
       />
@@ -517,7 +530,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         type="source"
         position={Position.Left}
         className={cn(
-          "!h-1.5 !w-1.5 !border-2 !border-zinc-950",
+          "!h-1.5 !w-1.5 !border-2 !border-[#fbf6eb]",
           primaryColor.handle,
         )}
       />
@@ -526,7 +539,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         type="target"
         position={Position.Right}
         className={cn(
-          "!h-1.5 !w-1.5 !border-2 !border-zinc-950",
+          "!h-1.5 !w-1.5 !border-2 !border-[#fbf6eb]",
           primaryColor.handle,
         )}
       />
@@ -535,7 +548,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         type="source"
         position={Position.Right}
         className={cn(
-          "!h-1.5 !w-1.5 !border-2 !border-zinc-950",
+          "!h-1.5 !w-1.5 !border-2 !border-[#fbf6eb]",
           primaryColor.handle,
         )}
       />
@@ -556,15 +569,15 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
   const confirmPopup =
     isSchedule && runConfirmOpen ? (
       <div
-        className="nodrag absolute left-0 top-full z-50 mt-1 w-[220px] space-y-2 rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 shadow-2xl"
+        className="nodrag absolute left-0 top-full z-50 mt-1 w-[220px] space-y-2 rounded-lg border border-[#ddd0b4] bg-[#fffaf2] p-2.5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <p className="text-[11px] leading-snug text-zinc-200">
+        <p className="text-[13px] leading-snug text-[#2e2719]">
           지금 바로 1회 실행할까요?
         </p>
         {nextRun && (
-          <p className="font-mono text-[9px] text-zinc-500">
+          <p className="font-mono text-[11px] text-[#8c7e66]">
             다음 예정: {nextRun}
           </p>
         )}
@@ -572,7 +585,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
           <button
             type="button"
             onClick={() => setRunConfirmOpen(false)}
-            className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800"
+            className="flex-1 rounded border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[12px] font-medium text-[#5a5040] hover:bg-[#ddd0b4]"
           >
             아니오
           </button>
@@ -580,7 +593,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
             type="button"
             onClick={runScheduleNow}
             disabled={runPending}
-            className="flex-1 rounded bg-emerald-500 px-2 py-1 text-[10px] font-medium text-zinc-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded bg-[#7f8f54] px-2 py-1 text-[12px] font-medium text-[#fbf6eb] hover:bg-[#6a7843] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {runPending ? (
               <Loader2 className="mx-auto h-3 w-3 animate-spin" />
@@ -593,7 +606,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
     ) : null;
 
   return (
-    <div className="relative w-[180px]">
+    <div className="relative w-[218px]">
       {wrappedCard}
       {confirmPopup}
     </div>

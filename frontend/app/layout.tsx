@@ -29,7 +29,18 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-zinc-950">
+      <head>
+        <link
+          rel="stylesheet"
+          as="style"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"
+        />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@2.304/web/variable/JetBrainsMono-Variable.css"
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-[#f2e9d5]">
         <Providers>{children}</Providers>
       </body>
     </html>
