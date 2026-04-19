@@ -81,6 +81,8 @@ export const ChatOverlay = () => {
     requestLoadSession,
     loadSessionTick,
     pendingLoadSessionId,
+    pendingBriefing,
+    consumeBriefing,
   } = useChat();
 
   const [messages, setMessages] = useState<Message[]>([GREETING]);
@@ -149,8 +151,13 @@ export const ChatOverlay = () => {
     if (!isChatOpen) return;
     openTick.current += 1;
     setCurrentSessionId(null);
-    setMessages([GREETING]);
-  }, [isChatOpen, setCurrentSessionId]);
+    if (pendingBriefing) {
+      setMessages([{ role: "assistant", content: pendingBriefing }]);
+      consumeBriefing();
+    } else {
+      setMessages([GREETING]);
+    }
+  }, [isChatOpen, setCurrentSessionId, pendingBriefing, consumeBriefing]);
 
   // Manual 새 대화
   useEffect(() => {

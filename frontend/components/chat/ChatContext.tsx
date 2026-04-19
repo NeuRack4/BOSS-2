@@ -36,6 +36,9 @@ type ChatContextValue = {
   requestLoadSession: (id: string) => void;
   loadSessionTick: number;
   pendingLoadSessionId: string | null;
+  pendingBriefing: string | null;
+  openChatWithBriefing: (content: string) => void;
+  consumeBriefing: () => void;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -51,6 +54,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [pendingLoadSessionId, setPendingLoadSessionId] = useState<
     string | null
   >(null);
+  const [pendingBriefing, setPendingBriefing] = useState<string | null>(null);
 
   const registerSender = useCallback((fn: ChatSendFn) => {
     senderRef.current = fn;
@@ -87,6 +91,15 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     senderRef.current?.(text);
   }, []);
 
+  const openChatWithBriefing = useCallback((content: string) => {
+    setPendingBriefing(content);
+    setIsChatOpen(true);
+  }, []);
+
+  const consumeBriefing = useCallback(() => {
+    setPendingBriefing(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       registerSender,
@@ -105,6 +118,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       requestLoadSession,
       loadSessionTick,
       pendingLoadSessionId,
+      pendingBriefing,
+      openChatWithBriefing,
+      consumeBriefing,
     }),
     [
       registerSender,
@@ -121,6 +137,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       requestLoadSession,
       loadSessionTick,
       pendingLoadSessionId,
+      pendingBriefing,
+      openChatWithBriefing,
+      consumeBriefing,
     ],
   );
 

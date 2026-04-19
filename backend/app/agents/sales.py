@@ -1,7 +1,12 @@
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
-from app.agents.orchestrator import CLARIFY_RULE
+from app.agents.orchestrator import CLARIFY_RULE, NICKNAME_RULE, PROFILE_RULE
 from app.agents._feedback import feedback_context
+from app.agents._suggest import suggest_today_for_domain
+
+
+def suggest_today(account_id: str) -> list[dict]:
+    return suggest_today_for_domain(account_id, "sales")
 
 SYSTEM_PROMPT = """당신은 매출 관리 전문 AI 에이전트입니다.
 소상공인의 매출 분석, 가격 전략, 고객 응대를 담당합니다.
@@ -19,7 +24,7 @@ SYSTEM_PROMPT = """당신은 매출 관리 전문 AI 에이전트입니다.
 type: sales_report|price_strategy|customer_script|checklist
 title: <제목>
 [/ARTIFACT]
-""" + CLARIFY_RULE + """
+""" + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
 예시 (정보 부족 시):
 "매출 개선을 도와드릴게요. 지금 가장 고민되는 부분은 무엇인가요?

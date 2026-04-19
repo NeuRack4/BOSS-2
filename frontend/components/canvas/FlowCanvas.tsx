@@ -429,8 +429,9 @@ export const FlowCanvas = () => {
   const [stickyHoveredId, setStickyHoveredId] = useState<string | null>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const nodeOpRef = useRef<Map<string, number>>(new Map());
-  const { send: sendChat } = useChat();
-  const { timeRangeDays, selectedDomains, showArchive } = useFilter();
+  const { send: sendChat, openChat } = useChat();
+  const { timeRangeDays, selectedDomains, showArchive, setShowArchive } =
+    useFilter();
   const filterRef = useRef({ timeRangeDays, selectedDomains });
   useEffect(() => {
     filterRef.current = { timeRangeDays, selectedDomains };
@@ -450,20 +451,41 @@ export const FlowCanvas = () => {
     return () => window.removeEventListener("boss:reset-layout", handler);
   }, [resetLayout]);
 
+  const focusNodeById = useCallback((id: string): boolean => {
+    const inst = flowRef.current;
+    if (!inst) return false;
+    const n = inst.getNode(id);
+    if (!n) return false;
+    const kind = (n.data as { kind?: Kind })?.kind ?? "artifact";
+    const { w, h } = sizeFor(kind);
+    const mw = n.measured?.width ?? w;
+    const mh = n.measured?.height ?? h;
+    inst.setCenter(n.position.x + mw / 2, n.position.y + mh / 2, {
+      zoom: 1.4,
+      duration: 600,
+    });
+    return true;
+  }, []);
+
   useEffect(() => {
     const onFocus = (e: Event) => {
       const id = (e as CustomEvent<{ id?: string }>).detail?.id;
       if (!id) return;
-      flowRef.current?.fitView({
-        nodes: [{ id }],
-        padding: 0.35,
-        duration: 600,
-        maxZoom: 1.8,
-      });
+      if (focusNodeById(id)) return;
+      // Target is not in the current render — likely an archive child while
+      // showArchive is off. Enable archive and retry until it appears.
+      setShowArchive(true);
+      let attempts = 0;
+      const tryFocus = () => {
+        if (focusNodeById(id)) return;
+        if (++attempts >= 8) return;
+        window.setTimeout(tryFocus, 80);
+      };
+      window.setTimeout(tryFocus, 80);
     };
     window.addEventListener("boss:focus-node", onFocus);
     return () => window.removeEventListener("boss:focus-node", onFocus);
-  }, []);
+  }, [focusNodeById, setShowArchive]);
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
@@ -575,43 +597,50 @@ export const FlowCanvas = () => {
       const overflow = candidates.slice(VISIBLE_ARTIFACT_CAP);
 
       if (overflow.length > 0) {
-        // sub-domain (kind='domain' type='category') id → archive node id
-        const archiveBySubDomain = new Map<string, string>();
-        const archiveNodes = allArtifacts.filter((a) => a.type === "archive");
-        for (const arch of archiveNodes) {
-          const parentEdge = allEdges.find(
-            (e) => e.child_id === arch.id && e.relation === "contains",
-          );
-          if (parentEdge) archiveBySubDomain.set(parentEdge.parent_id, arch.id);
-        }
-        const newEdges: Array<Omit<EdgeRow, "id">> = [];
-        for (const art of overflow) {
-          const parentContainsEdges = allEdges.filter(
-            (e) => e.child_id === art.id && e.relation === "contains",
-          );
-          let targetArchiveId: string | undefined;
-          for (const pe of parentContainsEdges) {
-            const p = allArtifacts.find((x) => x.id === pe.parent_id);
-            if (p?.kind === "domain" && p.type === "category") {
-              targetArchiveId = archiveBySubDomain.get(p.id);
-              if (targetArchiveId) break;
+        const { data: userData } = await supabase.auth.getUser();
+        const accountId = userData.user?.id;
+        if (accountId) {
+          // sub-domain (kind='domain' type='category') id → archive node id
+          const archiveBySubDomain = new Map<string, string>();
+          const archiveNodes = allArtifacts.filter((a) => a.type === "archive");
+          for (const arch of archiveNodes) {
+            const parentEdge = allEdges.find(
+              (e) => e.child_id === arch.id && e.relation === "contains",
+            );
+            if (parentEdge)
+              archiveBySubDomain.set(parentEdge.parent_id, arch.id);
+          }
+          const newEdges: Array<Omit<EdgeRow, "id"> & { account_id: string }> =
+            [];
+          for (const art of overflow) {
+            const parentContainsEdges = allEdges.filter(
+              (e) => e.child_id === art.id && e.relation === "contains",
+            );
+            let targetArchiveId: string | undefined;
+            for (const pe of parentContainsEdges) {
+              const p = allArtifacts.find((x) => x.id === pe.parent_id);
+              if (p?.kind === "domain" && p.type === "category") {
+                targetArchiveId = archiveBySubDomain.get(p.id);
+                if (targetArchiveId) break;
+              }
+            }
+            if (targetArchiveId) {
+              newEdges.push({
+                account_id: accountId,
+                parent_id: targetArchiveId,
+                child_id: art.id,
+                relation: "contains",
+              });
             }
           }
-          if (targetArchiveId) {
-            newEdges.push({
-              parent_id: targetArchiveId,
-              child_id: art.id,
-              relation: "contains",
-            });
-          }
-        }
-        if (newEdges.length > 0) {
-          const { data: inserted, error } = await supabase
-            .from("artifact_edges")
-            .insert(newEdges)
-            .select("id,parent_id,child_id,relation");
-          if (!error && inserted) {
-            allEdges = [...allEdges, ...(inserted as EdgeRow[])];
+          if (newEdges.length > 0) {
+            const { data: inserted, error } = await supabase
+              .from("artifact_edges")
+              .insert(newEdges)
+              .select("id,parent_id,child_id,relation");
+            if (!error && inserted) {
+              allEdges = [...allEdges, ...(inserted as EdgeRow[])];
+            }
           }
         }
       }
@@ -1277,12 +1306,15 @@ export const FlowCanvas = () => {
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const data = node.data as unknown as ArtifactRow;
-      if (data.kind === "anchor") return;
+      if (data.kind === "anchor") {
+        openChat();
+        return;
+      }
       const detail = buildDetail(node.id);
       if (!detail) return;
       setModal({ type: "node-detail", node: detail });
     },
-    [buildDetail],
+    [buildDetail, openChat],
   );
 
   const menuItems = useMemo(

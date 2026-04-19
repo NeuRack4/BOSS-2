@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import activity, artifacts, chat, evaluations, memos, schedules, search, summary
+from app.routers import activity, artifacts, auth, chat, evaluations, memos, schedules, search, summary
 
 app = FastAPI(title="BOSS-2 API", version="0.1.0")
 
@@ -13,6 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(activity.router)
 app.include_router(evaluations.router)

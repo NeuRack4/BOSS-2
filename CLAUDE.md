@@ -22,10 +22,49 @@
 
 ### Agent 구조
 
-- `orchestrator.py` — 의도 분류 + 도메인 라우팅만 담당. 비즈니스 로직 없음
-- `recruitment.py` / `marketing.py` / `sales.py` / `documents.py` — 각 도메인 독립 에이전트
+- `orchestrator.py` — 의도 분류 + 도메인 라우팅 + **복수 도메인 합성** + **plan 모드** + **로그인 브리핑** + **닉네임/프로필 추출**. 비즈니스 로직 없음
+- `recruitment.py` / `marketing.py` / `sales.py` / `documents.py` — 각 도메인 독립 에이전트. 각 모듈은 `suggest_today(account_id)` 를 export (`_suggest.suggest_today_for_domain` 래핑).
+- `_suggest.py` — 도메인 공용 `suggest_today_for_domain(account_id, domain)` 헬퍼. 마감/시작 임박 artifact + 오늘~내일 예정 schedule 을 섞어 최대 3개 반환.
+- `_feedback.py` — 도메인 에이전트 system 프롬프트에 주입되는 과거 down-vote 피드백 컨텍스트.
 - 에이전트 간 직접 호출 금지. 반드시 orchestrator를 통해 라우팅
 - 하나의 artifact가 여러 도메인에 속할 수 있음 (크로스 도메인) — `domains TEXT[]` 배열로 표현
+
+### Orchestrator 동작 (v0.6.0~)
+
+`classify_intent(message, history)` 는 **라벨 리스트**를 돌려준다. 가능한 라벨:
+
+- `recruitment` / `marketing` / `sales` / `documents` — 도메인 (복수 가능)
+- `chitchat` — 인사·호칭 설정·BOSS 사용법·감사 인사
+- `refuse` — 4개 도메인과 무관한 요청 (코딩·날씨·일반 상식 QA 등) — 명시적 거절 메시지 1줄
+- `planning` — 기간 단위 플랜/정리 요청. 단독으로만 존재.
+
+분기 (`orchestrator.run`):
+
+1. `["refuse"]` → `_refusal_message(account_id)` (BOSS 범위 안내 + 닉네임 있으면 호칭).
+2. `["planning"]` → `_handle_planning` — 메시지에서 기간 추출(기본 오늘±2일), `activity_logs` + 기한 artifact + 예정 schedule 수집 → 4개 도메인 `suggest_today` 후보 첨부 → GPT-4o 로 일자별/도메인별 플랜 생성.
+3. 도메인 1개 → `_call_domain_with_shortcut` — 에이전트 1회 호출 후 응답에 `[CHOICES]` 가 있으면 **히스토리/장기기억으로 답을 추정** → 가능하면 에이전트를 guess 로 재호출해 최종 응답까지 한 턴에 제공 (_"대화 맥락으로 X 쪽이라고 판단"_ 노티스 prefix).
+4. 도메인 2개 이상 → 각 도메인을 shortcut 경로로 호출 → `[CHOICES]` 가 남아 있으면 섹션별 pass-through, 아니면 `_synthesize_cross_domain` 이 하나의 자연스러운 답으로 재합성. ARTIFACT/CHOICES/SET_NICKNAME 마커는 합성 단계에서 반드시 제거.
+5. `chitchat` (또는 빈 라벨) → `SYSTEM_PROMPT` + 닉네임/프로필 컨텍스트로 직접 응답.
+
+### Nickname + Profile 자동 학습
+
+- 응답에 **인라인 블록** 삽입/해제 규약 (에이전트와 오케스트레이터 공용):
+  - `[SET_NICKNAME]닉네임[/SET_NICKNAME]` — 호칭 저장 (`profiles.display_name`).
+  - `[SET_PROFILE]` … 한 줄당 `key: value` … `[/SET_PROFILE]` — 사업 프로필 저장.
+- Core key 허용: `business_type | business_name | business_stage(창업 준비|오픈 직전|영업 중|확장 중) | employees_count(0|1-3|4-9|10+) | location | channels(offline|online|both) | primary_goal`.
+- `sns_channels: 인스타,틱톡` 같은 쉼표 값은 `profile_meta.sns_channels` 리스트로 저장. 그 외 자유 key/value 도 `profile_meta` 에 머지.
+- 응답 파이프라인은 **항상** `_extract_and_save_nickname` → `_extract_and_save_profile` 을 거쳐 블록을 뜯어내고 본문에선 제거. 누락 시 UI 에 마커가 노출됨.
+- system 프롬프트 주입: `_nickname_context` + `_profile_context` 는 모든 도메인 에이전트 system 컨텍스트 끝에 append (`NICKNAME_RULE`, `PROFILE_RULE` 상수 공유).
+
+### 로그인 브리핑
+
+- 프론트가 로그인 성공 직후 `POST /api/auth/session/touch {account_id}` 호출 (`app/routers/auth.py`).
+- 백엔드가 `profiles.last_seen_at` 을 읽어 **이전 접속 시각**을 확보 → `orchestrator.build_briefing(account_id, last_seen_at)` 실행 → 마지막으로 `last_seen_at` 을 now 로 갱신.
+- 발사 조건(`_briefing_should_fire`): `last_seen_at` 이 없거나 (now - last_seen_at ≥ 8h) 또는 이전 접속 이후 `task_logs.status='failed'` ≥ 1건.
+- 본문 구성: 헤드라인 3줄 + `---` + `### 자리 비운 사이` / `### 최근 이어가기` / `### 오늘 추천` + 마지막에 사용자에게 거는 질문 1개.
+- `_aggregate_activity` 가 `activity_logs` + `task_logs` 를 타입/도메인별 카운트로 집계, `_top_domains_last_week` 로 상위 1~2 도메인의 최근 제목을 쿼리로 만들어 `hybrid_search` 1회로 장기기억 recall.
+- 프로필 core 필드가 3개 미만이면 **프로필 넛지** 인스트럭션 추가 — 본문 마지막 질문에 비어있는 필드 중 하나만 자연스럽게 물어보도록 강제.
+- 응답(`{should_fire, message, meta}`)을 프론트가 받아 `sessionStorage.boss2:pending-briefing` 에 저장 → `/dashboard` 진입 시 `BriefingLoader` 가 꺼내 `openChatWithBriefing(content)` 호출 → 채팅창이 열리면서 첫 assistant 메시지가 브리핑으로 교체.
 
 ### Memory 구조
 
@@ -43,11 +82,15 @@
 - 공용 upsert: `public.upsert_embedding(account_id, source_type, source_id, content, embedding)` — runtime `index_artifact` / 메모 CRUD / `scripts/backfill_embeddings.py` 모두 이 RPC 사용. `source_id` 유니크 인덱스로 upsert 안전.
 - `source_type` 허용값: `recruitment | marketing | sales | documents | memory | document | schedule | log | hub | memo` (006 · 007 마이그레이션으로 확장).
 
-### Scheduler 구조
+### Scheduler 구조 (`backend/app/scheduler/`)
 
-- 모든 artifact는 생성 시 `schedule` 필드를 가짐 (cron 표현식)
-- Celery Beat이 Supabase `schedules` 테이블을 주기적으로 읽어 동적 등록
-- 태스크 실행 결과는 `task_logs` 테이블에 저장
+- `celery_app.py` — Celery app 팩토리. `CELERY_BROKER_URL=rediss://…@upstash:6379/0` 에 `ssl_cert_reqs=CERT_REQUIRED` 를 자동 주입(`_ensure_ssl_cert_reqs`). Beat 기본 스케쥴로 `scheduler-tick` 하나를 `SCHEDULER_TICK_SECONDS`(기본 60s) 간격으로 등록.
+- `tasks.tick` — Beat 이 60s 마다 호출하는 스캐너. `scanner.find_due_schedules` → per-item `run_schedule_artifact.delay(id)` fan-out. `scanner.find_date_notifications` → tick 안에서 바로 `activity_logs.schedule_notify` insert (중복은 `(artifact_id, notify_kind, for_date)` 로 방지).
+- `tasks.run_schedule_artifact(id)` — 단일 schedule 실행. `artifacts.status = running` 전이 → `orchestrator.run_scheduled(artifact, account_id)` → 결과 반영(`status=active`, `metadata.executed_at`, `metadata.next_run = croniter.get_next`) + `task_logs` 성공/실패 insert + `activity_logs.schedule_run` insert + `log_nodes.create_log_node` 로 `kind='log'` artifact 노드를 캔버스에 추가(`artifact_edges.relation='logged_from'`).
+- `scanner.find_due_schedules(now)` — `kind='schedule' AND status='active' AND metadata.next_run <= now`.
+- `scanner.find_date_notifications(today)` — 일회성 artifact 중 `metadata.start_date == today` 또는 `metadata.due_date ∈ {today, today+1}`. 오늘자 `activity_logs.schedule_notify` 로그가 이미 있는 건 필터.
+- `log_nodes.create_log_node(sb, schedule_artifact, status, content, executed_at)` — `kind='log'` 노드 insert + `artifact_edges(parent=schedule, child=log, relation='logged_from')`. `schedules` 라우터의 수동 `run_now` 경로도 이 함수를 공유.
+- 태스크 실행 결과는 항상 `artifacts`(status/metadata) + `task_logs` + `activity_logs` + `kind='log'` 노드 **4곳에 동시 기록**.
 
 ### Realtime
 
@@ -57,7 +100,9 @@
 ## Database Tables (public schema)
 
 ```
-profiles              — auth.users 확장, display_name
+profiles              — auth.users 확장, display_name (닉네임), last_seen_at (로그인 브리핑 트리거),
+                        business_type / business_name / business_stage / employees_count / location /
+                        channels / primary_goal (core 7개) + profile_meta(jsonb, sns_channels 등 자유 필드)
 artifacts             — account_id(auth.uid), domains text[] (recruitment|marketing|sales|documents),
                         kind(anchor|domain|artifact|schedule|log), type, title, content, status,
                         metadata(jsonb: pinned, position, cron, ...), created_at
@@ -68,6 +113,8 @@ embeddings            — account_id, source_type, source_id, embedding(vector 1
 memory_short          — account_id, messages(jsonb), turn_count
 memory_long           — account_id, content, embedding(vector 1024), importance
 activity_logs         — account_id, type, domain, title, description, metadata(jsonb: artifact_id 포함)
+                        type 허용값: artifact_created | agent_run | schedule_run | schedule_notify
+                        (008 마이그레이션으로 schedule_run / schedule_notify 추가)
 schedules             — account_id, artifact_id, domain, cron_expr, is_active, last_run, next_run
 task_logs             — schedule_id, account_id, status, result, error, executed_at
 memos                 — account_id, artifact_id(FK→artifacts), content, created_at, updated_at
@@ -195,7 +242,7 @@ memos                 — account_id, artifact_id(FK→artifacts), content, crea
 3. Backend 먼저 개발 → Frontend 연동
 4. 새 도메인 Agent 추가 시 → orchestrator의 intent 분류 프롬프트도 업데이트
 
-### Migration File Layout (v0.5.0 기준)
+### Migration File Layout (v0.6.0 기준)
 
 ```
 supabase/
@@ -206,7 +253,10 @@ supabase/
 │   ├── 004_rls.sql                              # Row Level Security
 │   ├── 005_functions_triggers.sql               # bootstrap_workspace, hybrid_search, memory_search
 │   ├── 006_expand_embeddings_source_type.sql    # schedule/log/hub source_type + upsert_embedding RPC + source_id uniq
-│   └── 007_memos.sql                            # memos 테이블 + RLS + 'memo' source_type + updated_at 트리거
+│   ├── 007_memos.sql                            # memos 테이블 + RLS + 'memo' source_type + updated_at 트리거
+│   ├── 008_expand_activity_log_types.sql        # activity_logs.type CHECK 확장: schedule_run / schedule_notify
+│   ├── 009_profile_last_seen.sql                # profiles.last_seen_at (timestamptz) — 로그인 브리핑 트리거
+│   └── 010_profile_expansion.sql                # profiles 7개 core 컬럼 + profile_meta jsonb
 └── seed/
     ├── seed_mock_data.sql           # test@test.com 용 mock 시드
     └── cleanup_mock_data.sql        # '[MOCK]%' 일괄 제거

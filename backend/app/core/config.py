@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     upstash_redis_rest_url: str
     upstash_redis_rest_token: str
 
+    # Celery (Upstash Redis TCP — rediss://default:<pw>@host:6379/0)
+    celery_broker_url: str = ""
+    celery_result_backend: str = ""  # 비우면 broker 재사용
+    scheduler_tick_seconds: int = 60
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축

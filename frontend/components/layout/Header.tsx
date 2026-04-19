@@ -42,7 +42,7 @@ export const Header = () => {
   };
 
   return (
-    <header className="h-12 border-b border-[#ddd0b4] bg-[#fbf6eb] text-[#2e2719] flex items-center px-4 shrink-0 z-50 gap-4">
+    <header className="relative h-12 border-b border-[#ddd0b4] bg-[#fbf6eb] text-[#2e2719] flex items-center justify-between px-4 shrink-0 z-50 gap-4">
       <Link
         href="/dashboard"
         aria-label="BOSS 대쉬보드"
@@ -59,11 +59,11 @@ export const Header = () => {
         />
       </Link>
 
-      <div className="flex-1 flex justify-center">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
-          className="flex items-center gap-2 w-full max-w-[420px] rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-1.5 text-[12px] text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#5a5040] transition-colors"
+          className="pointer-events-auto flex items-center gap-2 w-[420px] max-w-[60vw] rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-1.5 text-[12px] text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#5a5040] transition-colors"
         >
           <Search className="h-3.5 w-3.5" />
           <span className="flex-1 text-left">노드·메모 검색…</span>

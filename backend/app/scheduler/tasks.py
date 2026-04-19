@@ -1,0 +1,179 @@
+"""Celery 태스크.
+
+- `tick` — 60초마다 Beat 이 호출. 스캐너 결과를 읽어 실행 대상은 per-item 태스크로 fan-out,
+  알림 대상은 tick 안에서 바로 activity_logs 에 insert.
+- `run_schedule_artifact` — 단일 schedule artifact 실행. orchestrator.run_scheduled 를 호출.
+- 실행 결과는 artifacts.status/metadata 갱신 + task_logs(성공/실패) + activity_logs(schedule_run).
+"""
+
+import asyncio
+import logging
+from datetime import datetime, timezone
+
+from croniter import croniter
+
+from app.agents import orchestrator
+from app.core.supabase import get_supabase
+from app.scheduler.celery_app import celery_app
+from app.scheduler.log_nodes import create_log_node
+from app.scheduler.scanner import find_date_notifications, find_due_schedules
+
+log = logging.getLogger(__name__)
+
+
+def _next_run_iso(cron_expr: str | None, base: datetime) -> str | None:
+    if not cron_expr:
+        return None
+    try:
+        itr = croniter(cron_expr, base)
+        return itr.get_next(datetime).isoformat()
+    except Exception:
+        return None
+
+
+def _notify_kind_to_text(kind: str) -> tuple[str, str]:
+    return {
+        "start": ("시작일 알림", "오늘부터 시작되는 항목입니다."),
+        "due_d0": ("마감일 당일", "오늘이 마감일입니다."),
+        "due_d1": ("마감 하루 전", "내일이 마감일입니다."),
+    }.get(kind, ("알림", ""))
+
+
+@celery_app.task(name="app.scheduler.tasks.tick")
+def tick() -> dict:
+    """Beat가 60초마다 호출하는 스캐너."""
+    now = datetime.now(timezone.utc)
+    due = find_due_schedules(now=now)
+    notifications = find_date_notifications(today=now.date())
+
+    for art in due:
+        run_schedule_artifact.delay(art["id"])
+
+    sb = get_supabase()
+    notif_count = 0
+    for t in notifications:
+        art = t["artifact"]
+        title_prefix, desc = _notify_kind_to_text(t["notify_kind"])
+        try:
+            sb.table("activity_logs").insert(
+                {
+                    "account_id": art["account_id"],
+                    "type": "schedule_notify",
+                    "domain": (art.get("domains") or ["general"])[0],
+                    "title": f"[{title_prefix}] {art.get('title') or ''}",
+                    "description": desc,
+                    "metadata": {
+                        "artifact_id": art["id"],
+                        "notify_kind": t["notify_kind"],
+                        "for_date": t["for_date"],
+                    },
+                }
+            ).execute()
+            notif_count += 1
+        except Exception as e:
+            log.exception("notify insert failed: %s", e)
+
+    return {"dispatched": len(due), "notifications": notif_count, "ts": now.isoformat()}
+
+
+@celery_app.task(name="app.scheduler.tasks.run_schedule_artifact", bind=True, max_retries=3)
+def run_schedule_artifact(self, artifact_id: str) -> dict:
+    """단일 schedule artifact 실행."""
+    sb = get_supabase()
+    art_res = (
+        sb.table("artifacts")
+        .select("id,account_id,domains,kind,type,title,content,status,metadata")
+        .eq("id", artifact_id)
+        .single()
+        .execute()
+    )
+    art = art_res.data
+    if not art or art.get("kind") != "schedule":
+        return {"ok": False, "reason": "not_found_or_not_schedule"}
+    if art.get("status") != "active":
+        return {"ok": False, "reason": f"status={art.get('status')}"}
+
+    account_id = art["account_id"]
+    metadata = art.get("metadata") or {}
+    cron_expr = metadata.get("cron")
+
+    sb.table("artifacts").update({"status": "running"}).eq("id", artifact_id).execute()
+    now = datetime.now(timezone.utc)
+
+    try:
+        reply = asyncio.run(orchestrator.run_scheduled(art, account_id))
+    except Exception as e:
+        log.exception("schedule execution failed: %s", e)
+        sb.table("artifacts").update({"status": "failed"}).eq("id", artifact_id).execute()
+        log_id = create_log_node(
+            sb, art, status="failed", content=f"실행 실패: {str(e)[:200]}", executed_at=now
+        )
+        sb.table("task_logs").insert(
+            {
+                "account_id": account_id,
+                "status": "failed",
+                "result": {"artifact_id": artifact_id, "title": art.get("title"), "log_id": log_id},
+                "error": str(e)[:2000],
+            }
+        ).execute()
+        sb.table("activity_logs").insert(
+            {
+                "account_id": account_id,
+                "type": "schedule_run",
+                "domain": (art.get("domains") or ["general"])[0],
+                "title": art.get("title") or "scheduled run",
+                "description": f"실행 실패: {str(e)[:200]}",
+                "metadata": {"artifact_id": artifact_id, "log_id": log_id, "status": "failed"},
+            }
+        ).execute()
+        return {"ok": False, "error": str(e)[:500]}
+
+    next_run = _next_run_iso(cron_expr, now)
+    new_metadata = {**metadata, "executed_at": now.isoformat()}
+    if next_run:
+        new_metadata["next_run"] = next_run
+
+    sb.table("artifacts").update(
+        {"status": "active", "metadata": new_metadata}
+    ).eq("id", artifact_id).execute()
+
+    log_id = create_log_node(
+        sb,
+        art,
+        status="success",
+        content=f"자동 실행 완료 — 응답 {len(reply or '')} 문자",
+        executed_at=now,
+    )
+
+    sb.table("task_logs").insert(
+        {
+            "account_id": account_id,
+            "status": "success",
+            "result": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "title": art.get("title"),
+                "reply_preview": (reply or "")[:500],
+                "next_run": next_run,
+            },
+        }
+    ).execute()
+
+    sb.table("activity_logs").insert(
+        {
+            "account_id": account_id,
+            "type": "schedule_run",
+            "domain": (art.get("domains") or ["general"])[0],
+            "title": art.get("title") or "scheduled run",
+            "description": "자동 실행 완료",
+            "metadata": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "status": "success",
+                "reply_preview": (reply or "")[:200],
+                "next_run": next_run,
+            },
+        }
+    ).execute()
+
+    return {"ok": True, "artifact_id": artifact_id, "log_id": log_id, "next_run": next_run}

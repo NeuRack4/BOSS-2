@@ -1,6 +1,7 @@
 import { Header } from "@/components/layout/Header";
 import { ChatOverlay } from "@/components/chat/ChatOverlay";
 import { ChatProvider } from "@/components/chat/ChatContext";
+import { BriefingLoader } from "@/components/chat/BriefingLoader";
 import { FilterProvider } from "@/components/canvas/FilterContext";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { FloatingFilterPanel } from "@/components/canvas/FloatingFilterPanel";
@@ -16,6 +17,7 @@ export default function DashboardPage() {
             <FloatingFilterPanel />
           </div>
           <ChatOverlay />
+          <BriefingLoader />
         </div>
       </FilterProvider>
     </ChatProvider>

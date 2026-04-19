@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.agents import orchestrator
 from app.core.supabase import get_supabase
+from app.scheduler.log_nodes import create_log_node
 from app.models.schemas import (
     ScheduleCreateRequest,
     ScheduleResponse,
@@ -52,6 +53,17 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
         reply = await orchestrator.run_scheduled(art, req.account_id)
     except Exception as e:
         sb.table("artifacts").update({"status": "failed"}).eq("id", artifact_id).execute()
+        log_id = create_log_node(
+            sb, art, status="failed", content=f"실행 실패: {str(e)[:200]}", executed_at=now
+        )
+        sb.table("task_logs").insert(
+            {
+                "account_id": req.account_id,
+                "status": "failed",
+                "result": {"artifact_id": artifact_id, "title": art.get("title"), "trigger": "run_now", "log_id": log_id},
+                "error": str(e)[:2000],
+            }
+        ).execute()
         raise HTTPException(status_code=500, detail=f"execution failed: {e}")
 
     cron_expr = metadata.get("cron")
@@ -67,6 +79,28 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
         {"status": "active", "metadata": new_metadata}
     ).eq("id", artifact_id).execute()
 
+    log_id = create_log_node(
+        sb, art,
+        status="success",
+        content=f"수동 1회 실행 완료 — 응답 {len(reply or '')} 문자",
+        executed_at=now,
+    )
+
+    sb.table("task_logs").insert(
+        {
+            "account_id": req.account_id,
+            "status": "success",
+            "result": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "title": art.get("title"),
+                "trigger": "run_now",
+                "reply_preview": (reply or "")[:500],
+                "next_run": next_run,
+            },
+        }
+    ).execute()
+
     sb.table("activity_logs").insert(
         {
             "account_id": req.account_id,
@@ -74,7 +108,13 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
             "domain": (art.get("domains") or ["general"])[0],
             "title": art.get("title") or "scheduled run",
             "description": "수동 1회 실행",
-            "metadata": {"artifact_id": artifact_id, "reply_preview": (reply or "")[:200]},
+            "metadata": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "status": "success",
+                "trigger": "run_now",
+                "reply_preview": (reply or "")[:200],
+            },
         }
     ).execute()
 

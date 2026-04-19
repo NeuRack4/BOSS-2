@@ -100,3 +100,13 @@ class SummaryResponse(BaseModel):
     data: dict[str, Any]
     error: str | None = None
     meta: dict[str, Any] = {}
+
+
+class SessionTouchRequest(BaseModel):
+    account_id: str
+
+
+class SessionTouchResponse(BaseModel):
+    data: dict[str, Any]
+    error: str | None = None
+    meta: dict[str, Any] = {}

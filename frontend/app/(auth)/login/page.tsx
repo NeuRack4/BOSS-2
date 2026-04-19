@@ -23,7 +23,7 @@ export default function LoginPage() {
     setLoading(true);
 
     if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -31,6 +31,24 @@ export default function LoginPage() {
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         setLoading(false);
         return;
+      }
+      const uid = data.user?.id;
+      if (uid) {
+        try {
+          const apiBase = process.env.NEXT_PUBLIC_API_URL;
+          const res = await fetch(`${apiBase}/api/auth/session/touch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ account_id: uid }),
+          });
+          const json = await res.json();
+          const briefing = json?.data?.briefing;
+          if (briefing?.should_fire && briefing?.message) {
+            sessionStorage.setItem("boss2:pending-briefing", briefing.message);
+          }
+        } catch {
+          // briefing 실패는 로그인 자체를 막지 않음
+        }
       }
       router.push("/dashboard");
       router.refresh();

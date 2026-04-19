@@ -1,7 +1,12 @@
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
-from app.agents.orchestrator import CLARIFY_RULE
+from app.agents.orchestrator import CLARIFY_RULE, NICKNAME_RULE, PROFILE_RULE
 from app.agents._feedback import feedback_context
+from app.agents._suggest import suggest_today_for_domain
+
+
+def suggest_today(account_id: str) -> list[dict]:
+    return suggest_today_for_domain(account_id, "recruitment")
 
 SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
 소상공인의 채용공고 작성, 면접 질문 생성, 직원 관리 조언을 담당합니다.
@@ -18,7 +23,7 @@ SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
 type: job_posting|interview_questions|checklist|guide
 title: <제목>
 [/ARTIFACT]
-""" + CLARIFY_RULE + """
+""" + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
 예시 (정보 부족 시):
 "채용공고를 작성해드릴게요. 어떤 직종의 공고인가요?

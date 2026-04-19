@@ -25,14 +25,17 @@ export const NodeContextMenu = ({ x, y, items, onClose }: Props) => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    const onClick = (e: MouseEvent) => {
+    const onPointer = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    const onWheel = () => onClose();
     window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClick);
+    window.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("wheel", onWheel, { passive: true });
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("wheel", onWheel);
     };
   }, [onClose]);
 

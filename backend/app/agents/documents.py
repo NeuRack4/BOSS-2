@@ -1,7 +1,12 @@
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
-from app.agents.orchestrator import CLARIFY_RULE
+from app.agents.orchestrator import CLARIFY_RULE, NICKNAME_RULE, PROFILE_RULE
 from app.agents._feedback import feedback_context
+from app.agents._suggest import suggest_today_for_domain
+
+
+def suggest_today(account_id: str) -> list[dict]:
+    return suggest_today_for_domain(account_id, "documents")
 
 SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 소상공인의 각종 서류 작성, 계약서, 공문서, 행정 서류를 담당합니다.
@@ -19,7 +24,7 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 type: contract|estimate|notice|checklist|guide
 title: <제목>
 [/ARTIFACT]
-""" + CLARIFY_RULE + """
+""" + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
 예시 (정보 부족 시):
 "서류를 작성해드릴게요. 어떤 서류가 필요하신가요?

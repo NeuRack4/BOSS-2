@@ -1,7 +1,12 @@
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
-from app.agents.orchestrator import CLARIFY_RULE
+from app.agents.orchestrator import CLARIFY_RULE, NICKNAME_RULE, PROFILE_RULE
 from app.agents._feedback import feedback_context
+from app.agents._suggest import suggest_today_for_domain
+
+
+def suggest_today(account_id: str) -> list[dict]:
+    return suggest_today_for_domain(account_id, "marketing")
 
 SYSTEM_PROMPT = """당신은 마케팅 전문 AI 에이전트입니다.
 소상공인의 SNS 마케팅, 광고, 이벤트 기획을 담당합니다.
@@ -18,7 +23,7 @@ SYSTEM_PROMPT = """당신은 마케팅 전문 AI 에이전트입니다.
 type: sns_post|ad_copy|marketing_plan|event_plan
 title: <제목>
 [/ARTIFACT]
-""" + CLARIFY_RULE + """
+""" + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
 예시 (정보 부족 시):
 "홍보 콘텐츠를 만들어드릴게요. 어떤 채널에 올리실 건가요?
