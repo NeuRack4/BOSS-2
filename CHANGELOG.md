@@ -5,11 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — feature-documents (Recruitment 대확장 + Capability 라우팅 + Legal 서브브랜치)
+
+### Added
+
+**Recruitment 에이전트 확장 (`recruitment.py`, `_recruit_*`)**
+
+- **3종 플랫폼 공고 동시 작성** — 당근알바 / 알바천국 / 사람인 · `[JOB_POSTINGS]` 마커 1회로 부모 `job_posting_set` + 자식 `job_posting × 3` (metadata.platform) + `contains` 엣지
+- **채용공고 HTML 포스터 생성 (`core/poster_gen.py`)** — GPT-4o 로 standalone HTML 1장 · Supabase Storage `recruitment-posters` 업로드 + `artifacts.content` 이중 저장 · `type='job_posting_poster'` · 기존 DALL-E 기반 `job_posting_image` 경로 대체 (한국어 텍스트 렌더링 품질)
+- **업종별 CHOICES 분기** — `profiles.business_type` → `cafe / restaurant / retail / beauty / academy / default` 매핑. 업종·플랫폼별 가이드 markdown (`_recruit_knowledge/`)
+- **`_recruit_calc.py`** — 2026 최저임금 10,320원 · 주휴수당 · 월 인건비 · 4대보험 의무 여부
+- **`hiring_drive` 기간 artifact** — `start_date+end_date` + `due_label='채용 마감'` 주입 → 기존 스케쥴러 D-7/3/1/0 리마인드 경로 자동 연결 (별도 마이그레이션 불필요)
+
+**Function-calling Capability 라우팅 (`_capability.py`)**
+
+- OpenAI tools API 로 도메인 에이전트의 기능을 capability 단위로 노출. 각 도메인이 `describe(account_id) -> list[Capability]` 를 export 하면 `describe_all()` 이 tool 스펙 + handler dispatch map 을 조립
+- `V2_DOMAINS = (recruitment, documents, marketing)` — sales 는 팀원 기능 구현 완료 후 별도 PR 에서 합류 예정
+- `orchestrator._dispatch_via_tools(...)` — single/multi domain 분기에서 V2 도메인만 섞인 경우 tools 경로 우선 시도 · 실패 시 legacy `_call_domain_with_shortcut` 자동 폴백
+- `parallel_tool_calls=True` — 크로스 도메인 요청(예: "공고+인스타 동시") 한 응답에 병렬 호출 후 `_synthesize_cross_domain` 합성
+- **등록된 capability 총 15개**: recruitment 4~5개(이미지 조건부) + documents 6~7개(review 조건부) + marketing 5개
+
+**Documents Legal 서브브랜치 (`_legal.py`, v0.9.0)**
+
+- `classify_legal_intent` (gpt-4o-mini) — 서류 작성 의도 아니면서 법률 자문 의도인 메시지 판별
+- `search_legal_knowledge` RPC → RAG 컨텍스트 주입 → GPT-4o 답변 + 면책 고지 자동 첨부
+- `type='legal_advice'` artifact 를 Documents > Legal 서브허브 아래 저장. `legal_annual_values` 테이블에서 최저임금/부가세율/소상공인 기준 등 연도별 법정 수치 주입
+
+**Marketing Capability (`marketing.py`)**
+
+- 기존 팀원 작업(`[NAVER_UPLOAD]` / `[[INSTAGRAM_POST]]` / `[[REVIEW_REPLY]]`) 위에 capability 5종 오버레이
+- `mkt_sns_post` / `mkt_blog_post` / `mkt_review_reply` / `mkt_ad_copy` / `mkt_campaign_plan`
+- 내부는 wrapper 스타일 — 파라미터를 자연어로 합성해 기존 `run()` 재사용
+
+**Frontend 포스터 iframe 미리보기 (`NodeDetailModal.tsx`)**
+
+- `type='job_posting_poster'` 노드 클릭 시 `<iframe srcDoc={content} sandbox="allow-same-origin">` 로 샌드박스 렌더 (560px)
+- `HTML 다운로드` (blob URL) + `새 탭에서 열기` (Supabase public URL) 버튼
+
+### Fixed — Orchestrator 분류 안정화
+
+**CHOICES sticky routing (`orchestrator.py`)**
+
+- 직전 어시스턴트 메시지에 unresolved `[CHOICES]` 가 있으면 classifier 에 sticky 힌트 주입 + 짧은 단답이 `chitchat` 으로 분류되어도 최근 대화 키워드로 도메인 복구
+- `_last_assistant_did_domain_action` — "저장되었어요 / 캔버스에 / artifact" 같은 도메인 액션 흔적 감지
+- `_has_context_reference` — "이걸로 / 방금 거 / 이 공고" 같은 맥락 지시어 감지
+- 두 조건 만족 시 `refuse` 결과도 sticky override 로 도메인 복구 (예: "이걸로 이미지 만들어줘" → recruitment 유지)
+- classifier 프롬프트 업데이트 — 이미지/포스터/썸네일/배너 생성 요청은 refuse 가 아닌 해당 도메인(recruitment · marketing) 으로 분류하도록 명시
+- history window 4 → 8 확장
+
+### Migrations (새 3종)
+
+- `018_legal_knowledge.sql` — `legal_knowledge_chunks` 테이블 + HNSW/trgm/FTS 인덱스 + RLS
+- `019_legal_knowledge_search.sql` — `search_legal_knowledge` RPC (벡터+BM25 RRF)
+- `020_legal_annual_values.sql` — 연도별 법정 수치(최저임금/부가세율/소상공인 기준 등) 테이블 + seed
+
+### API
+
+- `POST /api/recruitment/poster` — `job_posting_set` → HTML 포스터 생성 (DALL-E `/image` 엔드포인트 제거)
+- `POST /api/recruitment/wage-simulation` — 시급·주근무시간 → 월 총 인건비 시뮬레이션
+
 ## [Unreleased] — feature-marketing
 
 ### Added — 채팅 마케팅 UI 카드 + 리뷰 이미지 분석 + 파일 스테이징
 
 **인스타그램 피드 미리보기 카드 (`InstagramPostCard.tsx`)**
+
 - `[[INSTAGRAM_POST]]{json}[[/INSTAGRAM_POST]]` 마커 패턴으로 채팅 내 렌더
 - DALL-E 3으로 SNS 이미지 자동 생성 (업종·캡션 컨텍스트 반영)
 - 실제 인스타그램 UI 모사: 프로필 헤더, 이미지, 좋아요/댓글/공유/저장 버튼
@@ -17,15 +77,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "더 보기" 접기/펼치기, liked/saved 토글 상태
 
 **리뷰 답글 카드 (`ReviewReplyCard.tsx`)**
+
 - `[[REVIEW_REPLY]]{json}[[/REVIEW_REPLY]]` 마커 패턴
 - 별점 표시(1~5점), 글자 수 바(`CharBar`, 150자 기준 색상 변화)
 - 클립보드 복사 버튼 (2초 피드백)
 
 **리뷰 이미지 자동 분석 (`POST /api/marketing/review/analyze`)**
+
 - GPT-4o Vision으로 리뷰 캡처 이미지 분석 — 플랫폼(네이버/카카오/구글) + 별점 + 리뷰 본문 추출
 - 분석 결과로 답글 자동 생성 메시지 채팅에 전송
 
 **스테이징 파일 업로드 UX (`ChatOverlay.tsx`)**
+
 - 파일 선택 즉시 전송 대신 입력창 상단에 칩으로 미리보기 후 메시지와 함께 전송
 - Ctrl+V 클립보드 스크린샷 붙여넣기 → 자동 staged 처리
 - 리뷰 이미지 감지: 파일이 이미지이고 대화 맥락에 "리뷰"가 있으면 Vision 분석 경로로 분기
@@ -33,26 +96,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 **Artifact 캔버스 미표시 버그 (`_artifact.py`)**
+
 - `sub_domain` 없거나 매칭 실패 시 `contains` 엣지가 생성되지 않아 노드가 `(0,0)`(앵커 위)에 쌓이던 문제 수정
 - 서브허브 → 메인 허브 순으로 폴백해 **모든 artifact에 항상 `contains` 엣지 생성**
 
 **오케스트레이터 라우팅 오류**
+
 - "리뷰 답글 작성" 의도가 `refuse`로 분류되던 버그 수정 → `marketing` 라벨로 정상 분류
 
 **SNS 포스트 에이전트 대화 문구 혼입**
+
 - `_PREAMBLE_RE`로 "알겠습니다", "작성해보겠습니다" 등 정중한 문장 마무리로 끝나는 줄 자동 제거
 - `_SNS_POST_FORMAT` 프롬프트에 잘못된 예시 명시 및 줄바꿈 규칙 추가
 
 **`ChatOverlay` 순환 `useCallback` 의존성 (`ReferenceError: TDZ`)**
+
 - `send` ↔ `analyzeReviewImage` ↔ `uploadFiles` 간 순환 의존 제거
 - `sendRef = useRef(null)` 도입 + `useEffect(() => { sendRef.current = send }, [send])`로 해결
 
 **`next-themes` 스크립트 태그 콘솔 경고**
+
 - `forcedTheme="light"` 고정이었던 `ThemeProvider` 제거 → `Providers`를 단순 fragment로 교체
 
 ### Changed
 
 **마케팅 서브허브 자동 매핑 (`marketing.py`)**
+
 - 타입별 `sub_domain` 가이드 프롬프트 추가
   - `sns_post` / `product_post` → `Social`
   - `blog_post` → `Blog`
@@ -61,9 +130,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ad_copy` / `campaign` → `Campaigns`
 
 **`next.config.ts`**
+
 - DALL-E 3 이미지 도메인(`oaidalleapiprodscus.blob.core.windows.net`) `remotePatterns` 허용 추가
 
 **패키지**
+
 - `react-markdown`, `remark-gfm`, `remark-breaks` 추가
 
 ---
