@@ -36,6 +36,13 @@ def _search_sync(query: str, match_count: int = 6) -> list[dict]:
         return []
 
 
+def search_subsidy_programs(query: str, max_results: int = 10) -> list[dict]:
+    """지원사업만 필터해서 반환 (동기). GET /api/marketing/subsidies 전용."""
+    rows = _search_sync(query, match_count=max_results * 2)
+    subsidies = [r for r in rows if r.get("source_table") == "subsidy"]
+    return subsidies[:max_results]
+
+
 async def marketing_knowledge_context(message: str, match_count: int = 5) -> str:
     """
     마케팅 에이전트 system 프롬프트에 주입할 지식 컨텍스트 생성 (async).
