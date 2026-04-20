@@ -7,6 +7,7 @@ from app.routers import (
     auth,
     chat,
     evaluations,
+    marketing,
     memos,
     reviews,
     schedules,
@@ -32,6 +33,7 @@ app.include_router(evaluations.router)
 app.include_router(schedules.router)
 app.include_router(artifacts.router)
 app.include_router(summary.router)
+app.include_router(marketing.router)
 app.include_router(memos.router)
 app.include_router(search.router)
 app.include_router(uploads.router)
