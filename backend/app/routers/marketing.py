@@ -8,13 +8,19 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+import base64
+import json
+import logging
+
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.core.llm import client as openai_client
 from app.core.config import settings
 from app.core.supabase import get_supabase
 from app.agents._marketing_knowledge import search_subsidy_programs
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/marketing", tags=["marketing"])
 
@@ -117,6 +123,87 @@ async def upload_naver_blog(req: NaverBlogUploadRequest):
         )
     except Exception as e:
         return NaverBlogUploadResponse(success=False, error=str(e))
+
+
+# ── 리뷰 이미지 분석 ─────────────────────────────────────────────────────────
+
+_REVIEW_VISION_PROMPT = """이 이미지는 네이버 플레이스, 카카오맵, 구글맵 등의 고객 리뷰 캡처 화면입니다.
+아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력.
+
+{
+  "platform": "naver 또는 kakao 또는 google 또는 other",
+  "star_rating": 별점 숫자 1~5 (없으면 null),
+  "review_text": "고객이 작성한 리뷰 본문만 (사장님 답글 제외)",
+  "reviewer_name": "닉네임 (없으면 null)"
+}
+
+규칙:
+- review_text는 고객 리뷰 원문만. 날짜·별점·닉네임·사장님 답글 제외.
+- star_rating은 별 개수를 숫자로 (★★★ = 3).
+- 리뷰가 보이지 않으면 {"error": "리뷰를 찾을 수 없습니다"} 반환."""
+
+
+class ReviewAnalysisResult(BaseModel):
+    platform: str = "other"
+    star_rating: int | None = None
+    review_text: str = ""
+    reviewer_name: str | None = None
+    error: str = ""
+
+
+_MIME_BY_EXT = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "webp": "image/webp", "bmp": "image/bmp", "gif": "image/gif",
+}
+
+
+@router.post("/review/analyze", response_model=ReviewAnalysisResult)
+async def analyze_review_image(file: UploadFile = File(...)):
+    """
+    리뷰 캡처 이미지를 GPT-4o Vision으로 분석해 별점·플랫폼·리뷰 본문을 추출한다.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    mime = _MIME_BY_EXT.get(ext, "image/jpeg")
+    b64 = base64.standard_b64encode(content).decode("ascii")
+    data_url = f"data:{mime};base64,{b64}"
+
+    try:
+        resp = await openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _REVIEW_VISION_PROMPT},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+            temperature=0,
+            max_tokens=800,
+            response_format={"type": "json_object"},
+        )
+    except Exception as exc:
+        log.exception("review vision call failed")
+        raise HTTPException(status_code=503, detail=f"이미지 분석 실패: {str(exc)[:200]}")
+
+    raw = (resp.choices[0].message.content or "").strip()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="분석 결과를 파싱하지 못했습니다.")
+
+    if "error" in data:
+        return ReviewAnalysisResult(error=data["error"])
+
+    return ReviewAnalysisResult(
+        platform=data.get("platform", "other"),
+        star_rating=data.get("star_rating"),
+        review_text=(data.get("review_text") or "").strip(),
+        reviewer_name=data.get("reviewer_name"),
+    )
 
 
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────

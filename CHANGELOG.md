@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — feature-marketing
 
+### Added — 채팅 마케팅 UI 카드 + 리뷰 이미지 분석 + 파일 스테이징
+
+**인스타그램 피드 미리보기 카드 (`InstagramPostCard.tsx`)**
+- `[[INSTAGRAM_POST]]{json}[[/INSTAGRAM_POST]]` 마커 패턴으로 채팅 내 렌더
+- DALL-E 3으로 SNS 이미지 자동 생성 (업종·캡션 컨텍스트 반영)
+- 실제 인스타그램 UI 모사: 프로필 헤더, 이미지, 좋아요/댓글/공유/저장 버튼
+- 캡션 `react-markdown` + `remark-gfm` + `remark-breaks` 렌더링
+- "더 보기" 접기/펼치기, liked/saved 토글 상태
+
+**리뷰 답글 카드 (`ReviewReplyCard.tsx`)**
+- `[[REVIEW_REPLY]]{json}[[/REVIEW_REPLY]]` 마커 패턴
+- 별점 표시(1~5점), 글자 수 바(`CharBar`, 150자 기준 색상 변화)
+- 클립보드 복사 버튼 (2초 피드백)
+
+**리뷰 이미지 자동 분석 (`POST /api/marketing/review/analyze`)**
+- GPT-4o Vision으로 리뷰 캡처 이미지 분석 — 플랫폼(네이버/카카오/구글) + 별점 + 리뷰 본문 추출
+- 분석 결과로 답글 자동 생성 메시지 채팅에 전송
+
+**스테이징 파일 업로드 UX (`ChatOverlay.tsx`)**
+- 파일 선택 즉시 전송 대신 입력창 상단에 칩으로 미리보기 후 메시지와 함께 전송
+- Ctrl+V 클립보드 스크린샷 붙여넣기 → 자동 staged 처리
+- 리뷰 이미지 감지: 파일이 이미지이고 대화 맥락에 "리뷰"가 있으면 Vision 분석 경로로 분기
+
+### Fixed
+
+**Artifact 캔버스 미표시 버그 (`_artifact.py`)**
+- `sub_domain` 없거나 매칭 실패 시 `contains` 엣지가 생성되지 않아 노드가 `(0,0)`(앵커 위)에 쌓이던 문제 수정
+- 서브허브 → 메인 허브 순으로 폴백해 **모든 artifact에 항상 `contains` 엣지 생성**
+
+**오케스트레이터 라우팅 오류**
+- "리뷰 답글 작성" 의도가 `refuse`로 분류되던 버그 수정 → `marketing` 라벨로 정상 분류
+
+**SNS 포스트 에이전트 대화 문구 혼입**
+- `_PREAMBLE_RE`로 "알겠습니다", "작성해보겠습니다" 등 정중한 문장 마무리로 끝나는 줄 자동 제거
+- `_SNS_POST_FORMAT` 프롬프트에 잘못된 예시 명시 및 줄바꿈 규칙 추가
+
+**`ChatOverlay` 순환 `useCallback` 의존성 (`ReferenceError: TDZ`)**
+- `send` ↔ `analyzeReviewImage` ↔ `uploadFiles` 간 순환 의존 제거
+- `sendRef = useRef(null)` 도입 + `useEffect(() => { sendRef.current = send }, [send])`로 해결
+
+**`next-themes` 스크립트 태그 콘솔 경고**
+- `forcedTheme="light"` 고정이었던 `ThemeProvider` 제거 → `Providers`를 단순 fragment로 교체
+
+### Changed
+
+**마케팅 서브허브 자동 매핑 (`marketing.py`)**
+- 타입별 `sub_domain` 가이드 프롬프트 추가
+  - `sns_post` / `product_post` → `Social`
+  - `blog_post` → `Blog`
+  - `review_reply` → `Reviews`
+  - `event_plan` → `Events`
+  - `ad_copy` / `campaign` → `Campaigns`
+
+**`next.config.ts`**
+- DALL-E 3 이미지 도메인(`oaidalleapiprodscus.blob.core.windows.net`) `remotePatterns` 허용 추가
+
+**패키지**
+- `react-markdown`, `remark-gfm`, `remark-breaks` 추가
+
+---
+
 ### Added — Marketing 에이전트 전면 확장
 
 - **콘텐츠 타입 9종** — `sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post`. 에이전트를 카페 특화에서 **업종 불문(소상공인 전반)**으로 재작성. 각 타입별 출력 형식 가이드 내장(SNS 해시태그 20~30개·최적 게시 시간, 블로그 마크다운 구조, 공지 5단계, 리뷰 별점별 톤, 상품 소개 4단계).
