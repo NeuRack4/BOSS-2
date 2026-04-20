@@ -164,11 +164,14 @@ title: <간결한 제목>
 start_date: YYYY-MM-DD
 end_date: YYYY-MM-DD
 due_date: YYYY-MM-DD
+due_label: <마감의 의미 라벨 — 예: 계약 만료 / 납품기한 / 견적 유효기간 / 공지 게시일 / 제안 회신 기한>
+contract_subtype: <documents·contract 인 경우만 — labor|lease|service|supply|partnership|franchise|nda>
 sub_domain: <서브허브 title — system 컨텍스트의 "이 계정의 서브허브" 목록에서만 선택>
 [/ARTIFACT]
 
 - 사용자가 기간을 자연어로 말했다면(예: "내일부터 1주일", "다음주 금요일까지") 오늘 날짜 기준으로 환산해 start_date/end_date 또는 due_date 에 YYYY-MM-DD 로 채우세요.
 - 기간성(캠페인·프로젝트·계약·프로모션·공채)은 start_date+end_date 조합, 단일 마감은 due_date 한 줄로 표현합니다.
+- 납품기한·제출기한 같은 특수 마감도 별도 키를 만들지 말고 **due_date + due_label** 조합으로 통일하세요 (스케쥴 D-7/3/1/0 리마인드가 하나의 경로로 작동).
 - sub_domain 라인은 "이 계정의 서브허브" 목록에 있는 title 을 **대소문자 포함 정확히** 적어야 합니다. 적절한 후보가 없다고 판단되면 sub_domain 라인 자체를 넣지 마세요 (임의로 새 이름을 지어내지 말 것).
 """
 

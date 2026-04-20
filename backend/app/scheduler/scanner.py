@@ -2,9 +2,18 @@
 
 두 가지 카테고리:
 1. `kind='schedule'` + `status='active'` + `metadata.next_run <= now` → 실행 대상
-2. 일회성 artifact (`kind='artifact'`) 중 `metadata.start_date == today` 또는
-   `metadata.due_date ∈ {today, today+1}` → 알림 대상
-   — 중복 방지는 activity_logs 에서 같은 (artifact_id, notify_kind, date) 가 있는지 체크.
+2. 일회성 artifact (`kind='artifact'`) 의 start_date/due_date(= end_date fallback) 기준
+   D-7 / D-3 / D-1 / D-0 (+start 와 start_d3 / start_d1) 알림 대상.
+   중복 방지는 activity_logs 에서 같은 (artifact_id, notify_kind, for_date) 튜플 체크.
+
+notify_kind 규약:
+  start        start_date == today
+  start_d1     start_date == today+1
+  start_d3     start_date == today+3
+  due_d0       due_date == today
+  due_d1       due_date == today+1
+  due_d3       due_date == today+3
+  due_d7       due_date == today+7
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -48,14 +57,18 @@ def find_due_schedules(now: datetime | None = None, limit: int = 500) -> list[di
     return due
 
 
+_START_OFFSETS = {0: "start", 1: "start_d1", 3: "start_d3"}
+_DUE_OFFSETS = {0: "due_d0", 1: "due_d1", 3: "due_d3", 7: "due_d7"}
+
+
 def find_date_notifications(today: date | None = None, limit: int = 1000) -> list[dict]:
     """오늘 알림을 쏴야 하는 일회성 artifact 들.
 
-    반환 항목: {artifact, notify_kind ∈ {'start','due_d0','due_d1'}, for_date}
+    반환 항목: {artifact, notify_kind, for_date}
     """
     sb = get_supabase()
     today = today or datetime.now(timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
+    today_iso = today.isoformat()
 
     res = (
         sb.table("artifacts")
@@ -72,12 +85,12 @@ def find_date_notifications(today: date | None = None, limit: int = 1000) -> lis
         start = meta.get("start_date")
         due = meta.get("due_date") or meta.get("end_date")
 
-        if start == today.isoformat():
-            targets.append({"artifact": row, "notify_kind": "start", "for_date": today.isoformat()})
-        if due == today.isoformat():
-            targets.append({"artifact": row, "notify_kind": "due_d0", "for_date": today.isoformat()})
-        elif due == tomorrow.isoformat():
-            targets.append({"artifact": row, "notify_kind": "due_d1", "for_date": today.isoformat()})
+        for offset, kind in _START_OFFSETS.items():
+            if start and start == (today + timedelta(days=offset)).isoformat():
+                targets.append({"artifact": row, "notify_kind": kind, "for_date": today_iso})
+        for offset, kind in _DUE_OFFSETS.items():
+            if due and due == (today + timedelta(days=offset)).isoformat():
+                targets.append({"artifact": row, "notify_kind": kind, "for_date": today_iso})
 
     if not targets:
         return []

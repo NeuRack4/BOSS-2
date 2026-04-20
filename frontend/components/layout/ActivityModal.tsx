@@ -11,14 +11,37 @@ import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import type { Domain } from "@/components/canvas/FilterContext";
 
+type NotifyKind =
+  | "start"
+  | "start_d1"
+  | "start_d3"
+  | "due_d0"
+  | "due_d1"
+  | "due_d3"
+  | "due_d7";
+
 type Activity = {
   id: string;
-  type: "artifact_created" | "agent_run";
+  type: "artifact_created" | "agent_run" | "schedule_run" | "schedule_notify";
   domain: Domain;
   title: string;
   description: string;
   created_at: string;
-  metadata: { artifact_id?: string } | null;
+  metadata: {
+    artifact_id?: string;
+    notify_kind?: NotifyKind;
+    due_label?: string;
+  } | null;
+};
+
+const NOTIFY_BADGE: Record<NotifyKind, { label: string; tone: string }> = {
+  start: { label: "D-0 시작", tone: "bg-[#cfe3d0] text-[#2e5a3a]" },
+  start_d1: { label: "D-1 시작", tone: "bg-[#d9e7dd] text-[#3b6a4a]" },
+  start_d3: { label: "D-3 시작", tone: "bg-[#e3ece2] text-[#5a7560]" },
+  due_d0: { label: "D-0 마감", tone: "bg-[#e9c9c0] text-[#8a3a28]" },
+  due_d1: { label: "D-1 마감", tone: "bg-[#ecd3c6] text-[#9c5130]" },
+  due_d3: { label: "D-3 마감", tone: "bg-[#efdfc8] text-[#8a6a2c]" },
+  due_d7: { label: "D-7 마감", tone: "bg-[#eee5d0] text-[#6a5a36]" },
 };
 
 const DOMAIN_ICONS: Record<Domain, ReactNode> = {
@@ -42,9 +65,11 @@ const DOMAIN_LABELS: Record<Domain, string> = {
   documents: "서류",
 };
 
-const TYPE_LABELS = {
+const TYPE_LABELS: Record<Activity["type"], string> = {
   artifact_created: "생성",
   agent_run: "실행",
+  schedule_run: "자동실행",
+  schedule_notify: "알림",
 };
 
 const formatTime = (iso: string) =>
@@ -175,6 +200,20 @@ export const ActivityModal = ({ open, onClose }: Props) => {
                         >
                           {TYPE_LABELS[a.type] ?? a.type}
                         </Badge>
+                        {a.metadata?.notify_kind &&
+                          NOTIFY_BADGE[a.metadata.notify_kind] && (
+                            <span
+                              className={cn(
+                                "h-4 rounded px-1.5 text-[10px] font-semibold leading-4",
+                                NOTIFY_BADGE[a.metadata.notify_kind].tone,
+                              )}
+                            >
+                              {NOTIFY_BADGE[a.metadata.notify_kind].label}
+                              {a.metadata.due_label
+                                ? ` · ${a.metadata.due_label}`
+                                : ""}
+                            </span>
+                          )}
                       </div>
                       {a.description && (
                         <p className="text-xs text-[#5a5040]">
