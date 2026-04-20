@@ -156,12 +156,68 @@ def parse_content(raw: str) -> tuple[str, list[tuple[str, str]], list[str]]:
     return title, segments, tags
 
 
+def insert_image(page, image_path: str) -> bool:
+    """SE One 에디터 본문에 로컬 이미지 파일을 삽입."""
+    # 이미지 삽입 툴바 버튼 클릭
+    clicked = page.evaluate("""() => {
+        const selectors = [
+            'button[data-name="image"]',
+            '.se-toolbar button[title*="사진"]',
+            '.se-toolbar button[title*="Image"]',
+            '.se-toolbar button[title*="이미지"]',
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) { el.dispatchEvent(new MouseEvent('click', {bubbles:true})); return sel; }
+        }
+        // 아이콘 클래스로 탐색
+        const btns = [...document.querySelectorAll('.se-toolbar button')];
+        const btn = btns.find(b =>
+            b.querySelector('svg[class*="image"]') ||
+            b.querySelector('i[class*="image"]') ||
+            b.querySelector('span[class*="image"]') ||
+            b.title?.toLowerCase().includes('image') ||
+            b.title?.includes('사진') || b.title?.includes('이미지')
+        );
+        if (btn) { btn.dispatchEvent(new MouseEvent('click', {bubbles:true})); return 'icon-found'; }
+        return null;
+    }""")
+    if not clicked:
+        return False
+    time.sleep(1.5)
+
+    # 파일 업로드 input 찾기
+    file_input = page.locator("input[type='file']").first
+    if file_input.count() == 0:
+        return False
+
+    file_input.set_input_files(image_path)
+    time.sleep(3)  # 업로드 완료 대기
+
+    # 팝업 확인/삽입 버튼 클릭
+    for sel in [
+        "button:has-text('삽입')",
+        "button:has-text('확인')",
+        ".se-popup-button-confirm",
+        ".se-popup button",
+    ]:
+        loc = page.locator(sel)
+        if loc.count() > 0:
+            loc.first.click(force=True)
+            time.sleep(1)
+            break
+
+    page.wait_for_timeout(1000)
+    return True
+
+
 def main():
     data = json.loads(sys.stdin.read())
     content = data["content"]
     blog_id = data["blog_id"]
     title_override = data.get("title", "")
     tags_override = data.get("tags", [])
+    image_path = data.get("image_path", "")
 
     parsed_title, segments, parsed_tags = parse_content(content)
     title = title_override or parsed_title
@@ -262,6 +318,18 @@ def main():
             else:
                 page.mouse.click(640, 420)
                 page.wait_for_timeout(600)
+
+            # 이미지 삽입 (본문 첫 단락 앞)
+            if image_path:
+                insert_image(page, image_path)
+                page.wait_for_timeout(800)
+                # 본문 영역 재포커스
+                for sel in BODY_SELECTORS:
+                    loc = page.locator(sel)
+                    if loc.count() > 0:
+                        loc.last.click(force=True)
+                        page.wait_for_timeout(400)
+                        break
 
             prev_kind = None
             for kind, text in segments:

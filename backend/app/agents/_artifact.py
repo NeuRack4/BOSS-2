@@ -224,21 +224,26 @@ async def save_artifact_from_reply(
             return None
         artifact_id = result.data[0]["id"]
 
+        # 서브허브 지정 → 정확히 매칭. 없으면 도메인 메인 허브로 폴백.
+        # 어떤 경우든 contains 엣지를 반드시 생성해 캔버스에 위치가 잡히도록 한다.
         sub_domain_name = (parsed.get("sub_domain") or "").strip()
+        hub_id: str | None = None
         if sub_domain_name:
             hub_id = _find_sub_hub_id(sb, account_id, domain, sub_domain_name)
-            if hub_id:
-                try:
-                    sb.table("artifact_edges").insert(
-                        {
-                            "account_id": account_id,
-                            "parent_id":  hub_id,
-                            "child_id":   artifact_id,
-                            "relation":   "contains",
-                        }
-                    ).execute()
-                except Exception:
-                    pass
+        if not hub_id:
+            hub_id = pick_sub_hub_id(sb, account_id, domain) or pick_main_hub_id(sb, account_id, domain)
+        if hub_id:
+            try:
+                sb.table("artifact_edges").insert(
+                    {
+                        "account_id": account_id,
+                        "parent_id":  hub_id,
+                        "child_id":   artifact_id,
+                        "relation":   "contains",
+                    }
+                ).execute()
+            except Exception:
+                pass
 
         try:
             sb.table("activity_logs").insert(

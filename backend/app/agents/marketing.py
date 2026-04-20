@@ -27,8 +27,12 @@ from app.agents._artifact import (
 )
 from app.agents._marketing_knowledge import marketing_knowledge_context
 import re as _re
+import json as _json
 
 _NAVER_UPLOAD_RE = _re.compile(r"\[NAVER_UPLOAD\]", _re.IGNORECASE)
+_INSTAGRAM_POST_RE = _re.compile(
+    r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]"
+)
 
 
 VALID_TYPES: tuple[str, ...] = (
@@ -52,37 +56,59 @@ def suggest_today(account_id: str) -> list[dict]:
 
 _SNS_POST_FORMAT = """
 [sns_post 출력 형식]
-1. 캡션 본문 (3~5문장, 줄바꿈 포함. 프로모션·이벤트가 있으면 반드시 포함. "캡션" 등 제목 없이 바로 시작)
+
+⚠️ 절대 규칙: sns_post를 작성할 때는 사용자에게 하는 말(설명·안내·인사)을 절대 포함하지 않는다.
+"작성해보겠습니다", "아래는 게시글입니다", "적합한 게시물입니다", "이미지와 함께 올리세요" 같은
+안내 문구 없이 실제 인스타그램 피드에 올라갈 내용만 바로 출력한다.
+
+출력 순서:
+1. 캡션 본문 — 첫 줄부터 바로 시작. 문장마다 줄바꿈, 이모지 활용, 3~5문장
 2. 빈 줄 2개
-3. 해시태그 (총 20~30개, 한 줄 나열 — "해시태그" 제목 없이 #으로 바로 시작)
-   - 절반은 한국어: 업종명·상품명·동네명·계절 위주
-   - 절반은 영어: 실제 많이 검색되는 태그 위주 (#seoulcafe, #koreanfood, #cafehopping 등)
+3. 해시태그 — #으로 바로 시작, 한 줄, 20~30개 (한국어 절반 + 영어 절반)
 4. 빈 줄
-5. 게시 최적 시간대 추천 1줄 (예: "💡 추천 게시 시간: 오후 2~4시 — 업종 피크타임 직전")
+5. 💡 추천 게시 시간: ... (1줄)
+
+올바른 예시:
+🔥 신메뉴 출시! 오늘만 기다렸어요.
+간장 베이스의 불백, 딱 한 입에 반하는 맛 🍖
+이번 달 한정 20% 할인 진행 중이에요!
+놓치면 후회할 거예요 😋
+
+
+#신메뉴 #불백 #간장불백 #맛집 #foodstagram #koreanfood #koreanbbq
+
+💡 추천 게시 시간: 오후 12~1시 — 점심 직전 피크타임
+
+잘못된 예시 (절대 금지):
+❌ "아래는 인스타그램 피드에 적합한 게시글입니다."
+❌ "이미지를 직접 삽입할 수는 없지만 내용을 작성했습니다."
+❌ "필수 정보를 확인했습니다. 게시글입니다."
 """
 
 _BLOG_POST_FORMAT = """
 [blog_post 출력 형식 — 네이버 블로그 마크다운]
-# 제목 (이모지 1개 포함, 25자 이내, 클릭 유도)
+# 🌸 제목 (이모지 1개 포함, 25자 이내, 클릭 유도)
 
 도입 1~2문장 (공감·계절감으로 시작)
 
-### [이모지] 소제목1 (8자 이내)
+### 🍽️ 소제목1 (8자 이내, 내용에 맞는 이모지 직접 선택)
 내용 2~3문장. 핵심 정보 위주로 간결하게.
 
-### [이모지] 소제목2 (8자 이내)
+### ✨ 소제목2 (8자 이내, 내용에 맞는 이모지 직접 선택)
 내용 2~3문장. 상품/서비스/분위기 묘사.
 
-### [이모지] 소제목3 (8자 이내)
+### 💌 소제목3 (8자 이내, 내용에 맞는 이모지 직접 선택)
 마무리 2문장. 방문/구매 유도 + 따뜻한 인사.
 
 #태그1 #태그2 #태그3 #태그4 #태그5 #태그6 #태그7 #태그8 #태그9 #태그10
 
 규칙:
+- 소제목 앞 이모지는 반드시 실제 이모지 문자를 사용 (예: 🌟 🍜 💡 🎉 등). "[이모지]" 같은 텍스트 금지.
 - 한 단락 2~3문장, 짧고 읽기 쉽게
 - 단락 내 줄바꿈 없음, 단락 사이 줄바꿈
 - 친근하고 자연스러운 구어체
 - 수치(매출·방문자 수 등)는 컨텍스트에 제공된 것만 사용
+- 블로그 본문 이후에 "업로드하겠습니다", "자동 업로드됩니다" 같은 문구 절대 추가 금지
 """
 
 _NOTICE_FORMAT = """
@@ -113,12 +139,17 @@ _PRODUCT_POST_FORMAT = """
 # ── 필수 필드 매트릭스 ──────────────────────────────────────────────────────
 
 _REQUIRED_FIELDS = """
-[필수 필드 매트릭스 — 모두 확정되기 전엔 [ARTIFACT] 출력 금지]
+[필수 필드 매트릭스]
+
+⚠️ 핵심 규칙:
+- 타입별 필수 필드가 모두 확정되면 **즉시** 완성된 결과물을 작성하고 [ARTIFACT] 블록을 붙인다.
+- 공통 필드(업종·목표·타겟)는 프로필에 있으면 자동 사용, 없어도 합리적으로 추정해서 작성한다. 공통 필드 때문에 결과물 작성을 미루지 않는다.
+- 결과물을 다 썼으면 [ARTIFACT] 블록 없이 질문을 추가하는 것 절대 금지. 내용이 완성됐으면 반드시 [ARTIFACT]를 붙인다.
+- 질문이 필요하면 결과물 작성 전에 미리 [CHOICES]로 묻는다. 결과물 작성 후에 추가 질문 금지.
 
 공통 (모든 타입):
-  - 업종/가게 정보: 프로필에 있으면 자동 사용, 없으면 질문
-  - 목표: 인지도 향상 / 전환(구매·방문) / 재방문·재구매 / 브랜딩 등
-  - 타겟 고객: 연령대·관심사·지역 등 (가능한 범위 내)
+  - 업종/가게 정보: 프로필에 있으면 자동 사용, 없으면 대화 맥락에서 추정 (추정 불가 시만 질문)
+  - 목표·타겟: 프로필/맥락으로 추정 가능하면 자동 적용
 
 타입별 추가 필수:
   sns_post:
@@ -148,7 +179,7 @@ _REQUIRED_FIELDS = """
 
   review_reply:
     - 별점 (1~5)
-    - 리뷰 내용 (선택 — 없으면 별점만 반영)
+    - 리뷰 내용 (필수 — 반드시 물어볼 것. 고객이 실제로 어떤 말을 남겼는지 알아야 맞춤 답글 작성 가능)
 
   notice:
     - 공지 종류 (임시휴무 / 영업시간 변경 / 이벤트·할인 / 신상품 출시 / 기타)
@@ -240,11 +271,32 @@ SYSTEM_PROMPT = (
     + NICKNAME_RULE
     + PROFILE_RULE
     + """
+[결과물 저장 강화 규칙]
+- 대화를 통해 타입별 필수 필드를 모두 확인했다면, 그 턴에 반드시 완성된 결과물 + [ARTIFACT] 블록을 출력한다.
+- 결과물을 작성한 뒤 "추가로 궁금하신 점", "사업 단계가 어떻게 되세요" 같은 후속 질문을 덧붙이지 않는다.
+- 예외: 결과물 없이 순수 질문만 하는 턴은 가능. 단 그 턴에는 결과물 내용도 쓰지 않는다.
+
+[sub_domain 매핑 가이드 — 반드시 아래 기준으로 선택]
+- sns_post / product_post → Social
+- blog_post              → Blog
+- ad_copy / campaign     → Campaigns
+- event_plan             → Events
+- review_reply           → Reviews
+- marketing_plan / notice → Social (가장 가까운 허브 선택)
+시스템 컨텍스트의 "이 계정의 marketing 서브허브" 목록에 위 이름이 있으면 반드시 해당 이름으로 sub_domain 을 채운다.
+
 [네이버 블로그 자동 업로드 규칙]
-사용자가 블로그 포스팅을 작성하면서 동시에 네이버 블로그에 업로드/게시해달라고 명시적으로 요청한 경우:
-- blog_post [ARTIFACT] 블록을 정상 출력한 뒤, 응답 맨 마지막 줄에 [NAVER_UPLOAD] 를 추가하세요.
-- 업로드 요청 없이 blog_post만 작성하는 경우에는 [NAVER_UPLOAD] 를 출력하지 마세요.
-- blog_post 타입이 아닌 경우(sns_post, ad_copy 등)에는 절대 [NAVER_UPLOAD] 를 출력하지 마세요.
+당신은 네이버 블로그에 직접 자동 업로드할 수 있습니다. 사용자에게 "직접 복사해서 붙여넣으세요"라고 안내하지 마세요.
+
+사용자가 블로그 포스팅 작성과 함께 네이버 블로그 업로드/게시를 요청한 경우:
+1. blog_post 형식으로 포스팅을 작성하고 [ARTIFACT] 블록을 정상 출력한다.
+2. 응답의 맨 마지막 줄에 반드시 [NAVER_UPLOAD] 를 단독으로 출력한다. (다른 텍스트 없이)
+3. "업로드해드릴게요", "자동 업로드됩니다" 등의 안내 문구를 본문에 자연스럽게 포함한다.
+
+절대 하지 말아야 할 것:
+- "직접 복사해서 붙여넣으세요"라고 안내하는 것
+- blog_post 타입이 아닌 경우(sns_post 등)에 [NAVER_UPLOAD] 출력
+- 업로드 요청이 없을 때 [NAVER_UPLOAD] 출력
 
 작성 원칙:
 - 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
@@ -262,6 +314,157 @@ SYSTEM_PROMPT = (
 [/CHOICES]"
 """
 )
+
+
+_PREAMBLE_RE = _re.compile(
+    # 한국어 정중한 문장 마무리로 끝나는 줄 = 에이전트 대화 문구
+    r"(습니다|었습니다|했습니다|겠습니다|입니다|어요|해요|할게요|드릴게요|없지만)[.!]?\s*$",
+    _re.UNICODE,
+)
+
+
+def _extract_sns_content(reply: str) -> tuple[str, list[str], str]:
+    """reply에서 SNS 캡션, 해시태그 리스트, 게시 시간 추천 추출.
+    에이전트 대화 문구(알겠습니다, 작성할게요, 아래는 ~ 입니다 등) 앞부분은 제거.
+    """
+    artifact_pos = reply.find("[ARTIFACT]")
+    text = reply[:artifact_pos].strip() if artifact_pos != -1 else reply.strip()
+
+    all_lines = [l for l in text.splitlines() if l.strip()]
+
+    # 앞에서 최대 6줄까지 대화 문구면 건너뜀. 비-대화 문구 줄을 만나면 즉시 중단.
+    start = 0
+    for i, line in enumerate(all_lines[:6]):
+        if _PREAMBLE_RE.search(line.strip()):
+            start = i + 1
+        else:
+            break
+
+    caption_lines: list[str] = []
+    hashtags: list[str] = []
+    best_time = ""
+
+    for line in all_lines[start:]:
+        s = line.strip()
+        if _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", s):
+            hashtags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
+        elif s.startswith("💡"):
+            best_time = s
+        else:
+            caption_lines.append(s)
+
+    return "\n".join(caption_lines), hashtags, best_time
+
+
+async def _generate_sns_image(caption: str, hashtags: list[str]) -> str:
+    """DALL-E 3으로 SNS 이미지 생성 → URL 반환. 실패 시 빈 문자열."""
+    from app.core.llm import client as openai_client
+
+    tag_str = " ".join(f"#{t}" for t in hashtags[:8])
+    prompt = (
+        f"Instagram-worthy promotional photo for Korean small business. "
+        f"Context: {caption[:120]}. Tags: {tag_str}. "
+        "Warm aesthetic, natural lighting, clean composition, no text overlay, "
+        "high-quality lifestyle/food/product photography style."
+    )
+    try:
+        resp = await openai_client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            n=1,
+            size="1024x1024",
+            quality="standard",
+        )
+        return (resp.data[0].url or "").strip()
+    except Exception:
+        return ""
+
+
+_STAR_RE = _re.compile(r"별점\s*(\d)[점]?|(\d)[점\*★☆]|[★☆]{1,5}")
+
+
+def _extract_star_rating(text: str) -> int | None:
+    """텍스트에서 별점(1~5) 추출. 없으면 None."""
+    m = _STAR_RE.search(text)
+    if not m:
+        return None
+    val = int(m.group(1) or m.group(2) or len(_re.findall(r"[★]", m.group(0))))
+    return val if 1 <= val <= 5 else None
+
+
+def _maybe_review_reply_card(reply: str) -> str:
+    """review_reply 타입이면 [[REVIEW_REPLY]] 마커를 반환 (동기)."""
+    from app.agents._artifact import _parse_block, _clean_content
+
+    parsed = _parse_block(reply)
+    if not parsed or parsed.get("type", "") != "review_reply":
+        return ""
+
+    reply_text = _clean_content(reply).strip()
+    if not reply_text:
+        return ""
+
+    # 대화 문구 제거 (preamble)
+    lines = [l for l in reply_text.splitlines() if l.strip()]
+    start = 0
+    for i, line in enumerate(lines[:4]):
+        if _PREAMBLE_RE.search(line.strip()):
+            start = i + 1
+        else:
+            break
+    reply_text = "\n".join(lines[start:]).strip()
+
+    star_rating = _extract_star_rating(reply)
+    payload = {
+        "reply_text": reply_text,
+        "star_rating": star_rating,
+        "char_count": len(reply_text),
+    }
+    return f"\n\n[[REVIEW_REPLY]]{_json.dumps(payload, ensure_ascii=False)}[[/REVIEW_REPLY]]"
+
+
+async def _maybe_instagram_preview(reply: str) -> str:
+    """sns_post / product_post 타입이거나 해시태그 5개 이상이면 [[INSTAGRAM_POST]] 마커를 반환."""
+    from app.agents._artifact import _parse_block
+
+    parsed = _parse_block(reply)
+    artifact_type = (parsed or {}).get("type", "")
+
+    # blog_post는 네이버 업로드 전용 — Instagram 카드 제외
+    if artifact_type == "blog_post":
+        return ""
+
+    is_sns_type = artifact_type in ("sns_post", "product_post")
+
+    if not is_sns_type:
+        # [ARTIFACT] 없을 때: 해시태그 5개 이상인 줄 있고 블로그 # 제목 없으면 SNS로 간주
+        lines = reply.splitlines()
+        has_hashtag_block = any(
+            _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", line.strip())
+            and len(_re.findall(r"#[\w가-힣A-Za-z]+", line)) >= 5
+            for line in lines
+        )
+        has_blog_heading = any(
+            line.strip().startswith("# ") and len(line.strip()) > 2
+            for line in lines
+        )
+        if not has_hashtag_block or has_blog_heading:
+            return ""
+
+    caption, hashtags, best_time = _extract_sns_content(reply)
+    if not caption and not hashtags:
+        return ""
+
+    image_url = await _generate_sns_image(caption, hashtags)
+
+    payload = {
+        "title": (parsed or {}).get("title", ""),
+        "caption": caption,
+        "hashtags": hashtags,
+        "best_time": best_time,
+        "image_url": image_url,
+    }
+    return f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
 
 
 async def run(
@@ -315,28 +518,112 @@ async def run(
 
     if wants_naver_upload:
         reply += "\n\n" + await _try_naver_upload(reply)
+    else:
+        review_marker = _maybe_review_reply_card(reply)
+        if review_marker:
+            reply += review_marker
+        else:
+            instagram_marker = await _maybe_instagram_preview(reply)
+            if instagram_marker:
+                reply += instagram_marker
 
     return reply
 
 
+def _extract_blog_content(reply: str) -> tuple[str, str]:
+    """
+    reply에서 실제 블로그 본문과 제목만 추출.
+    - [ARTIFACT] 블록 이전 텍스트만 사용
+    - 첫 번째 '# 제목' 줄부터 시작 (그 앞의 에이전트 대화 문구 제거)
+    - '# 제목' 이 없으면 전체 사용
+    Returns: (title, blog_content)
+    """
+    artifact_pos = reply.find("[ARTIFACT]")
+    text = reply[:artifact_pos].strip() if artifact_pos != -1 else reply.strip()
+
+    lines = text.splitlines()
+    title = ""
+    start_idx = 0
+
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s.startswith("# ") and len(s) > 2:
+            title = s[2:].strip()
+            start_idx = i
+            break
+
+    blog_lines = lines[start_idx:] if title else lines
+
+    # 마지막 #태그 줄 이후 대화 문구 제거
+    last_tag_idx = None
+    for i, line in enumerate(blog_lines):
+        if _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", line.strip()):
+            last_tag_idx = i
+    if last_tag_idx is not None:
+        blog_lines = blog_lines[: last_tag_idx + 1]
+
+    return title, "\n".join(blog_lines).strip()
+
+
+async def _generate_blog_image(title: str, content_preview: str) -> str:
+    """DALL-E 3으로 블로그 대표 이미지 생성 → 임시 파일 경로 반환. 실패 시 빈 문자열."""
+    import tempfile
+    import asyncio as _asyncio
+    import urllib.request as _urllib
+    from app.core.llm import client as openai_client
+
+    prompt = (
+        f"Korean small business blog promotional photo for: '{title}'. "
+        f"{content_preview[:120]}. "
+        "High-quality lifestyle/food/product photo, warm Korean aesthetic, "
+        "natural lighting, no text, suitable for Naver blog header image."
+    )
+    try:
+        resp = await openai_client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            n=1,
+            size="1024x1024",
+            quality="standard",
+        )
+        image_url = (resp.data[0].url or "").strip()
+        if not image_url:
+            return ""
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp.close()
+        await _asyncio.to_thread(_urllib.urlretrieve, image_url, tmp.name)
+        return tmp.name
+    except Exception:
+        return ""
+
+
 async def _try_naver_upload(reply: str) -> str:
     """blog_post 본문을 파싱해 네이버 블로그에 업로드. 결과 문자열 반환."""
+    import os as _os
     from app.core.config import settings
-    from app.agents._artifact import _parse_block, _clean_content
+    from app.agents._artifact import _parse_block
 
     if not settings.naver_blog_id or not settings.naver_blog_pw:
         return "📌 네이버 블로그 자동 업로드를 사용하려면 `.env`에 `NAVER_BLOG_ID`와 `NAVER_BLOG_PW`를 설정해 주세요."
 
-    parsed = _parse_block(reply)
-    title = (parsed or {}).get("title", "").strip() or "블로그 포스팅"
-    content = _clean_content(reply)
+    # # 제목 줄 기준으로 실제 블로그 본문만 추출 (에이전트 대화 문구 제거)
+    title_from_content, blog_content = _extract_blog_content(reply)
 
-    # 태그 추출 (마지막 줄 #태그 형식)
+    # [ARTIFACT] 블록 title 보조 사용 (# 제목이 없을 때 fallback)
+    parsed = _parse_block(reply)
+    artifact_title = (parsed or {}).get("title", "").strip()
+    title = title_from_content or artifact_title or "블로그 포스팅"
+
+    # 태그 추출 (#태그 형식 줄)
     tags: list[str] = []
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("#") and " " not in line.lstrip("#"):
-            tags.append(line.lstrip("#"))
+    for line in blog_content.splitlines():
+        s = line.strip()
+        if _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", s):
+            tags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
+            break
+
+    # 대표 이미지 생성
+    image_path = await _generate_blog_image(title, blog_content[:300])
 
     try:
         from app.services.naver_blog import upload_post
@@ -344,8 +631,9 @@ async def _try_naver_upload(reply: str) -> str:
             blog_id=settings.naver_blog_id,
             blog_pw=settings.naver_blog_pw,
             title=title,
-            content=content,
+            content=blog_content,
             tags=tags,
+            image_path=image_path,
         )
         if post_url:
             return f"✅ 네이버 블로그에 업로드했어요!\n🔗 {post_url}"
@@ -354,3 +642,10 @@ async def _try_naver_upload(reply: str) -> str:
         return "⚠️ playwright가 설치되지 않았습니다. `pip install playwright && playwright install chromium`을 실행해 주세요."
     except Exception as e:
         return f"⚠️ 네이버 블로그 업로드 중 오류가 발생했어요: {e}"
+    finally:
+        # 임시 이미지 파일 정리
+        if image_path:
+            try:
+                _os.unlink(image_path)
+            except Exception:
+                pass

@@ -20,12 +20,14 @@ def _run_subprocess(
     title: str,
     content: str,
     tags: list[str],
+    image_path: str = "",
 ) -> str:
     payload = json.dumps({
-        "blog_id": blog_id,
-        "title":   title,
-        "content": content,
-        "tags":    tags,
+        "blog_id":    blog_id,
+        "title":      title,
+        "content":    content,
+        "tags":       tags,
+        "image_path": image_path,
     })
     result = subprocess.run(
         [sys.executable, str(_RUNNER)],
@@ -51,6 +53,7 @@ async def upload_post(
     title: str,
     content: str,
     tags: list[str] | None = None,
+    image_path: str = "",
 ) -> str:
     """
     별도 프로세스에서 Playwright를 실행해 네이버 블로그에 업로드한다.
@@ -59,5 +62,5 @@ async def upload_post(
     if not blog_id or not blog_pw:
         raise ValueError("NAVER_BLOG_ID / NAVER_BLOG_PW 환경변수를 설정하세요.")
     return await asyncio.to_thread(
-        _run_subprocess, blog_id, blog_pw, title, content, tags or []
+        _run_subprocess, blog_id, blog_pw, title, content, tags or [], image_path
     )

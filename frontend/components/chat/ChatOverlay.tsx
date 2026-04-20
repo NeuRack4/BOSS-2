@@ -29,6 +29,16 @@ import {
   extractReviewPayload,
   type ReviewPayload,
 } from "./ReviewResultCard";
+import {
+  InstagramPostCard,
+  extractInstagramPayload,
+  type InstagramPayload,
+} from "./InstagramPostCard";
+import {
+  ReviewReplyCard,
+  extractReviewReplyPayload,
+  type ReviewReplyPayload,
+} from "./ReviewReplyCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 type UploadCategory =
@@ -52,6 +62,8 @@ type Message = {
   content: string;
   choices?: string[];
   review?: ReviewPayload;
+  instagram?: InstagramPayload;
+  reviewReply?: ReviewReplyPayload;
   attachment?: {
     status: "uploading" | "done" | "error";
     filename: string;
@@ -168,9 +180,11 @@ export const ChatOverlay = () => {
   const [uploadType, setUploadType] = useState<string>("auto");
   const [userId, setUserId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendRef = useRef<((text: string, messageIndex?: number) => Promise<void>) | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
@@ -243,6 +257,7 @@ export const ChatOverlay = () => {
     if (newSessionTick === 0) return;
     setMessages([GREETING]);
     setInput("");
+    setStagedFiles([]);
     adjustHeight(textareaRef.current);
     textareaRef.current?.focus();
   }, [newSessionTick]);
@@ -286,10 +301,314 @@ export const ChatOverlay = () => {
     setCurrentSessionId,
   ]);
 
+  /** 이미지 파일 + 리뷰 맥락이면 true */
+  const isReviewImage = useCallback(
+    (file: File) => {
+      if (!file.type.startsWith("image/")) return false;
+      const inputLower = input.toLowerCase();
+      if (inputLower.includes("리뷰")) return true;
+      const recentText = messages
+        .slice(-6)
+        .map((m) => m.content)
+        .join(" ")
+        .toLowerCase();
+      return recentText.includes("리뷰");
+    },
+    [input, messages],
+  );
+
+  /** 리뷰 이미지 분석 → 자동 채팅 전송 */
+  const analyzeReviewImage = useCallback(
+    async (file: File) => {
+      if (!userId) return;
+      const placeholderIdx = messages.length;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "user" as const,
+          content: "",
+          attachment: { status: "uploading", filename: file.name },
+        },
+      ]);
+      setUploading(true);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(`${apiBase}/api/marketing/review/analyze`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        // 첨부 버블을 "완료"로 업데이트
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[placeholderIdx]) {
+            next[placeholderIdx] = {
+              ...next[placeholderIdx],
+              attachment: { status: "done", filename: file.name },
+            };
+          }
+          return next;
+        });
+
+        if (data.error) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `⚠️ ${data.error}` },
+          ]);
+          return;
+        }
+
+        // 플랫폼 라벨
+        const platformLabel: Record<string, string> = {
+          naver: "네이버 플레이스",
+          kakao: "카카오맵",
+          google: "구글맵",
+          other: "플랫폼",
+        };
+        const platform = platformLabel[data.platform] ?? "플랫폼";
+        const stars = data.star_rating ? `별점 ${data.star_rating}점` : "별점 미확인";
+        const reviewText = data.review_text
+          ? `\n리뷰 내용: ${data.review_text}`
+          : "";
+
+        // 자동 채팅 메시지 전송 (sendRef 로 순환 의존 없이 호출)
+        await sendRef.current?.(
+          `${platform} ${stars} 리뷰 답글 작성해줘.${reviewText}`,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "분석 실패";
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[placeholderIdx]) {
+            next[placeholderIdx] = {
+              ...next[placeholderIdx],
+              attachment: { status: "error", filename: file.name, error: msg },
+            };
+          }
+          return next;
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [apiBase, userId, messages.length],
+  );
+
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (!userId || uploading || loading) return;
+      if (files.length === 0) return;
+
+      const oversize = files.find((f) => f.size > UPLOAD_MAX_MB * 1024 * 1024);
+      if (oversize) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `"${oversize.name}" 가 너무 큽니다 (${UPLOAD_MAX_MB}MB 이하만 업로드 가능).`,
+          },
+        ]);
+        return;
+      }
+
+      setUploading(true);
+
+      const firstPlaceholderIndex = messages.length;
+      setMessages((prev) => [
+        ...prev,
+        ...files.map<Message>((f) => ({
+          role: "user",
+          content: "",
+          attachment: {
+            status: "uploading",
+            filename: f.name,
+            sizeKb: Math.round(f.size / 1024),
+          },
+        })),
+      ]);
+
+      try {
+        const form = new FormData();
+        form.append("account_id", userId);
+        form.append("user_declared_type", uploadType);
+        for (const f of files) form.append("files", f);
+
+        const res = await fetch(`${apiBase}/api/uploads/document`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "업로드 실패" }));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const json = await res.json();
+        const data = json?.data ?? {};
+        const items: Array<{
+          artifact_id: string;
+          title: string;
+          classification?: {
+            category: UploadCategory;
+            doc_type: string;
+            auto?: {
+              category: UploadCategory;
+              doc_type: string;
+              confidence: number;
+            };
+          };
+          needs_confirmation?: boolean;
+          final_category?: UploadCategory;
+        }> = Array.isArray(data.items) ? data.items : [];
+        const errors: Array<{ filename?: string; detail?: string }> =
+          Array.isArray(data.errors) ? data.errors : [];
+
+        setMessages((prev) => {
+          const next = [...prev];
+          files.forEach((f, i) => {
+            const idx = firstPlaceholderIndex + i;
+            const errMatch = errors.find((e) => e.filename === f.name);
+            if (next[idx]) {
+              next[idx] = {
+                ...next[idx],
+                attachment: {
+                  status: errMatch ? "error" : "done",
+                  filename: f.name,
+                  sizeKb: Math.round(f.size / 1024),
+                  error: errMatch?.detail,
+                },
+              };
+            }
+          });
+          return next;
+        });
+
+        window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+
+        const confirms = items.filter((it) => it.needs_confirmation);
+        const docsOk = items.filter(
+          (it) => !it.needs_confirmation && it.final_category === "documents",
+        );
+        const nonDocs = items.filter(
+          (it) =>
+            !it.needs_confirmation &&
+            it.final_category &&
+            it.final_category !== "documents",
+        );
+
+        if (confirms.length > 0) {
+          setMessages((prev) => [
+            ...prev,
+            ...confirms.map<Message>((it) => {
+              const auto = it.classification?.auto;
+              const autoCategory = (auto?.category ?? "other") as UploadCategory;
+              const autoDocType = auto?.doc_type ?? CATEGORY_LABEL[autoCategory];
+              const userCategory = (it.final_category ?? "other") as UploadCategory;
+              const userDocType = it.classification?.doc_type ?? CATEGORY_LABEL[userCategory];
+              return {
+                role: "assistant",
+                content: `"${it.title}" — 자동 분류는 **${autoDocType}**, 선택하신 건 **${userDocType}** 인데 어느 쪽이 맞나요?`,
+                choices: [
+                  `자동 분류(${autoDocType})`,
+                  `내 선택(${userDocType})`,
+                ],
+                confirm: {
+                  artifactId: it.artifact_id,
+                  autoCategory,
+                  autoDocType,
+                  userCategory,
+                  userDocType,
+                },
+              };
+            }),
+          ]);
+        }
+
+        if (nonDocs.length > 0) {
+          const lines = nonDocs.map((it) => {
+            const cat = (it.final_category ?? "other") as UploadCategory;
+            return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
+          });
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: lines.join("\n") },
+          ]);
+        }
+
+        if (docsOk.length === 1 && confirms.length === 0) {
+          const autoMessage = `방금 업로드한 "${docsOk[0].title}" 문서를 공정성 분석해주세요.`;
+          await sendRef.current?.(autoMessage);
+        } else if (docsOk.length > 1) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `문서 ${docsOk.length}개가 업로드됐어요. 어느 문서부터 분석할까요?`,
+              choices: docsOk.map((it) => `"${it.title}" 분석해줘`),
+            },
+          ]);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "업로드 실패";
+        setMessages((prev) => {
+          const next = [...prev];
+          files.forEach((f, i) => {
+            const idx = firstPlaceholderIndex + i;
+            if (next[idx]) {
+              next[idx] = {
+                ...next[idx],
+                attachment: {
+                  status: "error",
+                  filename: f.name,
+                  sizeKb: Math.round(f.size / 1024),
+                  error: msg,
+                },
+              };
+            }
+          });
+          return next;
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [apiBase, userId, uploading, loading, messages.length, uploadType],
+  );
+
   const send = useCallback(
     async (text: string, messageIndex?: number) => {
       const trimmed = text.trim();
-      if (!trimmed || loading || !userId) return;
+      if ((!trimmed && stagedFiles.length === 0) || loading || !userId) return;
+
+      // staged 파일 처리 분기
+      if (stagedFiles.length > 0) {
+        const files = [...stagedFiles];
+        setStagedFiles([]);
+        setInput("");
+        adjustHeight(textareaRef.current);
+
+        const textLower = trimmed.toLowerCase();
+        const recentText = messages.slice(-6).map((m) => m.content).join(" ").toLowerCase();
+        const hasReviewCtx = textLower.includes("리뷰") || recentText.includes("리뷰");
+
+        if (files.length === 1 && files[0].type.startsWith("image/") && hasReviewCtx) {
+          // 리뷰 이미지 분석 → 분석 완료 후 send 재호출로 채팅 전송
+          if (trimmed) {
+            setMessages((prev) => [...prev, { role: "user" as const, content: trimmed }]);
+          }
+          await analyzeReviewImage(files[0]);
+          return;
+        }
+        // 일반 파일 업로드 후 텍스트 메시지 전송
+        await uploadFiles(files);
+        if (trimmed) {
+          await send(trimmed, messageIndex);
+        }
+        return;
+      }
+
+      if (!trimmed) return;
       setInput("");
       adjustHeight(textareaRef.current);
       setMessages((prev) => {
@@ -349,10 +668,19 @@ export const ChatOverlay = () => {
       currentSessionId,
       fetchSessions,
       loading,
+      messages,
       setCurrentSessionId,
+      stagedFiles,
+      analyzeReviewImage,
+      uploadFiles,
       userId,
     ],
   );
+
+  // sendRef 를 항상 최신 send 로 유지 (analyzeReviewImage 에서 순환 dep 없이 호출 가능)
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
 
   useEffect(() => {
     return registerSender((text: string) => {
@@ -360,201 +688,16 @@ export const ChatOverlay = () => {
     });
   }, [registerSender, send]);
 
-  const uploadFiles = useCallback(
-    async (files: File[]) => {
-      if (!userId || uploading || loading) return;
-      if (files.length === 0) return;
-
-      const oversize = files.find((f) => f.size > UPLOAD_MAX_MB * 1024 * 1024);
-      if (oversize) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `"${oversize.name}" 가 너무 큽니다 (${UPLOAD_MAX_MB}MB 이하만 업로드 가능).`,
-          },
-        ]);
-        return;
-      }
-
-      setUploading(true);
-
-      // 파일마다 uploading 풍선을 먼저 쌓는다 (순서 보존을 위해 한 번에 append)
-      const firstPlaceholderIndex = messages.length;
-      setMessages((prev) => [
-        ...prev,
-        ...files.map<Message>((f) => ({
-          role: "user",
-          content: "",
-          attachment: {
-            status: "uploading",
-            filename: f.name,
-            sizeKb: Math.round(f.size / 1024),
-          },
-        })),
-      ]);
-
-      try {
-        const form = new FormData();
-        form.append("account_id", userId);
-        form.append("user_declared_type", uploadType);
-        for (const f of files) form.append("files", f);
-
-        const res = await fetch(`${apiBase}/api/uploads/document`, {
-          method: "POST",
-          body: form,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: "업로드 실패" }));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        const json = await res.json();
-        const data = json?.data ?? {};
-        const items: Array<{
-          artifact_id: string;
-          title: string;
-          classification?: {
-            category: UploadCategory;
-            doc_type: string;
-            auto?: {
-              category: UploadCategory;
-              doc_type: string;
-              confidence: number;
-            };
-          };
-          needs_confirmation?: boolean;
-          final_category?: UploadCategory;
-        }> = Array.isArray(data.items) ? data.items : [];
-        const errors: Array<{ filename?: string; detail?: string }> =
-          Array.isArray(data.errors) ? data.errors : [];
-
-        // 각 placeholder 를 success/error 로 업데이트
-        setMessages((prev) => {
-          const next = [...prev];
-          files.forEach((f, i) => {
-            const idx = firstPlaceholderIndex + i;
-            const errMatch = errors.find((e) => e.filename === f.name);
-            if (next[idx]) {
-              next[idx] = {
-                ...next[idx],
-                attachment: {
-                  status: errMatch ? "error" : "done",
-                  filename: f.name,
-                  sizeKb: Math.round(f.size / 1024),
-                  error: errMatch?.detail,
-                },
-              };
-            }
-          });
-          return next;
-        });
-
-        window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
-
-        // 아이템별 후속 처리
-        const confirms = items.filter((it) => it.needs_confirmation);
-        const docsOk = items.filter(
-          (it) => !it.needs_confirmation && it.final_category === "documents",
-        );
-        const nonDocs = items.filter(
-          (it) =>
-            !it.needs_confirmation &&
-            it.final_category &&
-            it.final_category !== "documents",
-        );
-
-        // (1) 충돌 — 각 아이템마다 CHOICES 풍선을 띄워 확정 유도
-        if (confirms.length > 0) {
-          setMessages((prev) => [
-            ...prev,
-            ...confirms.map<Message>((it) => {
-              const auto = it.classification?.auto;
-              const autoCategory = (auto?.category ??
-                "other") as UploadCategory;
-              const autoDocType =
-                auto?.doc_type ?? CATEGORY_LABEL[autoCategory];
-              const userCategory = (it.final_category ??
-                "other") as UploadCategory;
-              const userDocType =
-                it.classification?.doc_type ?? CATEGORY_LABEL[userCategory];
-              return {
-                role: "assistant",
-                content: `"${it.title}" — 자동 분류는 **${autoDocType}**, 선택하신 건 **${userDocType}** 인데 어느 쪽이 맞나요?`,
-                choices: [
-                  `자동 분류(${autoDocType})`,
-                  `내 선택(${userDocType})`,
-                ],
-                confirm: {
-                  artifactId: it.artifact_id,
-                  autoCategory,
-                  autoDocType,
-                  userCategory,
-                  userDocType,
-                },
-              };
-            }),
-          ]);
-        }
-
-        // (2) 비-documents 카테고리 — 간단한 안내 메시지
-        if (nonDocs.length > 0) {
-          const lines = nonDocs.map((it) => {
-            const cat = (it.final_category ?? "other") as UploadCategory;
-            return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
-          });
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: lines.join("\n") },
-          ]);
-        }
-
-        // (3) documents + 충돌 없음 — 분석 트리거 (하나일 때만 자동)
-        if (docsOk.length === 1 && confirms.length === 0) {
-          const autoMessage = `방금 업로드한 "${docsOk[0].title}" 문서를 공정성 분석해주세요.`;
-          await send(autoMessage);
-        } else if (docsOk.length > 1) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: `문서 ${docsOk.length}개가 업로드됐어요. 어느 문서부터 분석할까요?`,
-              choices: docsOk.map((it) => `"${it.title}" 분석해줘`),
-            },
-          ]);
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "업로드 실패";
-        setMessages((prev) => {
-          const next = [...prev];
-          files.forEach((f, i) => {
-            const idx = firstPlaceholderIndex + i;
-            if (next[idx]) {
-              next[idx] = {
-                ...next[idx],
-                attachment: {
-                  status: "error",
-                  filename: f.name,
-                  sizeKb: Math.round(f.size / 1024),
-                  error: msg,
-                },
-              };
-            }
-          });
-          return next;
-        });
-      } finally {
-        setUploading(false);
-      }
-    },
-    [apiBase, userId, uploading, loading, messages.length, send, uploadType],
-  );
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
-    if (list && list.length > 0) {
-      uploadFiles(Array.from(list));
-    }
+    if (!list || list.length === 0) return;
+    setStagedFiles((prev) => [...prev, ...Array.from(list)]);
     e.target.value = "";
+    textareaRef.current?.focus();
+  };
+
+  const removeStagedFile = (idx: number) => {
+    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const confirmClassification = useCallback(
@@ -656,6 +799,29 @@ export const ChatOverlay = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send(input);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter((item) => item.type.startsWith("image/"));
+    if (imageItems.length === 0) return;
+
+    // 이미지 데이터가 있으면 staged에 추가 (텍스트 붙여넣기는 그대로 허용)
+    const files = imageItems
+      .map((item) => {
+        const file = item.getAsFile();
+        if (!file) return null;
+        // 스크린샷은 파일명이 없으므로 타임스탬프 기반 이름 부여
+        const ext = file.type.split("/")[1] ?? "png";
+        const name = `screenshot-${Date.now()}.${ext}`;
+        return new File([file], name, { type: file.type });
+      })
+      .filter((f): f is File => f !== null);
+
+    if (files.length > 0) {
+      e.preventDefault(); // 이미지 붙여넣기 시 텍스트로 오염되는 것 방지
+      setStagedFiles((prev) => [...prev, ...files]);
     }
   };
 
@@ -807,12 +973,25 @@ export const ChatOverlay = () => {
           <ScrollArea className="min-h-0 flex-1 px-5 py-4">
             <div className="mx-auto max-w-3xl space-y-3">
               {messages.map((msg, i) => {
-                const extracted =
-                  msg.role === "assistant"
-                    ? extractReviewPayload(msg.content || "")
-                    : { cleaned: msg.content, payload: msg.review ?? null };
-                const displayText = extracted.cleaned;
-                const reviewPayload = msg.review ?? extracted.payload;
+                let displayText = msg.content;
+                let reviewPayload: ReviewPayload | null = msg.review ?? null;
+                let instagramPayload: InstagramPayload | null = msg.instagram ?? null;
+                let reviewReplyPayload: ReviewReplyPayload | null = msg.reviewReply ?? null;
+
+                if (msg.role === "assistant") {
+                  const rrExtracted = extractReviewReplyPayload(displayText || "");
+                  displayText = rrExtracted.cleaned;
+                  if (rrExtracted.payload) reviewReplyPayload = rrExtracted.payload;
+
+                  const igExtracted = extractInstagramPayload(displayText || "");
+                  displayText = igExtracted.cleaned;
+                  if (igExtracted.payload) instagramPayload = igExtracted.payload;
+
+                  const rvExtracted = extractReviewPayload(displayText || "");
+                  displayText = rvExtracted.cleaned;
+                  if (rvExtracted.payload) reviewPayload = rvExtracted.payload;
+                }
+
                 return (
                   <div key={i} className="space-y-2">
                     <div
@@ -879,6 +1058,16 @@ export const ChatOverlay = () => {
                         <ReviewResultCard payload={reviewPayload} />
                       </div>
                     )}
+                    {instagramPayload && msg.role === "assistant" && (
+                      <div className="ml-8">
+                        <InstagramPostCard payload={instagramPayload} />
+                      </div>
+                    )}
+                    {reviewReplyPayload && msg.role === "assistant" && (
+                      <div className="ml-8 max-w-[80%]">
+                        <ReviewReplyCard payload={reviewReplyPayload} />
+                      </div>
+                    )}
                     {msg.role === "assistant" && msg.choices && (
                       <div className="ml-8 grid grid-cols-2 gap-1.5">
                         {msg.choices.map((choice, idx) => (
@@ -921,6 +1110,28 @@ export const ChatOverlay = () => {
           <div className="border-t border-[#ddd0b4] bg-[#ebe0ca]/40 px-5 py-4">
             <div className="mx-auto max-w-3xl">
               <div className="relative rounded-xl border border-[#ddd0b4] bg-[#fffaf2]">
+                {/* Staged 파일 미리보기 */}
+                {stagedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 border-b border-[#ddd0b4] px-3 pt-2.5 pb-2">
+                    {stagedFiles.map((f, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1.5 rounded-lg border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[12px] text-[#2e2719]"
+                      >
+                        <Paperclip className="h-3 w-3 shrink-0 text-[#8c7e66]" />
+                        <span className="max-w-[160px] truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeStagedFile(i)}
+                          className="ml-0.5 rounded p-0.5 hover:bg-[#ddd0b4]"
+                          aria-label="첨부 파일 제거"
+                        >
+                          <X className="h-3 w-3 text-[#8c7e66]" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="overflow-y-auto">
                   <Textarea
                     ref={textareaRef}
@@ -930,6 +1141,7 @@ export const ChatOverlay = () => {
                       adjustHeight(e.target);
                     }}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     placeholder="메시지를 입력하세요..."
                     className={cn(
                       "w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-[#2e2719]",
@@ -994,10 +1206,10 @@ export const ChatOverlay = () => {
                     <button
                       type="button"
                       onClick={() => send(input)}
-                      disabled={loading || !input.trim()}
+                      disabled={loading || (!input.trim() && stagedFiles.length === 0)}
                       className={cn(
                         "flex items-center justify-between gap-1 rounded-lg border border-[#ddd0b4] px-1.5 py-1.5 text-sm transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca] disabled:opacity-50",
-                        input.trim()
+                        (input.trim() || stagedFiles.length > 0)
                           ? "bg-[#2e2719] text-[#fbf6eb] hover:bg-[#3d3423]"
                           : "text-[#8c7e66]",
                       )}
@@ -1006,7 +1218,7 @@ export const ChatOverlay = () => {
                       <ArrowUpIcon
                         className={cn(
                           "h-4 w-4",
-                          input.trim() ? "text-[#fbf6eb]" : "text-[#8c7e66]",
+                          (input.trim() || stagedFiles.length > 0) ? "text-[#fbf6eb]" : "text-[#8c7e66]",
                         )}
                       />
                     </button>
