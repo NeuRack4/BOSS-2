@@ -24,3 +24,8 @@ croniter==3.0.3
 python-dotenv==1.0.1
 numpy==2.2.0
 tiktoken==0.8.0
+
+# Document parsing (uploads)
+openpyxl>=3.1.5         # XLSX 시트 → markdown 테이블
+striprtf>=0.0.26        # RTF 태그 제거
+pillow-heif>=0.18.0     # HEIC(아이폰 기본) → JPEG 변환 후 기존 vision OCR 재사용

@@ -31,6 +31,22 @@ import {
 } from "./ReviewResultCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 
+type UploadCategory =
+  | "documents"
+  | "receipt"
+  | "invoice"
+  | "tax"
+  | "id"
+  | "other";
+
+type ConfirmPayload = {
+  artifactId: string;
+  autoCategory: UploadCategory;
+  autoDocType: string;
+  userCategory: UploadCategory;
+  userDocType: string;
+};
+
 type Message = {
   role: "user" | "assistant";
   content: string;
@@ -42,15 +58,54 @@ type Message = {
     sizeKb?: number;
     error?: string;
   };
+  confirm?: ConfirmPayload;
 };
 
 const UPLOAD_ACCEPT =
-  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif," +
+  ".pdf,.docx,.doc,.txt,.rtf,.xlsx,.csv," +
+  ".jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif,.heic,.heif," +
   "application/pdf," +
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
   "application/msword," +
-  "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet," +
+  "text/plain,text/csv,application/rtf," +
+  "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,image/heic,image/heif";
 const UPLOAD_MAX_MB = 20;
+
+const UPLOAD_TYPES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "auto", label: "자동 분류" },
+  { value: "contract", label: "계약서" },
+  { value: "proposal", label: "제안서" },
+  { value: "estimate", label: "견적서" },
+  { value: "notice", label: "공지문" },
+  { value: "checklist", label: "체크리스트" },
+  { value: "guide", label: "가이드" },
+  { value: "receipt", label: "영수증" },
+  { value: "invoice", label: "청구서" },
+  { value: "tax", label: "세금계산서" },
+  { value: "id", label: "신분증" },
+  { value: "other", label: "기타" },
+];
+
+const CATEGORY_LABEL: Record<UploadCategory, string> = {
+  documents: "문서",
+  receipt: "영수증",
+  invoice: "청구서",
+  tax: "세금계산서",
+  id: "신분증",
+  other: "기타",
+};
+
+const NON_DOC_HINT: Partial<Record<UploadCategory, string>> = {
+  receipt:
+    "영수증으로 분류했어요. 저장은 됐지만 자동 분석/기록은 아직 지원하지 않아요.",
+  invoice:
+    "청구서로 분류했어요. 저장은 됐지만 자동 분석/기록은 아직 지원하지 않아요.",
+  tax: "세금계산서로 분류했어요. 저장은 됐지만 자동 분석/기록은 아직 지원하지 않아요.",
+  id: "신분증으로 분류했어요. 민감 정보라 저장만 하고 별도 처리는 하지 않아요.",
+  other:
+    "사업용 문서 분류에 해당하지 않아 저장만 해뒀어요. 필요하면 위 드롭다운에서 타입을 지정해 다시 올려주세요.",
+};
 
 const MIN_TEXTAREA = 60;
 const MAX_TEXTAREA = 200;
@@ -110,6 +165,7 @@ export const ChatOverlay = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadType, setUploadType] = useState<string>("auto");
   const [userId, setUserId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -304,40 +360,46 @@ export const ChatOverlay = () => {
     });
   }, [registerSender, send]);
 
-  const uploadFile = useCallback(
-    async (file: File) => {
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
       if (!userId || uploading || loading) return;
-      if (file.size > UPLOAD_MAX_MB * 1024 * 1024) {
+      if (files.length === 0) return;
+
+      const oversize = files.find((f) => f.size > UPLOAD_MAX_MB * 1024 * 1024);
+      if (oversize) {
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `파일이 너무 큽니다 (${UPLOAD_MAX_MB}MB 이하만 업로드 가능).`,
+            content: `"${oversize.name}" 가 너무 큽니다 (${UPLOAD_MAX_MB}MB 이하만 업로드 가능).`,
           },
         ]);
         return;
       }
 
       setUploading(true);
-      const placeholderIndex = messages.length;
+
+      // 파일마다 uploading 풍선을 먼저 쌓는다 (순서 보존을 위해 한 번에 append)
+      const firstPlaceholderIndex = messages.length;
       setMessages((prev) => [
         ...prev,
-        {
+        ...files.map<Message>((f) => ({
           role: "user",
           content: "",
           attachment: {
             status: "uploading",
-            filename: file.name,
-            sizeKb: Math.round(file.size / 1024),
+            filename: f.name,
+            sizeKb: Math.round(f.size / 1024),
           },
-        },
+        })),
       ]);
 
       try {
         const form = new FormData();
-        form.append("file", file);
         form.append("account_id", userId);
-        form.append("original_name", file.name);
+        form.append("user_declared_type", uploadType);
+        for (const f of files) form.append("files", f);
+
         const res = await fetch(`${apiBase}/api/uploads/document`, {
           method: "POST",
           body: form,
@@ -348,57 +410,213 @@ export const ChatOverlay = () => {
         }
         const json = await res.json();
         const data = json?.data ?? {};
+        const items: Array<{
+          artifact_id: string;
+          title: string;
+          classification?: {
+            category: UploadCategory;
+            doc_type: string;
+            auto?: {
+              category: UploadCategory;
+              doc_type: string;
+              confidence: number;
+            };
+          };
+          needs_confirmation?: boolean;
+          final_category?: UploadCategory;
+        }> = Array.isArray(data.items) ? data.items : [];
+        const errors: Array<{ filename?: string; detail?: string }> =
+          Array.isArray(data.errors) ? data.errors : [];
 
+        // 각 placeholder 를 success/error 로 업데이트
         setMessages((prev) => {
           const next = [...prev];
-          if (next[placeholderIndex]) {
-            next[placeholderIndex] = {
-              ...next[placeholderIndex],
-              attachment: {
-                status: "done",
-                filename: file.name,
-                sizeKb: Math.round(file.size / 1024),
-              },
-            };
-          }
+          files.forEach((f, i) => {
+            const idx = firstPlaceholderIndex + i;
+            const errMatch = errors.find((e) => e.filename === f.name);
+            if (next[idx]) {
+              next[idx] = {
+                ...next[idx],
+                attachment: {
+                  status: errMatch ? "error" : "done",
+                  filename: f.name,
+                  sizeKb: Math.round(f.size / 1024),
+                  error: errMatch?.detail,
+                },
+              };
+            }
+          });
           return next;
         });
 
-        // 업로드된 uploaded_doc artifact 를 캔버스에 반영
         window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
 
-        // 업로드 완료 후 자동으로 분석 트리거 메시지 전송
-        const autoMessage = `방금 업로드한 "${data.title || file.name}" 문서를 공정성 분석해주세요.`;
-        await send(autoMessage);
+        // 아이템별 후속 처리
+        const confirms = items.filter((it) => it.needs_confirmation);
+        const docsOk = items.filter(
+          (it) => !it.needs_confirmation && it.final_category === "documents",
+        );
+        const nonDocs = items.filter(
+          (it) =>
+            !it.needs_confirmation &&
+            it.final_category &&
+            it.final_category !== "documents",
+        );
+
+        // (1) 충돌 — 각 아이템마다 CHOICES 풍선을 띄워 확정 유도
+        if (confirms.length > 0) {
+          setMessages((prev) => [
+            ...prev,
+            ...confirms.map<Message>((it) => {
+              const auto = it.classification?.auto;
+              const autoCategory = (auto?.category ??
+                "other") as UploadCategory;
+              const autoDocType =
+                auto?.doc_type ?? CATEGORY_LABEL[autoCategory];
+              const userCategory = (it.final_category ??
+                "other") as UploadCategory;
+              const userDocType =
+                it.classification?.doc_type ?? CATEGORY_LABEL[userCategory];
+              return {
+                role: "assistant",
+                content: `"${it.title}" — 자동 분류는 **${autoDocType}**, 선택하신 건 **${userDocType}** 인데 어느 쪽이 맞나요?`,
+                choices: [
+                  `자동 분류(${autoDocType})`,
+                  `내 선택(${userDocType})`,
+                ],
+                confirm: {
+                  artifactId: it.artifact_id,
+                  autoCategory,
+                  autoDocType,
+                  userCategory,
+                  userDocType,
+                },
+              };
+            }),
+          ]);
+        }
+
+        // (2) 비-documents 카테고리 — 간단한 안내 메시지
+        if (nonDocs.length > 0) {
+          const lines = nonDocs.map((it) => {
+            const cat = (it.final_category ?? "other") as UploadCategory;
+            return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
+          });
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: lines.join("\n") },
+          ]);
+        }
+
+        // (3) documents + 충돌 없음 — 분석 트리거 (하나일 때만 자동)
+        if (docsOk.length === 1 && confirms.length === 0) {
+          const autoMessage = `방금 업로드한 "${docsOk[0].title}" 문서를 공정성 분석해주세요.`;
+          await send(autoMessage);
+        } else if (docsOk.length > 1) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `문서 ${docsOk.length}개가 업로드됐어요. 어느 문서부터 분석할까요?`,
+              choices: docsOk.map((it) => `"${it.title}" 분석해줘`),
+            },
+          ]);
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "업로드 실패";
         setMessages((prev) => {
           const next = [...prev];
-          if (next[placeholderIndex]) {
-            next[placeholderIndex] = {
-              ...next[placeholderIndex],
-              attachment: {
-                status: "error",
-                filename: file.name,
-                sizeKb: Math.round(file.size / 1024),
-                error: msg,
-              },
-            };
-          }
+          files.forEach((f, i) => {
+            const idx = firstPlaceholderIndex + i;
+            if (next[idx]) {
+              next[idx] = {
+                ...next[idx],
+                attachment: {
+                  status: "error",
+                  filename: f.name,
+                  sizeKb: Math.round(f.size / 1024),
+                  error: msg,
+                },
+              };
+            }
+          });
           return next;
         });
       } finally {
         setUploading(false);
       }
     },
-    [apiBase, userId, uploading, loading, messages.length, send],
+    [apiBase, userId, uploading, loading, messages.length, send, uploadType],
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
+    const list = e.target.files;
+    if (list && list.length > 0) {
+      uploadFiles(Array.from(list));
+    }
     e.target.value = "";
   };
+
+  const confirmClassification = useCallback(
+    async (messageIndex: number, chosen: "auto" | "user") => {
+      const msg = messages[messageIndex];
+      if (!msg?.confirm || !userId) return;
+      const {
+        artifactId,
+        autoCategory,
+        autoDocType,
+        userCategory,
+        userDocType,
+      } = msg.confirm;
+      const finalCategory = chosen === "auto" ? autoCategory : userCategory;
+      const finalDocType = chosen === "auto" ? autoDocType : userDocType;
+
+      // 메시지의 choices/confirm 제거 + 확정 표기
+      setMessages((prev) => {
+        const next = [...prev];
+        if (next[messageIndex]) {
+          next[messageIndex] = {
+            ...next[messageIndex],
+            choices: undefined,
+            confirm: undefined,
+            content: `${next[messageIndex].content}\n\n→ **${finalDocType}** 로 확정했어요.`,
+          };
+        }
+        return next;
+      });
+
+      try {
+        await fetch(
+          `${apiBase}/api/uploads/document/${artifactId}/classification?account_id=${userId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: finalCategory,
+              doc_type: finalDocType,
+            }),
+          },
+        );
+        window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+      } catch {
+        /* noop — 확정 실패해도 UI 는 이미 업데이트됨, 필요시 재시도는 차기 */
+      }
+
+      // 문서 카테고리로 확정됐으면 분석 트리거
+      if (finalCategory === "documents") {
+        await send(`방금 업로드한 문서를 공정성 분석해주세요.`);
+      } else {
+        const hint = NON_DOC_HINT[finalCategory];
+        if (hint) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: hint },
+          ]);
+        }
+      }
+    },
+    [apiBase, messages, send, userId],
+  );
 
   // Esc to close (only when input empty)
   useEffect(() => {
@@ -411,6 +629,15 @@ export const ChatOverlay = () => {
   }, [isChatOpen, input, closeChat]);
 
   const handleChoiceClick = (choice: string, messageIndex: number) => {
+    // 분류 충돌 확정 전용 풍선
+    const msg = messages[messageIndex];
+    if (msg?.confirm) {
+      confirmClassification(
+        messageIndex,
+        choice.startsWith("자동 분류") ? "auto" : "user",
+      );
+      return;
+    }
     if (isOtherChoice(choice)) {
       setMessages((prev) => {
         const next = [...prev];
@@ -720,6 +947,7 @@ export const ChatOverlay = () => {
                       ref={fileInputRef}
                       type="file"
                       accept={UPLOAD_ACCEPT}
+                      multiple
                       onChange={handleFileSelect}
                       className="hidden"
                     />
@@ -728,8 +956,8 @@ export const ChatOverlay = () => {
                       disabled={uploading || loading || !userId}
                       onClick={() => fileInputRef.current?.click()}
                       className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca] disabled:opacity-50"
-                      aria-label="문서 첨부 (PDF · DOCX · 이미지)"
-                      title="PDF·DOCX·이미지를 첨부하면 공정성 분석을 도와드려요 (이미지는 OCR)"
+                      aria-label="문서 첨부 (PDF·DOCX·TXT·RTF·XLSX·CSV·이미지)"
+                      title="PDF·DOCX·TXT·RTF·XLSX·CSV·이미지 첨부 (여러 개 선택 가능, 이미지는 OCR)"
                     >
                       {uploading ? (
                         <Loader2 className="h-4 w-4 animate-spin text-[#5a5040]" />
@@ -740,6 +968,20 @@ export const ChatOverlay = () => {
                         {uploading ? "업로드 중" : "첨부"}
                       </span>
                     </button>
+                    <select
+                      value={uploadType}
+                      onChange={(e) => setUploadType(e.target.value)}
+                      disabled={uploading || loading}
+                      className="rounded-md border border-[#ddd0b4] bg-transparent px-2 py-1 text-xs text-[#5a5040] focus:border-[#bfae8a] focus:outline-none disabled:opacity-50"
+                      title="업로드 파일 타입 (자동 분류 기본)"
+                      aria-label="업로드 파일 타입"
+                    >
+                      {UPLOAD_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

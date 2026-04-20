@@ -2,38 +2,53 @@
 
 POST /api/uploads/document
   multipart/form-data:
-    file: PDF|DOCX (이미지는 v1.1.3 OCR 추가 예정)
-    account_id: str
-    original_name: str (선택, 없으면 파일명)
+    files:          UploadFile (1개 이상, 반복 허용)      # ← v1.2 멀티 업로드
+    account_id:     str
+    original_name:  str (deprecated — files 멀티 업로드에선 무시)
+    user_declared_type: str = "auto"
+        one of: auto | contract | proposal | estimate | notice | checklist | guide |
+                receipt | invoice | tax | id | other
 
-동작:
-  1. 파일 bytes 수신 → 크기 검증 (< 20MB).
-  2. Supabase Storage 버킷 `documents-uploads` 에 `{account_id}/{uuid}-{name}` 로 업로드.
-  3. doc_parser.parse_file 로 텍스트 추출.
-  4. artifacts 에 `kind='artifact'`, `type='uploaded_doc'` 행 삽입:
-       - domains: ['documents']
-       - title: 원본 파일명 (확장자 제외)
-       - content: 추출 텍스트 (DB 에 전량 저장)
-       - metadata: {storage_path, mime_type, size_bytes, original_name, parsed_len}
-  5. activity_logs 에 artifact_created 기록 + embedding 인덱싱.
-  6. { data: { artifact_id, title, size_bytes, parsed_len, preview }, meta: {} }.
+동작 (파일별):
+  1. 크기 검증 (< 20MB) · 텍스트 추출 (`doc_parser.parse_file`)
+  2. Supabase Storage 업로드 → `uploaded_doc` artifact 저장
+  3. 자동 분류 (`_doc_classify.classify_document`) + 유저 선언 비교
+     - 충돌 감지 시 `metadata.needs_confirmation = true` + `suggested_category` 기록
+  4. documents 서브허브에 contains 엣지 연결
+  5. activity_logs + embedding (best-effort)
 
-storage_path 는 bucket 내부 경로 (bucket prefix 제외).
-사후 분석(_doc_review) 은 `POST /api/reviews` 별도 호출.
+응답:
+  { data: { items: [...], summary: {...} }, meta: {} }
+  items[i] = {artifact_id, title, size_bytes, parsed_len, preview, storage_path, classification, needs_confirmation}
+
+PATCH /api/uploads/document/{artifact_id}/classification
+  body: {category, doc_type}
+  → metadata.classification 갱신 + needs_confirmation 해제.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.agents._artifact import pick_documents_parent
+from app.agents._doc_classify import (
+    CATEGORY_LABELS,
+    Category,
+    classify_document,
+    detect_conflict,
+    resolve_user_declared_type,
+)
 from app.core.doc_parser import parse_file
 from app.core.supabase import get_supabase
 from app.models.schemas import UploadDocumentResponse
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -47,6 +62,10 @@ def _mime_for(filename: str) -> str:
         "pdf":  "application/pdf",
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "doc":  "application/msword",
+        "txt":  "text/plain",
+        "rtf":  "application/rtf",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv":  "text/csv",
         "jpg":  "image/jpeg",
         "jpeg": "image/jpeg",
         "png":  "image/png",
@@ -54,21 +73,18 @@ def _mime_for(filename: str) -> str:
         "bmp":  "image/bmp",
         "tiff": "image/tiff",
         "gif":  "image/gif",
+        "heic": "image/heic",
+        "heif": "image/heif",
     }.get(ext, "application/octet-stream")
 
 
 def _safe_name(name: str) -> str:
-    # 경로 구분자만 제거. 한글은 DB 메타데이터에 원본 그대로 보관.
     return os.path.basename(name or "document")[:180]
 
 
 def _storage_key_for(account_id: str, filename: str) -> str:
-    """Supabase Storage 키는 ASCII 만 허용되므로 UUID + 확장자로만 구성.
-
-    원본 파일명은 metadata.original_name 에 별도 보관.
-    """
+    """Storage 키는 ASCII 만. UUID + 확장자만 사용, 원본은 metadata 에 보관."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    # 확장자도 ASCII + 안전 문자로 제한
     ext = "".join(ch for ch in ext if ch.isalnum())[:10] or "bin"
     return f"{account_id}/{uuid.uuid4().hex}.{ext}"
 
@@ -79,22 +95,37 @@ def _title_of(filename: str) -> str:
     return stem[:180] or "업로드 문서"
 
 
-@router.post("/document", response_model=UploadDocumentResponse)
-async def upload_document(
-    account_id: str = Form(...),
-    file: UploadFile = File(...),
-    original_name: Optional[str] = Form(None),
-):
+async def _process_single(
+    account_id: str,
+    file: UploadFile,
+    user_declared_type: str,
+) -> dict:
+    """파일 1개 업로드 파이프라인. 실패 시 HTTPException 을 호출자로 propagate.
+
+    반환: items[i] 에 들어갈 dict.
+    """
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
     if len(raw) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail=f"파일 크기가 {_MAX_BYTES // 1024 // 1024}MB 를 초과합니다.")
 
-    disp_name = _safe_name(original_name or file.filename or "document")
-    content_text = await parse_file(raw, disp_name)  # 실패 시 HTTPException
+    disp_name = _safe_name(file.filename or "document")
+    content_text = await parse_file(raw, disp_name)
 
-    # Storage 업로드 — 키는 ASCII 만 허용되므로 UUID + 확장자로만 구성
+    # 자동 분류 + 유저 선언 비교
+    auto = await classify_document(content_text, disp_name)
+    declared = resolve_user_declared_type(user_declared_type)
+    conflict = detect_conflict(auto, declared)
+    # final_category 는 유저 선언이 있으면 유저 값 우선 (충돌 여부는 플래그로 따로)
+    if declared is not None:
+        final_category: Category = declared[0]
+        final_doc_type: str = declared[1]
+    else:
+        final_category = auto.category
+        final_doc_type = auto.doc_type
+
+    # Storage 업로드
     storage_path = _storage_key_for(account_id, disp_name)
     sb = get_supabase()
     try:
@@ -107,14 +138,25 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Storage 업로드 실패: {str(exc)[:200]}")
 
     title = _title_of(disp_name)
-    metadata = {
-        "storage_path":  storage_path,
-        "bucket":        _BUCKET,
-        "mime_type":     _mime_for(disp_name),
-        "size_bytes":    len(raw),
-        "original_name": disp_name,
-        "parsed_len":    len(content_text),
+    classification_meta = {
+        "category":        final_category,
+        "doc_type":        final_doc_type,
+        "user_declared":   user_declared_type or "auto",
+        "auto":            auto.to_dict(),
     }
+    metadata = {
+        "storage_path":        storage_path,
+        "bucket":              _BUCKET,
+        "mime_type":           _mime_for(disp_name),
+        "size_bytes":          len(raw),
+        "original_name":       disp_name,
+        "parsed_len":          len(content_text),
+        "classification":      classification_meta,
+        "needs_confirmation":  conflict,
+    }
+    if conflict:
+        metadata["suggested_category"] = auto.category
+        metadata["suggested_doc_type"] = auto.doc_type
 
     payload = {
         "account_id": account_id,
@@ -129,7 +171,6 @@ async def upload_document(
     try:
         result = sb.table("artifacts").insert(payload).execute()
     except Exception as exc:
-        # 업로드된 파일 롤백
         try:
             sb.storage.from_(_BUCKET).remove([storage_path])
         except Exception:
@@ -140,7 +181,7 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="artifact 저장 결과가 비었습니다.")
     artifact_id = result.data[0]["id"]
 
-    # documents 서브허브(없으면 메인 허브)로 contains 연결 — 캔버스에서 parents 가 보이도록
+    # documents 서브허브 연결 (best-effort)
     hub_id = pick_documents_parent(
         sb,
         account_id,
@@ -157,33 +198,135 @@ async def upload_document(
         except Exception:
             pass
 
-    # activity_logs + embedding (best-effort)
+    # activity_logs
     try:
         sb.table("activity_logs").insert({
             "account_id":  account_id,
             "type":        "artifact_created",
             "domain":      "documents",
             "title":       title,
-            "description": f"문서 업로드: {disp_name} ({len(raw)//1024} KB)",
+            "description": f"문서 업로드: {disp_name} ({len(raw)//1024} KB, {CATEGORY_LABELS.get(final_category, final_category)})",
             "metadata":    {"artifact_id": artifact_id, **metadata},
         }).execute()
     except Exception:
         pass
 
+    # 임베딩
     try:
         from app.rag.embedder import index_artifact
         await index_artifact(account_id, "documents", artifact_id, f"{title}\n{content_text[:4000]}")
     except Exception:
         pass
 
-    preview = content_text[:500]
-    return UploadDocumentResponse(
-        data={
-            "artifact_id": artifact_id,
-            "title":       title,
-            "size_bytes":  len(raw),
-            "parsed_len":  len(content_text),
-            "preview":     preview,
-            "storage_path": storage_path,
-        }
+    return {
+        "artifact_id":        artifact_id,
+        "title":              title,
+        "size_bytes":         len(raw),
+        "parsed_len":         len(content_text),
+        "preview":            content_text[:500],
+        "storage_path":       storage_path,
+        "classification":     classification_meta,
+        "needs_confirmation": conflict,
+        "final_category":     final_category,
+    }
+
+
+@router.post("/document", response_model=UploadDocumentResponse)
+async def upload_document(
+    account_id: str = Form(...),
+    files: List[UploadFile] = File(...),
+    user_declared_type: str = Form("auto"),
+    # 하위 호환: 기존 단일 파일 + original_name 파라미터 (무시해도 동작).
+    original_name: Optional[str] = Form(None),  # noqa: ARG001
+):
+    if not files:
+        raise HTTPException(status_code=400, detail="업로드된 파일이 없습니다.")
+
+    items: list[dict] = []
+    errors: list[dict] = []
+    for f in files:
+        try:
+            item = await _process_single(account_id, f, user_declared_type)
+            items.append(item)
+        except HTTPException as e:
+            errors.append({"filename": f.filename, "status_code": e.status_code, "detail": e.detail})
+            log.warning("upload item failed: %s — %s", f.filename, e.detail)
+        except Exception as e:
+            errors.append({"filename": f.filename, "status_code": 500, "detail": str(e)[:200]})
+            log.exception("upload item crashed")
+
+    if not items:
+        # 하나도 성공 못 함 → 첫 에러를 HTTPException 으로 돌려줌
+        first = errors[0] if errors else {"status_code": 500, "detail": "업로드 실패"}
+        raise HTTPException(status_code=first.get("status_code", 500), detail=first.get("detail", "업로드 실패"))
+
+    # 프론트 단일 파일 호환: 첫 아이템의 필드를 data 루트에도 복제 (legacy clients)
+    first = items[0]
+    data: dict = {
+        "items":              items,
+        "summary":            {
+            "total":               len(items) + len(errors),
+            "succeeded":           len(items),
+            "failed":              len(errors),
+            "needs_confirmation":  sum(1 for it in items if it.get("needs_confirmation")),
+        },
+        "errors":             errors,
+        # ↓ legacy (단일 업로드) 호환 필드
+        "artifact_id":        first["artifact_id"],
+        "title":              first["title"],
+        "size_bytes":         first["size_bytes"],
+        "parsed_len":         first["parsed_len"],
+        "preview":            first["preview"],
+        "storage_path":       first["storage_path"],
+        "classification":     first["classification"],
+        "needs_confirmation": first["needs_confirmation"],
+        "final_category":     first["final_category"],
+    }
+    return UploadDocumentResponse(data=data)
+
+
+class ClassificationPatch(BaseModel):
+    category: Category
+    doc_type: str | None = None
+
+
+@router.patch("/document/{artifact_id}/classification", response_model=UploadDocumentResponse)
+async def patch_classification(artifact_id: str, body: ClassificationPatch, account_id: str):
+    """유저가 충돌을 해소하거나 분류를 재지정할 때 호출.
+
+    `metadata.classification.category` 를 갱신하고 `needs_confirmation` 을 해제한다.
+    """
+    sb = get_supabase()
+    rows = (
+        sb.table("artifacts")
+        .select("id,metadata,account_id")
+        .eq("id", artifact_id)
+        .eq("account_id", account_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
     )
+    if not rows:
+        raise HTTPException(status_code=404, detail="artifact 를 찾을 수 없습니다.")
+    meta = rows[0].get("metadata") or {}
+    classification = meta.get("classification") or {}
+    classification["category"] = body.category
+    classification["doc_type"] = body.doc_type or classification.get("doc_type") or CATEGORY_LABELS.get(body.category, body.category)
+    classification["user_declared"] = body.category  # 유저 최종 확정이라는 의미
+    meta["classification"] = classification
+    meta["needs_confirmation"] = False
+    meta.pop("suggested_category", None)
+    meta.pop("suggested_doc_type", None)
+
+    try:
+        sb.table("artifacts").update({"metadata": meta}).eq("id", artifact_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"classification 갱신 실패: {str(exc)[:200]}")
+
+    return UploadDocumentResponse(data={
+        "artifact_id":        artifact_id,
+        "classification":     classification,
+        "needs_confirmation": False,
+        "final_category":     body.category,
+    })
