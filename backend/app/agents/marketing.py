@@ -312,6 +312,14 @@ SYSTEM_PROMPT = (
 네이버 블로그
 기타 (직접 입력)
 [/CHOICES]"
+
+[인스타그램 피드 즉시 생성 규칙]
+사용자가 이미 캡션·해시태그·게시 시간을 제공했거나, "인스타 피드", "인스타그램 피드", "sns 게시물"을 명시적으로 요청한 경우:
+- CHOICES 로 채널을 다시 묻지 말 것
+- 바로 sns_post 타입 결과물을 완성해 출력하고 [ARTIFACT] 블록 포함
+- 캡션은 사용자 제공 내용을 그대로 반영 (개선·수정 시 알림)
+- 해시태그는 '#태그1 #태그2 ...' 형식으로 한 줄에 붙여 출력
+- 추천 게시 시간은 '💡 추천 게시 시간: ...' 형식으로 출력
 """
 )
 
@@ -346,12 +354,20 @@ def _extract_sns_content(reply: str) -> tuple[str, list[str], str]:
 
     for line in all_lines[start:]:
         s = line.strip()
-        if _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", s):
-            hashtags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
+        # 해시태그 전용 줄 (한 줄 묶음 / 여러 줄 분산 / "해시태그: #..." 라벨 붙은 줄 모두 수용)
+        tags_on_line = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
+        is_hashtag_line = bool(tags_on_line) and _re.match(
+            r"^[해시태그\s:：]*#", s
+        )
+        if is_hashtag_line:
+            hashtags += tags_on_line
         elif s.startswith("💡"):
             best_time = s
         else:
             caption_lines.append(s)
+    # 중복 제거 (순서 유지)
+    seen: set[str] = set()
+    hashtags = [t for t in hashtags if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
     return "\n".join(caption_lines), hashtags, best_time
 
@@ -437,21 +453,22 @@ async def _maybe_instagram_preview(reply: str) -> str:
     is_sns_type = artifact_type in ("sns_post", "product_post")
 
     if not is_sns_type:
-        # [ARTIFACT] 없을 때: 해시태그 5개 이상인 줄 있고 블로그 # 제목 없으면 SNS로 간주
+        # [ARTIFACT] 없을 때: 해시태그 5개 이상이고 블로그 # 제목 없으면 SNS로 간주
         lines = reply.splitlines()
-        has_hashtag_block = any(
-            _re.match(r"^(#[\w가-힣A-Za-z]+\s*)+$", line.strip())
-            and len(_re.findall(r"#[\w가-힣A-Za-z]+", line)) >= 5
-            for line in lines
-        )
+        all_hashtags_in_reply = _re.findall(r"#[\w가-힣A-Za-z]+", reply)
         has_blog_heading = any(
             line.strip().startswith("# ") and len(line.strip()) > 2
             for line in lines
         )
-        if not has_hashtag_block or has_blog_heading:
+        if len(all_hashtags_in_reply) < 5 or has_blog_heading:
             return ""
 
     caption, hashtags, best_time = _extract_sns_content(reply)
+
+    # sns_post 타입이면 캡션/해시태그가 없어도 artifact 제목으로 카드 생성
+    if is_sns_type and not caption and not hashtags:
+        caption = (parsed or {}).get("title", "")
+
     if not caption and not hashtags:
         return ""
 
@@ -497,7 +514,28 @@ async def run_sns_post(
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    reply = await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    # Instagram 카드가 아직 없으면 강제 생성
+    if "[[INSTAGRAM_POST]]" not in reply:
+        from app.agents._artifact import _parse_block
+        caption, hashtags, best_time = _extract_sns_content(reply)
+        if not caption:
+            caption = topic
+        if not hashtags:
+            hashtags = [topic.replace(" ", ""), "신메뉴", "맛집", "foodstagram", "instafood"]
+        image_url = await _generate_sns_image(caption, hashtags)
+        parsed = _parse_block(reply) or {}
+        payload = {
+            "title": parsed.get("title", topic),
+            "caption": caption,
+            "hashtags": hashtags,
+            "best_time": best_time,
+            "image_url": image_url,
+        }
+        reply += f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
+
+    return reply
 
 
 async def run_blog_post(
