@@ -94,7 +94,9 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
       }
       const saved = await res.json();
       const count = saved?.data?.saved ?? items.length;
-      onSaved?.(`매출 ${count}건이 저장됐어요. 캔버스 Revenue 허브에서 확인할 수 있어요.`);
+      onSaved?.(
+        `매출 ${count}건이 저장됐어요. 캔버스 Revenue 허브에서 확인할 수 있어요.`,
+      );
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
@@ -163,7 +165,11 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                       value={it.quantity}
                       min={1}
                       onChange={(e) =>
-                        update(i, "quantity", Math.max(1, parseInt(e.target.value) || 1))
+                        update(
+                          i,
+                          "quantity",
+                          Math.max(1, parseInt(e.target.value) || 1),
+                        )
                       }
                       className="w-16 bg-transparent text-right text-[#2e2719] focus:outline-none"
                     />
@@ -174,7 +180,11 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                       value={it.unit_price}
                       min={0}
                       onChange={(e) =>
-                        update(i, "unit_price", Math.max(0, parseInt(e.target.value) || 0))
+                        update(
+                          i,
+                          "unit_price",
+                          Math.max(0, parseInt(e.target.value) || 0),
+                        )
                       }
                       className="w-28 bg-transparent text-right text-[#2e2719] focus:outline-none"
                     />

@@ -58,6 +58,17 @@ const formatValue = (v: unknown): string => {
 const cleanTitle = (t: string): string =>
   (t || "").replace(/^\[MOCK\]\s*/, "").trim() || "(제목 없음)";
 
+const extractFirstHeading = (content: string): string => {
+  if (!content) return "";
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const m = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (m) return m[1].trim();
+  }
+  const first = lines.find((l) => l.trim().length > 0);
+  return first ? first.trim() : "";
+};
+
 const RELATION_COLOR: Record<string, string> = {
   contains: "text-[#8c7e66]",
   derives_from: "text-[#8c7e66]",
@@ -250,14 +261,14 @@ export const HoverInfoPanel = ({ node }: Props) => {
               </p>
             </div>
 
-            {node.content && (
+            {node.content && extractFirstHeading(node.content) && (
               <div>
                 <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#8c7e66]">
                   Content
                 </p>
-                <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded border border-[#ddd0b4] bg-[#f2e9d5]/70 px-2 py-1.5 text-[11px] leading-snug text-[#5a5040]">
-                  {node.content}
-                </pre>
+                <p className="mt-0.5 line-clamp-2 break-words rounded border border-[#ddd0b4] bg-[#f2e9d5]/70 px-2 py-1.5 text-[11px] font-medium leading-snug text-[#2e2719]">
+                  {extractFirstHeading(node.content)}
+                </p>
               </div>
             )}
 
@@ -273,12 +284,12 @@ export const HoverInfoPanel = ({ node }: Props) => {
                   {Object.entries(node.metadata).map(([k, v]) => (
                     <div
                       key={k}
-                      className="grid grid-cols-[80px_1fr] gap-2 text-[10.5px]"
+                      className="grid grid-cols-[80px_minmax(0,1fr)] gap-2 text-[10.5px]"
                     >
                       <span className="truncate font-mono text-[#8c7e66]">
                         {k}
                       </span>
-                      <pre className="whitespace-pre-wrap break-words font-mono text-[#5a5040]">
+                      <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[#5a5040]">
                         {formatValue(v)}
                       </pre>
                     </div>

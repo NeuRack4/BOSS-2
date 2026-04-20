@@ -26,6 +26,7 @@ from app.agents._doc_templates import (
     detect_doc_intent,
 )
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
+from app.agents._legal import classify_legal_intent, handle_legal_question
 
 log = logging.getLogger(__name__)
 
@@ -294,6 +295,314 @@ async def _maybe_dispatch_review(account_id: str, reply: str) -> str:
     return cleaned + _format_review_append(result)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Capability 인터페이스 (function-calling 라우팅용)
+# ──────────────────────────────────────────────────────────────────────────
+async def run_contract(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    subtype: str,
+    party_a: str,
+    party_b: str,
+    amount: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    extra_note: str | None = None,
+) -> str:
+    if subtype not in VALID_CONTRACT_SUBTYPES:
+        subtype = "service"
+    lines = [f"[subtype] {subtype}", f"[갑] {party_a}", f"[을] {party_b}"]
+    if amount:
+        lines.append(f"[금액/조건] {amount}")
+    if start_date:
+        lines.append(f"[시작일] {start_date}")
+    if end_date:
+        lines.append(f"[종료일] {end_date}")
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        f"{subtype} 계약서 초안을 작성해주세요. 아래 조건이 모두 확정되었으니 "
+        "추가 질문 없이 바로 [ARTIFACT] 블록(type=contract, contract_subtype 포함) + 본문을 출력하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_estimate(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    client: str,
+    items: str | None = None,
+    total_amount: str | None = None,
+    valid_until: str | None = None,
+) -> str:
+    lines = [f"[발주처] {client}"]
+    if items:
+        lines.append(f"[품목] {items}")
+    if total_amount:
+        lines.append(f"[총액] {total_amount}")
+    if valid_until:
+        lines.append(f"[유효기간] {valid_until}")
+    synthetic = (
+        "견적서 초안을 작성해주세요. [ARTIFACT] 블록(type=estimate, due_date=유효기간, due_label='견적 유효기간') 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_proposal(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    client: str,
+    scope: str | None = None,
+    amount: str | None = None,
+    reply_by: str | None = None,
+) -> str:
+    lines = [f"[제안 대상] {client}"]
+    if scope:
+        lines.append(f"[제안 범위] {scope}")
+    if amount:
+        lines.append(f"[제안가] {amount}")
+    if reply_by:
+        lines.append(f"[회신 기한] {reply_by}")
+    synthetic = (
+        "제안서 초안을 작성해주세요. [ARTIFACT] 블록(type=proposal, due_date=회신기한, due_label='제안 회신 기한') 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_notice(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    audience: str,
+    topic: str,
+    post_date: str | None = None,
+) -> str:
+    lines = [f"[대상] {audience}", f"[주제] {topic}"]
+    if post_date:
+        lines.append(f"[게시일] {post_date}")
+    synthetic = (
+        "공지문을 작성해주세요. [ARTIFACT] 블록(type=notice, due_date=게시일, due_label='공지 게시일') 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_checklist_guide(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+    kind: str = "checklist",
+) -> str:
+    artifact_type = "checklist" if kind == "checklist" else "guide"
+    synthetic = (
+        f"'{topic}' 주제로 {kind} 문서를 작성해주세요. [ARTIFACT] 블록(type={artifact_type}) 포함.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_review(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    user_role: str = "미지정",
+    contract_subtype: str | None = None,
+) -> str:
+    """업로드된 최근 문서의 공정성 분석."""
+    if user_role not in ("갑", "을", "미지정"):
+        user_role = "미지정"
+    sub = f", contract_subtype={contract_subtype}" if contract_subtype else ""
+    synthetic = (
+        f"최근 업로드한 문서의 공정성을 분석해주세요 (user_role={user_role}{sub}). "
+        "추가 CHOICES 없이 바로 [REVIEW_REQUEST] 마커를 출력하세요.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_legal_advice(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    question: str,
+    topic: str | None = None,
+) -> str:
+    """한국 법률·법령에 대한 질의 응답 (RAG 기반)."""
+    from app.agents._legal import classify_legal_intent, handle_legal_question
+
+    intent = await classify_legal_intent(question, history)
+    if not intent.is_legal and topic:
+        # tool args 로 명시적 호출된 경우 신뢰
+        from app.agents._legal import LegalIntent
+        intent = LegalIntent(is_legal=True, topic=topic, reason="tool-invoked")
+    if not intent.is_legal:
+        # 폴백: 일반 run() 에 질문을 넘김
+        return await run(question, account_id, history, rag_context, long_term_context)
+
+    return await handle_legal_question(
+        question,
+        account_id,
+        history,
+        rag_context=rag_context,
+        long_term_context=long_term_context,
+        intent=intent,
+    )
+
+
+def describe(account_id: str) -> list[dict]:
+    caps: list[dict] = [
+        {
+            "name": "doc_contract",
+            "description": (
+                "계약서 초안을 작성한다 (근로·임대차·용역·납품·파트너십·프랜차이즈·NDA 7종). "
+                "subtype·갑·을 확정 시에만 호출."
+            ),
+            "handler": run_contract,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subtype":    {"type": "string", "enum": list(VALID_CONTRACT_SUBTYPES)},
+                    "party_a":    {"type": "string", "description": "갑 (고용인/발주자/임대인)"},
+                    "party_b":    {"type": "string", "description": "을 (피고용인/수주자/임차인)"},
+                    "amount":     {"type": "string", "description": "금액/보수/임대료 등"},
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "end_date":   {"type": "string", "description": "YYYY-MM-DD"},
+                    "extra_note": {"type": "string"},
+                },
+                "required": ["subtype", "party_a", "party_b"],
+            },
+        },
+        {
+            "name": "doc_estimate",
+            "description": "견적서 초안을 작성한다.",
+            "handler": run_estimate,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client":       {"type": "string"},
+                    "items":        {"type": "string", "description": "품목·수량·단가를 자유 기술"},
+                    "total_amount": {"type": "string"},
+                    "valid_until":  {"type": "string", "description": "유효기간 YYYY-MM-DD"},
+                },
+                "required": ["client"],
+            },
+        },
+        {
+            "name": "doc_proposal",
+            "description": "제안서 초안을 작성한다.",
+            "handler": run_proposal,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client":   {"type": "string"},
+                    "scope":    {"type": "string"},
+                    "amount":   {"type": "string"},
+                    "reply_by": {"type": "string", "description": "회신 기한 YYYY-MM-DD"},
+                },
+                "required": ["client"],
+            },
+        },
+        {
+            "name": "doc_notice",
+            "description": "직원/고객/거래처 대상 공지문을 작성한다.",
+            "handler": run_notice,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "audience":  {"type": "string", "description": "직원 / 고객 / 거래처 등"},
+                    "topic":     {"type": "string"},
+                    "post_date": {"type": "string", "description": "게시일 YYYY-MM-DD"},
+                },
+                "required": ["audience", "topic"],
+            },
+        },
+        {
+            "name": "doc_checklist_guide",
+            "description": "서류 관리 관련 체크리스트 또는 가이드.",
+            "handler": run_checklist_guide,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
+                },
+                "required": ["topic"],
+            },
+        },
+        {
+            "name": "doc_legal_advice",
+            "description": (
+                "한국 법률·법령·조례·시행령에 대한 질문에 RAG 기반으로 답한다. "
+                "노동·임대차·공정거래·개인정보·세법·상법·식품위생·건축·저작권 등 분야 무관."
+            ),
+            "handler": run_legal_advice,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "법률 질문 원문"},
+                    "topic":    {"type": "string", "description": "노동/임대차/세법 등 대분야 힌트(선택)"},
+                },
+                "required": ["question"],
+            },
+        },
+    ]
+
+    # 최근 60분 이내 업로드 문서가 있을 때만 review capability 노출
+    if _find_recent_uploaded_doc(account_id):
+        caps.append({
+            "name": "doc_review",
+            "description": (
+                "최근 업로드한 계약서/제안서의 공정성(갑·을 비율·위험 조항)을 분석한다. "
+                "업로드 문서가 있을 때만 유효."
+            ),
+            "handler": run_review,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_role":        {"type": "string", "enum": ["갑", "을", "미지정"], "default": "미지정"},
+                    "contract_subtype": {"type": "string", "enum": list(VALID_CONTRACT_SUBTYPES)},
+                },
+            },
+        })
+
+    return caps
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 메인 run (legacy fallback 겸 capability wrapper 타겟)
+# ──────────────────────────────────────────────────────────────────────────
 async def run(
     message: str,
     account_id: str,
@@ -301,8 +610,28 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
-    # 1. 휴리스틱 intent 감지 → 템플릿/법령 컨텍스트 주입
+    # 0. Legal 분기 — 서류 작성/검토가 아닌 "일반 법률 자문" 질문은 _legal 로 위임.
+    #    조건: 휴리스틱상 현재 턴이 명시적 서류 작성(type_guess) 도 아니고,
+    #          최근 업로드 문서 컨텍스트도 없을 때만 classify_legal_intent 호출.
     type_guess, subtype_guess = detect_doc_intent(message)
+    upload_ctx_early = _build_upload_context(account_id)
+    if not type_guess and not upload_ctx_early:
+        intent = await classify_legal_intent(message, history)
+        if intent.is_legal:
+            log.info(
+                "[documents] legal branch: account=%s topic=%s reason=%r",
+                account_id, intent.topic, intent.reason[:80],
+            )
+            return await handle_legal_question(
+                message,
+                account_id,
+                history,
+                rag_context=rag_context,
+                long_term_context=long_term_context,
+                intent=intent,
+            )
+
+    # 1. 휴리스틱 intent 감지 → 템플릿/법령 컨텍스트 주입
     if not type_guess:
         for h in reversed(history[-6:]):
             if h.get("role") == "user":
@@ -315,7 +644,7 @@ async def run(
 
     system = SYSTEM_PROMPT + "\n\n" + today_context() + "\n\n" + doc_ctx
 
-    upload_ctx = _build_upload_context(account_id)
+    upload_ctx = upload_ctx_early
     if upload_ctx:
         system += "\n\n" + upload_ctx
 

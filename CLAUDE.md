@@ -22,11 +22,15 @@
 
 ### Agent 구조
 
-- `orchestrator.py` — 의도 분류 + 도메인 라우팅 + **복수 도메인 합성** + **plan 모드** + **로그인 브리핑** + **닉네임/프로필 추출**. 비즈니스 로직 없음
-- `recruitment.py` / `marketing.py` / `sales.py` / `documents.py` — 각 도메인 독립 에이전트. 각 모듈은 `suggest_today(account_id)` 를 export (`_suggest.suggest_today_for_domain` 래핑).
+- `orchestrator.py` — 의도 분류 + 도메인 라우팅 + **복수 도메인 합성** + **plan 모드** + **로그인 브리핑** + **닉네임/프로필 추출** + **Capability (function-calling) 라우팅 v0.9**. 비즈니스 로직 없음
+- `_capability.py` (v0.9.0~) — 각 도메인의 `describe(account_id)` 를 모아 OpenAI `tools` 스펙 + handler dispatch map 조립. `V2_DOMAINS = ("recruitment", "documents", "marketing")` — sales 는 팀원 기능 구현 완료 후 합류 예정. `_dispatch_via_tools` 가 single/multi domain 분기에서 V2 도메인만 섞인 경우 우선 시도 → 실패 시 legacy `_call_domain_with_shortcut` 자동 폴백. `parallel_tool_calls=True` 로 cross-domain 요청 병렬 처리 후 `_synthesize_cross_domain` 합성.
+- `recruitment.py` / `marketing.py` / `sales.py` / `documents.py` — 각 도메인 독립 에이전트. 각 모듈은 `suggest_today(account_id)` 를 export (`_suggest.suggest_today_for_domain` 래핑). V2 도메인(recruitment/documents/marketing)은 `describe(account_id)` + capability 별 `run_*` 핸들러 export (legacy `run()` 도 유지 — 폴백).
+- `recruitment.py` (v0.9.0~) — type 매트릭스(`job_posting | job_posting_set | job_posting_poster | interview_questions | checklist | guide | hiring_drive`). 3종 플랫폼 공고 동시 작성 (`[JOB_POSTINGS]` 마커 → 부모 `job_posting_set` + 자식 `job_posting × 3` + metadata.platform). HTML 포스터 생성 (`[POSTING_POSTER_REQUEST]` 마커 → `core.poster_gen.generate_job_posting_poster` → GPT-4o standalone HTML → Supabase Storage `recruitment-posters` 버킷 + `artifacts.content` 이중 저장). 업종별 CHOICES 분기는 `_recruit_templates.detect_category(business_type)` 로 `profiles.business_type` → cafe/restaurant/retail/beauty/academy/default 매핑. 인건비 계산은 `_recruit_calc.py` (2026 최저임금 10,320원 + 주휴수당 + 4대보험 의무). `_recruit_knowledge/` 에 직종·플랫폼별 가이드 markdown 이 system 프롬프트에 자동 주입.
 - `documents.py` (v0.7.0~) — type 매트릭스(`contract | estimate | proposal | notice | checklist | guide`) + 계약서 subtype 7종(`labor | lease | service | supply | partnership | franchise | nda`) 으로 분기. 서브타입별 스켈레톤/법령·관행 조항은 `_doc_templates.py` 가 주입하고 원본 markdown 은 `_doc_knowledge/<subtype>/{acceptable,risks}.md` 에 위치. 저장 시 `metadata.contract_subtype` + `due_label` 을 동반.
 - `documents.py` (v0.8.0~ 공정성 분석) — 최근 60분 이내 업로드된 `uploaded_doc` artifact 를 자동 감지 → 역할 CHOICES(갑/을/미지정) → `[REVIEW_REQUEST]` 마커 출력 → `_doc_review.dispatch_review` 가 analysis artifact + `analyzed_from` 엣지 생성 + gap/eul/risk_clauses 메타 저장 → 응답 끝에 `[[REVIEW_JSON]]` 구조화 페이로드 (프론트 `ReviewResultCard` 렌더용).
-- `_doc_review.py` — `analyze(content, user_role, doc_type, contract_subtype) → ReviewResult` + `dispatch_review(...)` (라우터/에이전트 공용 저장 헬퍼). RAG: `search_{law,pattern,acceptable}_contract_knowledge` RPC 3-way.
+- `documents.py` (v0.9.0~ Legal 서브브랜치) — `run()` 최상단에서 `_legal.classify_legal_intent` (gpt-4o-mini) 로 "일반 법률 자문" 질문 여부 판정. 단 (a) 휴리스틱상 서류 작성 의도(`detect_doc_intent`) 없고 (b) 최근 업로드 문서 컨텍스트 없을 때만 분기. legal 이면 `_legal.handle_legal_question` 으로 위임 → `search_legal_knowledge` RPC 로 다분야 법령 조문 recall (topic 필터 1차 → 필터 없이 2차 보강) → GPT-4o 조언 생성 → `type='legal_advice'` artifact 를 **Documents > Legal 서브허브** 아래 저장 + 매 응답 끝에 면책 고지 자동 첨부.
+- `_legal.py` — Legal 핸들러. `classify_legal_intent` + `_retrieve_legal_context` + `_generate_advice` + `_save_legal_advice`. RAG: `search_legal_knowledge` RPC (018·019 마이그레이션). 지식베이스는 별도 테이블 `legal_knowledge_chunks` — 소상공인이 마주하는 다분야 법령(노동·임대차·공정거래·개인정보·세법·상법·가맹·전자상거래·식품위생·소상공인 등) 16종을 `backend/scripts/ingest_legal_knowledge.py` 로 법제처 API 기반 수집. `DISCLAIMER` 상수가 면책 문구 통일.
+- `_doc_review.py` — `analyze(content, user_role, doc_type, contract_subtype) → ReviewResult` + `dispatch_review(...)` (라우터/에이전트 공용 저장 헬퍼). RAG: `search_{law,pattern,acceptable}_contract_knowledge` RPC 3-way. **분석 artifact 는 업로드 원본 문서와 `analyzed_from` 엣지만 생성 — 서브허브 `contains` 엣지는 의도적으로 만들지 않는다** (v0.8.x 부터).
 - `_suggest.py` — 도메인 공용 `suggest_today_for_domain(account_id, domain)` 헬퍼. 마감/시작 임박 artifact + 오늘~내일 예정 schedule 을 섞어 최대 3개 반환.
 - `_feedback.py` — 도메인 에이전트 system 프롬프트에 주입되는 과거 down-vote 피드백 컨텍스트.
 - 에이전트 간 직접 호출 금지. 반드시 orchestrator를 통해 라우팅
@@ -45,9 +49,21 @@
 
 1. `["refuse"]` → `_refusal_message(account_id)` (BOSS 범위 안내 + 닉네임 있으면 호칭).
 2. `["planning"]` → `_handle_planning` — 메시지에서 기간 추출(기본 오늘±2일), `activity_logs` + 기한 artifact + 예정 schedule 수집 → 4개 도메인 `suggest_today` 후보 첨부 → GPT-4o 로 일자별/도메인별 플랜 생성.
-3. 도메인 1개 → `_call_domain_with_shortcut` — 에이전트 1회 호출 후 응답에 `[CHOICES]` 가 있으면 **히스토리/장기기억으로 답을 추정** → 가능하면 에이전트를 guess 로 재호출해 최종 응답까지 한 턴에 제공 (_"대화 맥락으로 X 쪽이라고 판단"_ 노티스 prefix).
-4. 도메인 2개 이상 → 각 도메인을 shortcut 경로로 호출 → `[CHOICES]` 가 남아 있으면 섹션별 pass-through, 아니면 `_synthesize_cross_domain` 이 하나의 자연스러운 답으로 재합성. ARTIFACT/CHOICES/SET_NICKNAME 마커는 합성 단계에서 반드시 제거.
+3. 도메인 1개:
+   - V2 도메인(recruitment/documents/marketing) → `_dispatch_via_tools` 로 OpenAI function-calling 경로. tool_calls 있으면 해당 capability handler 실행, 없으면 LLM 의 자연어 되묻기 반환.
+   - 실패·sales 도메인 → legacy `_call_domain_with_shortcut` 으로 폴백 (에이전트 1회 호출 후 `[CHOICES]` 있으면 히스토리/장기기억으로 답 추정 → guess 재호출 → 한 턴에 결과).
+4. 도메인 2개 이상:
+   - 전부 V2 도메인 → `_dispatch_via_tools` (parallel_tool_calls) 한 번에 다수 capability 호출 후 합성.
+   - 그 외 → 각 도메인을 shortcut 경로로 호출 → `[CHOICES]` 가 남아 있으면 섹션별 pass-through, 아니면 `_synthesize_cross_domain` 으로 재합성. ARTIFACT/CHOICES/SET_NICKNAME 마커는 합성 단계에서 반드시 제거.
 5. `chitchat` (또는 빈 라벨) → `SYSTEM_PROMPT` + 닉네임/프로필 컨텍스트로 직접 응답.
+
+**CHOICES sticky routing (v0.9)** — classifier 가 짧은 후속 답변(예: "시급 12000", "이걸로 이미지") 을 chitchat/refuse 로 오분류하지 않도록:
+
+- `_last_assistant_unresolved_choices` — 직전 assistant 메시지에 살아있는 `[CHOICES]` 감지 → classifier 에 sticky 힌트 주입 + history window 4→8 확장.
+- `_last_assistant_did_domain_action` — "저장되었어요 / 캔버스에 / artifact:" 같은 도메인 액션 흔적 감지.
+- `_has_context_reference` — "이걸로 / 방금 거 / 이 공고" 등 맥락 지시어 감지.
+- 결과가 `chitchat` + 미해결 CHOICES 이거나, `refuse` + (미해결 CHOICES 또는 최근 도메인 액션 + 맥락 지시어) 이면 `_guess_domain_from_recent` 키워드 매칭으로 도메인 복구. 로그: `[classify] sticky override chitchat→X` / `refuse→X`.
+- classifier 프롬프트: 이미지/포스터/썸네일/배너 생성 요청은 refuse 가 아니라 recruitment/marketing 로 분류.
 
 ### Nickname + Profile 자동 학습
 
@@ -266,7 +282,16 @@ supabase/
 │   ├── 007_memos.sql                            # memos 테이블 + RLS + 'memo' source_type + updated_at 트리거
 │   ├── 008_expand_activity_log_types.sql        # activity_logs.type CHECK 확장: schedule_run / schedule_notify
 │   ├── 009_profile_last_seen.sql                # profiles.last_seen_at (timestamptz) — 로그인 브리핑 트리거
-│   └── 010_profile_expansion.sql                # profiles 7개 core 컬럼 + profile_meta jsonb
+│   ├── 010_profile_expansion.sql                # profiles 7개 core 컬럼 + profile_meta jsonb
+│   ├── 011_contract_knowledge.sql               # 계약서 검토 RAG 테이블 3종 (law/pattern/acceptable)
+│   ├── 012_contract_knowledge_search.sql        # 3-way RRF RPC 3종
+│   ├── 013_artifact_edges_analyzed_from.sql     # analyzed_from relation 추가
+│   ├── 014_standard_sub_hubs.sql                # 17종 표준 서브허브 자동 부트스트랩
+│   ├── 015_marketing_knowledge.sql              # marketing 지식 테이블
+│   ├── 016_marketing_rag.sql                    # marketing 하이브리드 검색 RPC
+│   ├── 017_marketing_subhubs.sql                # marketing 서브허브 확장
+│   ├── 018_legal_knowledge.sql                  # legal_knowledge_chunks (다분야 법령 통합 테이블)
+│   └── 019_legal_knowledge_search.sql           # search_legal_knowledge 3-way RRF RPC
 └── seed/
     ├── seed_mock_data.sql           # test@test.com 용 mock 시드
     └── cleanup_mock_data.sql        # '[MOCK]%' 일괄 제거
@@ -274,11 +299,17 @@ supabase/
 
 > v0.7.0 (documents 에이전트 + D-7/3/1/0 리마인드) 는 **마이그레이션 불필요** — `due_label` / `contract_subtype` / 확장 `notify_kind` 모두 `metadata` jsonb 안에서 처리.
 >
-> v0.8.x (공정성 분석) 는 011 + 012 마이그레이션 도입:
+> v0.8.x (공정성 분석) — 011 + 012 마이그레이션:
 >
 > - `011_contract_knowledge.sql` — `law_contract_knowledge_chunks` / `pattern_contract_knowledge_chunks` / `acceptable_contract_knowledge_chunks` 3종 지식 테이블 + HNSW/trgm/FTS 인덱스 + RLS(SELECT 공개, INSERT 는 service_role).
 > - `012_contract_knowledge_search.sql` — 3-way RRF RPC 3종 (`search_law/pattern/acceptable_contract_knowledge`).
 > - 인제스트 스크립트: `backend/scripts/ingest_contract_{laws,risks,acceptable}.py`. BAAI/bge-m3 로컬 임베딩.
+>
+> v0.9.0 (Legal 서브브랜치) — 018 + 019 마이그레이션:
+>
+> - `018_legal_knowledge.sql` — `legal_knowledge_chunks` (단일 테이블, 2단계 article/paragraph 청킹, domain 필드로 분야 구분).
+> - `019_legal_knowledge_search.sql` — `search_legal_knowledge` 3-way RRF RPC (vector / FTS / trgm).
+> - 인제스트 스크립트: `backend/scripts/ingest_legal_knowledge.py` — 법제처 Open API 기반, 16종 법령 (노동 5 / 임대 1 / 공정 2 / 전자상거래 1 / 개인정보 1 / 세법 2 / 중소기업 2 / 식품 1 / 상법 1).
 
 ### documents 에이전트 자산 (v0.7.0 + v0.8.x)
 

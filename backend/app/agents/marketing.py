@@ -467,6 +467,245 @@ async def _maybe_instagram_preview(reply: str) -> str:
     return f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Capability 인터페이스 (function-calling 라우팅용)
+# ──────────────────────────────────────────────────────────────────────────
+async def run_sns_post(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+    product: str | None = None,
+    promotion: str | None = None,
+    tone: str | None = None,
+    platform: str = "instagram",
+) -> str:
+    lines = [f"[주제] {topic}"]
+    if product:
+        lines.append(f"[제품/서비스] {product}")
+    if promotion:
+        lines.append(f"[프로모션/혜택] {promotion}")
+    if tone:
+        lines.append(f"[톤] {tone}")
+    lines.append(f"[플랫폼] {platform}")
+    synthetic = (
+        "SNS 피드 게시물(sns_post) 을 작성해주세요. 추가 질문 없이 바로 완성된 캡션 + 해시태그 + 추천 게시 시간을 출력하고, "
+        "[ARTIFACT] 블록(type=sns_post) 으로 저장하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_blog_post(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+    keywords: list[str] | None = None,
+    auto_upload: bool = False,
+) -> str:
+    lines = [f"[주제] {topic}"]
+    if keywords:
+        lines.append(f"[주요 키워드] {', '.join(keywords)}")
+    if auto_upload:
+        lines.append("[네이버 블로그 자동 업로드] 요청됨")
+    synthetic = (
+        "네이버 블로그 포스트(blog_post) 를 작성해주세요. 마크다운 형식으로 제목·본문·해시태그 완성. "
+        + ("완성 후 [NAVER_UPLOAD] 마커를 맨 마지막에 단독으로 출력해 자동 업로드." if auto_upload else "")
+        + "\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_review_reply(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    review_text: str,
+    star_rating: int | None = None,
+    platform: str | None = None,
+) -> str:
+    lines = [f"[리뷰 본문] {review_text}"]
+    if star_rating is not None:
+        lines.append(f"[별점] {star_rating}")
+    if platform:
+        lines.append(f"[플랫폼] {platform}")
+    synthetic = (
+        "고객 리뷰에 대한 사장님 답글(review_reply) 을 작성해주세요. 150자 내외, 진심 어린 톤. "
+        "[ARTIFACT] 블록(type=review_reply) 으로 저장하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_ad_copy(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    product: str,
+    channel: str | None = None,
+    target: str | None = None,
+    key_benefit: str | None = None,
+) -> str:
+    lines = [f"[광고 대상 상품/서비스] {product}"]
+    if channel:
+        lines.append(f"[채널] {channel}")
+    if target:
+        lines.append(f"[타겟] {target}")
+    if key_benefit:
+        lines.append(f"[핵심 혜택] {key_benefit}")
+    synthetic = (
+        "광고 카피(ad_copy) 를 작성해주세요. 3~5안으로 짧게. [ARTIFACT] 블록(type=ad_copy) 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_campaign_plan(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    title: str,
+    start_date: str,
+    end_date: str,
+    goal: str | None = None,
+    budget: str | None = None,
+    channels: list[str] | None = None,
+) -> str:
+    lines = [
+        f"[캠페인명] {title}",
+        f"[기간] {start_date} ~ {end_date}",
+    ]
+    if goal:
+        lines.append(f"[목표] {goal}")
+    if budget:
+        lines.append(f"[예산] {budget}")
+    if channels:
+        lines.append(f"[활용 채널] {', '.join(channels)}")
+    synthetic = (
+        f"'{title}' 캠페인(campaign) 기획서를 작성해주세요. "
+        "[ARTIFACT] 블록(type=campaign, start_date, end_date, due_label='캠페인 종료') 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+def describe(account_id: str) -> list[dict]:
+    return [
+        {
+            "name": "mkt_sns_post",
+            "description": (
+                "인스타그램·페이스북 등 SNS 피드 게시물을 작성한다. "
+                "캡션 + 해시태그 + 추천 게시 시간 완성. DALL-E 로 이미지 자동 생성도 포함."
+            ),
+            "handler": run_sns_post,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic":     {"type": "string", "description": "게시물 주제 (예: '신메뉴 출시', '추석 이벤트')"},
+                    "product":   {"type": "string", "description": "제품·서비스명(선택)"},
+                    "promotion": {"type": "string", "description": "프로모션/혜택(선택)"},
+                    "tone":      {"type": "string", "description": "톤 (예: '따뜻한', '유머러스')"},
+                    "platform":  {"type": "string", "enum": ["instagram", "facebook", "thread"], "default": "instagram"},
+                },
+                "required": ["topic"],
+            },
+        },
+        {
+            "name": "mkt_blog_post",
+            "description": (
+                "네이버 블로그 스타일 포스트(blog_post) 를 마크다운으로 작성한다. "
+                "사용자가 '업로드'까지 요청하면 auto_upload=true 로 호출해 실제 네이버 블로그 자동 업로드까지 실행."
+            ),
+            "handler": run_blog_post,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic":       {"type": "string"},
+                    "keywords":    {"type": "array", "items": {"type": "string"}},
+                    "auto_upload": {"type": "boolean", "default": False, "description": "네이버 블로그 자동 업로드 여부"},
+                },
+                "required": ["topic"],
+            },
+        },
+        {
+            "name": "mkt_review_reply",
+            "description": (
+                "고객 리뷰(네이버/카카오/구글 등) 에 대한 사장님 답글을 작성한다. "
+                "리뷰 본문과 별점이 있으면 함께 넘김."
+            ),
+            "handler": run_review_reply,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "review_text": {"type": "string", "description": "리뷰 원문"},
+                    "star_rating": {"type": "integer", "minimum": 1, "maximum": 5},
+                    "platform":    {"type": "string", "description": "네이버·카카오·구글 등"},
+                },
+                "required": ["review_text"],
+            },
+        },
+        {
+            "name": "mkt_ad_copy",
+            "description": "광고 카피·배너 문구를 3~5안으로 작성한다.",
+            "handler": run_ad_copy,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product":     {"type": "string"},
+                    "channel":     {"type": "string", "description": "예: 네이버 검색광고, 인스타그램 피드"},
+                    "target":      {"type": "string", "description": "타겟 고객(예: 20대 여성)"},
+                    "key_benefit": {"type": "string"},
+                },
+                "required": ["product"],
+            },
+        },
+        {
+            "name": "mkt_campaign_plan",
+            "description": (
+                "마케팅 캠페인·이벤트 기획을 artifact 로 등록한다 (start/end_date → 스케쥴러 D-리마인드 자동)."
+            ),
+            "handler": run_campaign_plan,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":      {"type": "string"},
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "end_date":   {"type": "string", "description": "YYYY-MM-DD"},
+                    "goal":       {"type": "string"},
+                    "budget":     {"type": "string"},
+                    "channels":   {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["title", "start_date", "end_date"],
+            },
+        },
+    ]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 메인 run (legacy fallback 겸 capability wrapper 타겟)
+# ──────────────────────────────────────────────────────────────────────────
 async def run(
     message: str,
     account_id: str,

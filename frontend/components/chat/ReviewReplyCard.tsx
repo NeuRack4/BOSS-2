@@ -9,8 +9,7 @@ export type ReviewReplyPayload = {
   char_count: number;
 };
 
-const _REVIEW_REPLY_RE =
-  /\[\[REVIEW_REPLY\]\]([\s\S]*?)\[\[\/REVIEW_REPLY\]\]/;
+const _REVIEW_REPLY_RE = /\[\[REVIEW_REPLY\]\]([\s\S]*?)\[\[\/REVIEW_REPLY\]\]/;
 
 export const extractReviewReplyPayload = (
   text: string,
@@ -29,7 +28,11 @@ export const extractReviewReplyPayload = (
 const CharBar = ({ count }: { count: number }) => {
   const pct = Math.min(100, Math.round((count / 150) * 100));
   const color =
-    count <= 150 ? "bg-[#7f8f54]" : count <= 200 ? "bg-[#d89a2b]" : "bg-[#c47865]";
+    count <= 150
+      ? "bg-[#7f8f54]"
+      : count <= 200
+        ? "bg-[#d89a2b]"
+        : "bg-[#c47865]";
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#ebe0ca]">

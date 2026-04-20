@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Trash2, Check, X, Upload, ImageIcon } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Upload,
+  ImageIcon,
+  ExternalLink,
+  Download,
+} from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from "@/lib/supabase/client";
@@ -115,7 +124,9 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
   const [blogUploading, setBlogUploading] = useState(false);
   const [blogResult, setBlogResult] = useState<string | null>(null);
   const [imageGenerating, setImageGenerating] = useState(false);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(
+    null,
+  );
 
   // Sales records
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([]);
@@ -142,33 +153,39 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
     }
   }, [node, accountId]);
 
-  const fetchSalesRecords = useCallback(async (date: string) => {
-    if (!accountId || !date) return;
-    setSalesLoading(true);
-    try {
-      const res = await fetch(
-        `${API}/api/sales?account_id=${accountId}&start_date=${date}&end_date=${date}&limit=100`,
-      );
-      const json = await res.json();
-      setSalesRecords((json.data?.records as SalesRecord[]) ?? []);
-    } finally {
-      setSalesLoading(false);
-    }
-  }, [accountId]);
+  const fetchSalesRecords = useCallback(
+    async (date: string) => {
+      if (!accountId || !date) return;
+      setSalesLoading(true);
+      try {
+        const res = await fetch(
+          `${API}/api/sales?account_id=${accountId}&start_date=${date}&end_date=${date}&limit=100`,
+        );
+        const json = await res.json();
+        setSalesRecords((json.data?.records as SalesRecord[]) ?? []);
+      } finally {
+        setSalesLoading(false);
+      }
+    },
+    [accountId],
+  );
 
-  const handleDeleteRecord = useCallback(async (recordId: string) => {
-    if (!accountId) return;
-    if (!confirm("이 매출 항목을 삭제할까요?")) return;
-    setDeletingRecord(recordId);
-    try {
-      await fetch(`${API}/api/sales/${recordId}?account_id=${accountId}`, {
-        method: "DELETE",
-      });
-      setSalesRecords((prev) => prev.filter((r) => r.id !== recordId));
-    } finally {
-      setDeletingRecord(null);
-    }
-  }, [accountId]);
+  const handleDeleteRecord = useCallback(
+    async (recordId: string) => {
+      if (!accountId) return;
+      if (!confirm("이 매출 항목을 삭제할까요?")) return;
+      setDeletingRecord(recordId);
+      try {
+        await fetch(`${API}/api/sales/${recordId}?account_id=${accountId}`, {
+          method: "DELETE",
+        });
+        setSalesRecords((prev) => prev.filter((r) => r.id !== recordId));
+      } finally {
+        setDeletingRecord(null);
+      }
+    },
+    [accountId],
+  );
 
   useEffect(() => {
     if (open && node && accountId) {
@@ -182,7 +199,9 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
       ) {
         const date =
           (node.metadata?.recorded_date as string) ||
-          (node.created_at ? node.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+          (node.created_at
+            ? node.created_at.split("T")[0]
+            : new Date().toISOString().split("T")[0]);
         setSalesDate(date);
         fetchSalesRecords(date);
       }
@@ -320,15 +339,35 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
         </span>
       </div>
 
-      <div className="grid grid-cols-[1fr_360px] gap-4">
-        <ScrollArea className="max-h-[520px] pr-2">
-          <div className="space-y-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
+        <ScrollArea className="max-h-[520px] min-w-0 pr-2">
+          <div className="min-w-0 space-y-3">
             {node.content ? (
-              <Section label="Content">
-                <pre className="whitespace-pre-wrap break-words rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2 text-[12px] leading-relaxed text-[#2e2719]">
-                  {node.content}
-                </pre>
-              </Section>
+              node.type === "job_posting_poster" ? (
+                <Section label="Poster">
+                  <PosterPreview
+                    html={node.content}
+                    publicUrl={
+                      typeof node.metadata?.public_url === "string"
+                        ? (node.metadata.public_url as string)
+                        : undefined
+                    }
+                    filename={
+                      typeof node.metadata?.storage_path === "string"
+                        ? ((node.metadata.storage_path as string)
+                            .split("/")
+                            .pop() ?? "poster.html")
+                        : "poster.html"
+                    }
+                  />
+                </Section>
+              ) : (
+                <Section label="Content">
+                  <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2 text-[12px] leading-relaxed text-[#2e2719]">
+                    {node.content}
+                  </pre>
+                </Section>
+              )
             ) : null}
 
             {node.subDomain && (
@@ -345,12 +384,12 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                   {Object.entries(node.metadata).map(([k, v]) => (
                     <div
                       key={k}
-                      className="grid grid-cols-[100px_1fr] gap-2 text-[11px]"
+                      className="grid grid-cols-[100px_minmax(0,1fr)] gap-2 text-[11px]"
                     >
                       <span className="truncate font-mono text-[#8c7e66]">
                         {k}
                       </span>
-                      <pre className="whitespace-pre-wrap break-words font-mono text-[#5a5040]">
+                      <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[#5a5040]">
                         {formatValue(v)}
                       </pre>
                     </div>
@@ -359,44 +398,47 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
               </Section>
             )}
 
-            {node.domains?.includes("marketing") && node.kind === "artifact" && (
-              <Section label="Marketing Actions">
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleGenerateImage}
-                      disabled={imageGenerating}
-                      className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
-                    >
-                      <ImageIcon className="h-3.5 w-3.5" />
-                      {imageGenerating ? "생성 중…" : "이미지 생성"}
-                    </button>
-                    {node.type === "blog_post" && (
+            {node.domains?.includes("marketing") &&
+              node.kind === "artifact" && (
+                <Section label="Marketing Actions">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={handleNaverUpload}
-                        disabled={blogUploading}
+                        onClick={handleGenerateImage}
+                        disabled={imageGenerating}
                         className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
                       >
-                        <Upload className="h-3.5 w-3.5" />
-                        {blogUploading ? "업로드 중…" : "네이버 블로그 업로드"}
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        {imageGenerating ? "생성 중…" : "이미지 생성"}
                       </button>
+                      {node.type === "blog_post" && (
+                        <button
+                          type="button"
+                          onClick={handleNaverUpload}
+                          disabled={blogUploading}
+                          className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          {blogUploading
+                            ? "업로드 중…"
+                            : "네이버 블로그 업로드"}
+                        </button>
+                      )}
+                    </div>
+                    {generatedImageUrl && (
+                      <img
+                        src={generatedImageUrl}
+                        alt="generated"
+                        className="rounded-md border border-[#ddd0b4] max-w-full"
+                      />
+                    )}
+                    {blogResult && (
+                      <p className="text-[11px] text-[#5a5040]">{blogResult}</p>
                     )}
                   </div>
-                  {generatedImageUrl && (
-                    <img
-                      src={generatedImageUrl}
-                      alt="generated"
-                      className="rounded-md border border-[#ddd0b4] max-w-full"
-                    />
-                  )}
-                  {blogResult && (
-                    <p className="text-[11px] text-[#5a5040]">{blogResult}</p>
-                  )}
-                </div>
-              </Section>
-            )}
+                </Section>
+              )}
 
             {node.domains?.includes("sales") &&
               node.kind === "artifact" &&
@@ -436,9 +478,15 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                           <thead>
                             <tr className="border-b border-[#ddd0b4] text-left text-[#8c7e66]">
                               <th className="px-2 py-1.5 font-medium">상품</th>
-                              <th className="px-2 py-1.5 font-medium">카테고리</th>
-                              <th className="px-2 py-1.5 text-right font-medium">수량</th>
-                              <th className="px-2 py-1.5 text-right font-medium">금액</th>
+                              <th className="px-2 py-1.5 font-medium">
+                                카테고리
+                              </th>
+                              <th className="px-2 py-1.5 text-right font-medium">
+                                수량
+                              </th>
+                              <th className="px-2 py-1.5 text-right font-medium">
+                                금액
+                              </th>
                               <th className="w-6 px-1" />
                             </tr>
                           </thead>
@@ -674,3 +722,54 @@ const RelativesBlock = ({
     )}
   </Section>
 );
+
+type PosterPreviewProps = {
+  html: string;
+  publicUrl?: string;
+  filename: string;
+};
+
+const PosterPreview = ({ html, publicUrl, filename }: PosterPreviewProps) => {
+  const handleDownload = useCallback(() => {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename.endsWith(".html") ? filename : `${filename}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [html, filename]);
+
+  return (
+    <div className="space-y-2">
+      <iframe
+        title="poster-preview"
+        srcDoc={html}
+        sandbox="allow-same-origin"
+        className="h-[560px] w-full rounded-md border border-[#ddd0b4] bg-white"
+      />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handleDownload}
+          className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4]"
+        >
+          <Download className="h-3.5 w-3.5" />
+          HTML 다운로드
+        </button>
+        {publicUrl ? (
+          <a
+            href={publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4]"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />새 탭에서 열기
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+};

@@ -55,6 +55,11 @@ router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 _BUCKET = "documents-uploads"
 _MAX_BYTES = 20 * 1024 * 1024  # 20MB
 
+# artifact 노드까지 만들 카테고리 — 담당 에이전트가 준비된 것만.
+# 그 외 (receipt/invoice/tax/id/other) 는 Storage 에만 저장하고 노드는 생성하지 않는다.
+# 담당 에이전트(sales 등)가 준비되면 그때 확장한다.
+_NODE_CATEGORIES: set[str] = {"documents"}
+
 
 def _mime_for(filename: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -158,6 +163,26 @@ async def _process_single(
         metadata["suggested_category"] = auto.category
         metadata["suggested_doc_type"] = auto.doc_type
 
+    # 노드를 만들지 않는 카테고리 — Storage 에는 남기고 여기서 리턴.
+    # (conflict 인 경우는 사용자가 CHOICES 로 재분류할 수 있으므로 노드를 만든다.)
+    if not conflict and final_category not in _NODE_CATEGORIES:
+        log.info(
+            "upload skip-node: account=%s category=%s filename=%s",
+            account_id, final_category, disp_name,
+        )
+        return {
+            "artifact_id":        None,
+            "title":              title,
+            "size_bytes":         len(raw),
+            "parsed_len":         len(content_text),
+            "preview":            content_text[:500],
+            "storage_path":       storage_path,
+            "classification":     classification_meta,
+            "needs_confirmation": False,
+            "final_category":     final_category,
+            "node_created":       False,
+        }
+
     payload = {
         "account_id": account_id,
         "domains":    ["documents"],
@@ -260,8 +285,9 @@ async def upload_document(
         first = errors[0] if errors else {"status_code": 500, "detail": "업로드 실패"}
         raise HTTPException(status_code=first.get("status_code", 500), detail=first.get("detail", "업로드 실패"))
 
-    # 프론트 단일 파일 호환: 첫 아이템의 필드를 data 루트에도 복제 (legacy clients)
-    first = items[0]
+    # 프론트 단일 파일 호환: 첫 아이템의 필드를 data 루트에도 복제 (legacy clients).
+    # 노드가 만들어진 아이템을 우선 선택 (skip-node 건만 있으면 그걸 그대로 사용).
+    first = next((it for it in items if it.get("artifact_id")), items[0])
     data: dict = {
         "items":              items,
         "summary":            {
@@ -269,18 +295,19 @@ async def upload_document(
             "succeeded":           len(items),
             "failed":              len(errors),
             "needs_confirmation":  sum(1 for it in items if it.get("needs_confirmation")),
+            "nodes_created":       sum(1 for it in items if it.get("artifact_id")),
         },
         "errors":             errors,
         # ↓ legacy (단일 업로드) 호환 필드
-        "artifact_id":        first["artifact_id"],
-        "title":              first["title"],
-        "size_bytes":         first["size_bytes"],
-        "parsed_len":         first["parsed_len"],
-        "preview":            first["preview"],
-        "storage_path":       first["storage_path"],
-        "classification":     first["classification"],
-        "needs_confirmation": first["needs_confirmation"],
-        "final_category":     first["final_category"],
+        "artifact_id":        first.get("artifact_id"),
+        "title":              first.get("title"),
+        "size_bytes":         first.get("size_bytes"),
+        "parsed_len":         first.get("parsed_len"),
+        "preview":            first.get("preview"),
+        "storage_path":       first.get("storage_path"),
+        "classification":     first.get("classification"),
+        "needs_confirmation": first.get("needs_confirmation", False),
+        "final_category":     first.get("final_category"),
     }
     return UploadDocumentResponse(data=data)
 

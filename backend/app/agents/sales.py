@@ -396,6 +396,244 @@ def strip_action_marker(text: str) -> tuple[str, dict | None]:
     return clean, data
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Capability 인터페이스 (function-calling 라우팅용, v0.9.1~)
+# ──────────────────────────────────────────────────────────────────────────
+async def run_revenue_entry(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    raw_text: str | None = None,
+) -> str:
+    """자연어 매출 입력 → 파싱 → SalesInputTable 오픈 마커.
+
+    raw_text 가 주어지면 그걸 기준으로, 아니면 사용자 메시지를 그대로 legacy run() 에 넘김
+    (기존 `_parse_sales_from_message` + `[ACTION:OPEN_SALES_TABLE]` 파이프라인 재사용).
+    """
+    text = (raw_text or "").strip() or message
+    return await run(text, account_id, history, rag_context, long_term_context)
+
+
+async def run_sales_report(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    period: str,
+    target: str | None = None,
+    kpi: list[str] | None = None,
+) -> str:
+    lines = [f"[분석 기간] {period}"]
+    if target:
+        lines.append(f"[대상] {target}")
+    if kpi:
+        lines.append(f"[핵심 KPI] {', '.join(kpi)}")
+    synthetic = (
+        "매출 분석 리포트(sales_report) 를 작성해주세요. [ARTIFACT] 블록(type=sales_report) 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_price_strategy(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    target: str,
+    current_price: str | None = None,
+    benchmark: str | None = None,
+    goal: str | None = None,
+) -> str:
+    lines = [f"[대상] {target}"]
+    if current_price:
+        lines.append(f"[현재 가격] {current_price}")
+    if benchmark:
+        lines.append(f"[경쟁/시장 기준] {benchmark}")
+    if goal:
+        lines.append(f"[목표] {goal}")
+    synthetic = (
+        "가격 전략(price_strategy) 을 작성해주세요. [ARTIFACT] 블록(type=price_strategy) 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_customer_script(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    situation: str,
+    tone: str | None = None,
+    channel: str | None = None,
+) -> str:
+    lines = [f"[응대 상황] {situation}"]
+    if tone:
+        lines.append(f"[톤] {tone}")
+    if channel:
+        lines.append(f"[채널] {channel}")
+    synthetic = (
+        "고객 응대 스크립트(customer_script) 를 작성해주세요. [ARTIFACT] 블록(type=customer_script) 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_promotion(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    title: str,
+    start_date: str,
+    end_date: str,
+    benefit: str,
+    target: str | None = None,
+) -> str:
+    lines = [
+        f"[프로모션명] {title}",
+        f"[기간] {start_date} ~ {end_date}",
+        f"[혜택] {benefit}",
+    ]
+    if target:
+        lines.append(f"[대상] {target}")
+    synthetic = (
+        f"'{title}' 할인/프로모션(promotion) 기획서를 작성해주세요. "
+        "[ARTIFACT] 블록(type=promotion, start_date, end_date, due_label='프로모션 종료') 으로 저장.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_sales_checklist(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+) -> str:
+    synthetic = (
+        f"'{topic}' 주제로 매출/운영 체크리스트(checklist) 를 작성해주세요. [ARTIFACT] 블록(type=checklist) 으로 저장.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+def describe(account_id: str) -> list[dict]:
+    """Sales 도메인 capability 매니페스트 (6종)."""
+    return [
+        {
+            "name": "sales_revenue_entry",
+            "description": (
+                "자연어 매출 텍스트(예: '오늘 아메리카노 15잔 10000원, 라떼 8잔 12000원') 를 파싱해 "
+                "SalesInputTable 을 여는 ACTION 마커와 함께 저장 흐름으로 진입. "
+                "사용자가 매출을 '기록하고 싶다/입력하고 싶다' 의도일 때 호출."
+            ),
+            "handler": run_revenue_entry,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "raw_text": {
+                        "type": "string",
+                        "description": "매출 원시 문장(없으면 사용자 메시지 그대로 사용).",
+                    },
+                },
+            },
+        },
+        {
+            "name": "sales_report",
+            "description": "매출 데이터 분석 리포트 (기간·대상·KPI 기반).",
+            "handler": run_sales_report,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "period": {"type": "string", "description": "예: '2026-03', '최근 30일', '1분기'"},
+                    "target": {"type": "string", "description": "메뉴·상품·서비스군"},
+                    "kpi":    {"type": "array", "items": {"type": "string"}, "description": "예: ['객단가', '재방문율']"},
+                },
+                "required": ["period"],
+            },
+        },
+        {
+            "name": "sales_price_strategy",
+            "description": "가격 전략·할인 정책 초안.",
+            "handler": run_price_strategy,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target":        {"type": "string"},
+                    "current_price": {"type": "string"},
+                    "benchmark":     {"type": "string", "description": "경쟁사·시장 가격 기준"},
+                    "goal":          {"type": "string"},
+                },
+                "required": ["target"],
+            },
+        },
+        {
+            "name": "sales_customer_script",
+            "description": "고객 응대 스크립트(문의·컴플레인·업셀 등).",
+            "handler": run_customer_script,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "situation": {"type": "string", "description": "예: '환불 요청', '예약 변경', '가격 문의'"},
+                    "tone":      {"type": "string"},
+                    "channel":   {"type": "string", "description": "매장/전화/카톡/리뷰 등"},
+                },
+                "required": ["situation"],
+            },
+        },
+        {
+            "name": "sales_promotion",
+            "description": (
+                "할인·프로모션 기획을 artifact 로 등록 (start/end_date → 스케쥴러 D-리마인드 자동)."
+            ),
+            "handler": run_promotion,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":      {"type": "string"},
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "end_date":   {"type": "string", "description": "YYYY-MM-DD"},
+                    "benefit":    {"type": "string", "description": "할인율·증정·쿠폰 등"},
+                    "target":     {"type": "string"},
+                },
+                "required": ["title", "start_date", "end_date", "benefit"],
+            },
+        },
+        {
+            "name": "sales_checklist",
+            "description": "재고/발주/마감 등 매출 관련 체크리스트.",
+            "handler": run_sales_checklist,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "예: '월말 재고 점검', '주간 발주'"},
+                },
+                "required": ["topic"],
+            },
+        },
+    ]
+
+
 # ── 메인 run ─────────────────────────────────────────────────────────────────
 
 async def run(

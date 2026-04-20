@@ -1,6 +1,6 @@
 # BOSS-2
 
-![version](https://img.shields.io/badge/version-0.8.0-blue)
+![version](https://img.shields.io/badge/version-0.9.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -34,6 +34,9 @@
 
 ## Key Features
 
+- **Recruitment 에이전트 v0.9.0** — 당근알바/알바천국/사람인 **3종 공고 동시 작성** (`[JOB_POSTINGS]` 마커 → 부모 `job_posting_set` + 자식 × 3 + `contains` 엣지) · **HTML 포스터 생성** (GPT-4o standalone HTML, `recruitment-posters` 버킷 + `artifacts.content` 이중 저장, 프론트 `<iframe srcDoc>` 샌드박스 렌더) · 업종별 CHOICES 분기(cafe/restaurant/retail/beauty/academy/default) · 2026 최저임금·주휴수당·4대보험 시뮬레이션 (`_recruit_calc.py`) · `hiring_drive` 기간 artifact 로 스케쥴러 D-7/3/1/0 리마인드 자동
+- **Function-calling Capability 라우팅 v0.9.0** — OpenAI tools API 로 도메인 에이전트의 기능을 capability 단위(recruitment 4~5 + documents 6~7 + marketing 5)로 노출. orchestrator 가 `describe_all()` 로 스펙 조립 후 `tool_choice="auto"` + `parallel_tool_calls=True` 로 라우팅 · 필수 파라미터 부족 시 LLM 이 자연어로 되묻기 · 실패 시 legacy `_call_domain_with_shortcut` 자동 폴백 · sales 는 팀원 기능 완료 후 별도 PR 에서 합류
+- **Legal 서브브랜치 v0.9.0 (`_legal.py`)** — 소상공인 다분야 법령(노동·임대차·공정거래·개인정보·세법·상법·가맹·전자상거래·식품위생 등) 16종 수집. `classify_legal_intent` → `search_legal_knowledge` RPC RAG → GPT-4o 답변 + 면책 고지 자동 첨부 → Documents > Legal 서브허브에 `legal_advice` artifact 저장. `legal_annual_values` 테이블에서 연도별 법정 수치 자동 주입
 - **Documents 에이전트 v0.7.0** — 계약서·견적서·제안서·공지문·체크리스트·가이드 6종 type + 계약서 subtype 7종(`labor/lease/service/supply/partnership/franchise/nda`). 스켈레톤 + 한국 법령·관행 조항 markdown(`_doc_knowledge/<subtype>/{acceptable,risks}.md`) 을 system 프롬프트에 자동 주입. `due_label` 메타(계약 만료/납품기한/견적 유효기간 등) 로 스케쥴러 **D-7/D-3/D-1/D-0** 알림 트리거
 - **공정성 분석 v0.8.0** — PDF/DOCX/이미지 업로드(`📎` 채팅 첨부 버튼) → 이미지는 `gpt-4o vision` OCR → 1,349 청크 지식 베이스(법령 1,171 + 위험패턴 100 + 허용조항 78) **3-way RRF RAG** → 갑/을 유불리 비율 + 위험 조항 JSON. `uploaded_doc` / `analysis` artifact 2개 + `analyzed_from` 엣지 생성, 프론트는 `ReviewResultCard` 로 이중 바 + 위험 조항 수정안 렌더
 - **표준 서브허브 17개 (전 계정 공통)** — `bootstrap_workspace` 트리거가 가입 즉시 Recruitment(Job_posting/Interviews/Onboarding/Evaluations) + Documents(Contracts/Tax&HR/Legal/Operations) + Sales(Reports/Customers/Pricing/Costs) + Marketing(Social/Blog/Campaigns/Events/Reviews) 서브허브를 생성. 모든 artifact 는 `artifact_edges.relation='contains'` 로 이 중 하나의 서브허브에 귀속됨
