@@ -371,7 +371,7 @@ export const ChatOverlay = () => {
               <MessageSquarePlus className="h-3.5 w-3.5" />새 대화
             </button>
           </div>
-          <ScrollArea className="flex-1 px-2 py-2">
+          <ScrollArea className="min-h-0 flex-1 px-2 py-2">
             {sessionsLoading && sortedSessions.length === 0 && (
               <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
                 불러오는 중...
@@ -456,7 +456,7 @@ export const ChatOverlay = () => {
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 px-5 py-4">
+          <ScrollArea className="min-h-0 flex-1 px-5 py-4">
             <div className="mx-auto max-w-3xl space-y-3">
               {messages.map((msg, i) => (
                 <div key={i} className="space-y-2">

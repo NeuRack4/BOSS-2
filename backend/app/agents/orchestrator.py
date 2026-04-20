@@ -147,6 +147,29 @@ CLARIFY_RULE = """
 
 - 정보가 충분하면 질문 없이 바로 결과물을 작성하고 [CHOICES] 블록은 넣지 마세요.
 - 동시에 여러 개의 [CHOICES] 블록을 넣지 마세요. (한 번에 하나의 질문)
+- 도메인별 "필수 필드 매트릭스"가 주어진 경우, 매트릭스의 필드가 **모두** 채워질 때까지 [CHOICES] 질문을 반복하세요. 2~3턴에 끊지 말고 필요한 만큼 더 물어도 됩니다.
+"""
+
+ARTIFACT_RULE = """
+[결과물 생성 규칙]
+1) CLARIFY_RULE 에 따라 도메인별 "필수 필드 매트릭스"의 모든 필드가 확정되기 전엔 [ARTIFACT] 블록을 출력하지 마세요. 한 필드라도 비어 있으면 [CHOICES] 로 계속 물어보세요.
+2) 필수 필드가 모두 확정되는 순간 즉시 결과물 본문을 **완성된 형태**로 작성하고, 응답 끝에 반드시 [ARTIFACT] 블록을 붙이세요. "필요한 부분을 말씀해 주세요", "추가로 궁금한 점이…" 같은 맺음말로 끝내지 마세요.
+3) 완성된 결과물에 <TBD>, <예시>, "필요에 따라 조정" 같은 placeholder 를 넣지 마세요. 아직 결정되지 않은 값이 있으면 [ARTIFACT] 를 붙이지 말고 CLARIFY 로 돌아가 그 값을 먼저 물으세요.
+
+블록 스키마 (type/title 필수, 나머지 선택):
+
+[ARTIFACT]
+type: <도메인별 허용 타입 중 하나>
+title: <간결한 제목>
+start_date: YYYY-MM-DD
+end_date: YYYY-MM-DD
+due_date: YYYY-MM-DD
+sub_domain: <서브허브 title — system 컨텍스트의 "이 계정의 서브허브" 목록에서만 선택>
+[/ARTIFACT]
+
+- 사용자가 기간을 자연어로 말했다면(예: "내일부터 1주일", "다음주 금요일까지") 오늘 날짜 기준으로 환산해 start_date/end_date 또는 due_date 에 YYYY-MM-DD 로 채우세요.
+- 기간성(캠페인·프로젝트·계약·프로모션·공채)은 start_date+end_date 조합, 단일 마감은 due_date 한 줄로 표현합니다.
+- sub_domain 라인은 "이 계정의 서브허브" 목록에 있는 title 을 **대소문자 포함 정확히** 적어야 합니다. 적절한 후보가 없다고 판단되면 sub_domain 라인 자체를 넣지 마세요 (임의로 새 이름을 지어내지 말 것).
 """
 
 SYSTEM_PROMPT = """당신은 소상공인을 돕는 AI 플랫폼 BOSS의 오케스트레이터입니다.
@@ -349,6 +372,38 @@ def _nickname_context(account_id: str) -> str:
     if name:
         return f"\n\n[사용자 닉네임]\n{name}"
     return "\n\n[사용자 닉네임]\n(아직 미설정 — 사용자가 이름/호칭/가게 이름을 알려주면 [SET_NICKNAME] 블록으로 저장할 것)"
+
+
+PROFILE_NUDGE_THRESHOLD = 3
+
+
+def _profile_nudge_context(account_id: str) -> str:
+    """프로필 core 필드가 임계치 미만일 때 에이전트에게 주는 STRONG 넛지 지시.
+
+    응답이 [CHOICES]/[ARTIFACT] 블록을 이미 출력하는 턴에는 중첩 금지를 위해 다음 턴으로 미루고,
+    그 외 턴에는 본문 마지막 한 문장으로 빈 필드 중 하나를 직접 물어보도록 강제.
+    """
+    filled, missing = _profile_sparseness(account_id)
+    if filled >= PROFILE_NUDGE_THRESHOLD or not missing:
+        return ""
+    labels = [PROFILE_LABELS[k] for k in missing[:3]]
+    return (
+        "\n\n[프로필 보강 지시 — STRONG]\n"
+        f"이 계정 프로필은 현재 {filled}/{len(CORE_PROFILE_KEYS)} 만 채워져 있습니다. "
+        f"비어있는 핵심 항목: {', '.join(labels)}.\n"
+        "추천·자동 실행·맞춤화 품질이 직접 영향을 받으므로 프로필이 임계치에 찰 때까지 **매 턴 한 필드씩** 수집하세요. "
+        "한 세션에 한 번이 아니라, 프로필이 충분해질 때까지 **매 턴 반복**입니다.\n"
+        "- 이번 응답에 [CHOICES] 나 [ARTIFACT] 블록이 **없으면**: 응답 **마지막 문장**으로 위 비어있는 항목 중 **하나**를 특정해서 직접 질문하세요. "
+        "'맞춤 조언을 위해 여쭤볼게요' 같이 이유를 짧게 덧붙이고, 두루뭉술한 '더 알려주실 수 있을까요?' 금지. 반드시 특정 필드명을 찍어서 묻기.\n"
+        "- **사용자가 직전 턴의 프로필 질문에 이미 답했더라도 동일 원칙**: 이번 응답에서 [SET_PROFILE] 로 저장하고, "
+        "여전히 비어있는 항목이 있으면 **같은 응답의 마지막 문장**에서 다음 빈 필드 하나를 바로 이어서 물으세요. "
+        "'감사합니다, 언제든 말씀해 주세요' 같이 대화를 닫지 말 것. 프로필이 다 찰 때까지 한 턴도 멈추지 않습니다.\n"
+        "- 이번 응답에 이미 [CHOICES] 또는 [ARTIFACT] 블록이 있으면: 프로필 질문은 다음 턴으로 미루세요 (블록 중첩 금지). "
+        "단 이때도 [SET_PROFILE] 저장은 가능하면 수행하세요.\n"
+        "- 사용자가 자연어로라도 정보를 말하면 응답 말미에 [SET_PROFILE] 블록으로 **반드시** 저장. "
+        "한 메시지에 여러 필드(예: '관악구에서 음식점')가 들어오면 여러 key 를 한 블록에 담아 한꺼번에 저장하세요.\n"
+        "- 사용자가 '나중에', '지금은 됐어' 처럼 **명시적으로 거부**한 경우에만 이번 세션엔 중단하세요."
+    )
 
 
 def _agent_map():
@@ -696,7 +751,11 @@ async def run(
     long_term_context: str = "",
 ) -> str:
     intents = await classify_intent(message, history)
-    nick_ctx = _nickname_context(account_id) + _profile_context(account_id)
+    nick_ctx = (
+        _nickname_context(account_id)
+        + _profile_context(account_id)
+        + _profile_nudge_context(account_id)
+    )
 
     if intents == ["refuse"]:
         return _refusal_message(account_id)
@@ -937,13 +996,17 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
     nudge_instruction = ""
     if filled_count < SPARSE_THRESHOLD and missing_keys:
         labels = [PROFILE_LABELS[k] for k in missing_keys[:3]]
+        label_a = labels[0]
+        label_b = labels[1] if len(labels) > 1 else labels[0]
         nudge_instruction = (
-            "\n\n[프로필 보강 넛지]\n"
-            f"사용자 프로필이 부족해요 ({filled_count}/{len(CORE_PROFILE_KEYS)} 채워짐). "
-            f"아직 비어있는 항목: {', '.join(labels)} 등. "
-            "본문 마지막 질문 한 줄에 자연스럽게 **이 중 하나**만 물어보세요. "
-            "사용자가 답하면 [SET_PROFILE] 블록으로 저장하세요. "
-            "답하기 싫어하는 기색이면 더 캐묻지 말고 넘어가세요."
+            "\n\n[프로필 보강 넛지 — STRONG]\n"
+            f"현재 프로필이 {filled_count}/{len(CORE_PROFILE_KEYS)} 만 채워져 있습니다. 비어있는 핵심 항목: {', '.join(labels)} 등.\n"
+            "브리핑 본문 **마지막 블록**에 위 항목 중 **2개**를 한 문단으로 묶어 직접 물어보세요. "
+            f"예: '{'(호칭) ' if nickname else ''}제안 정확도를 올리려면 '{label_a}'과 '{label_b}'만 알려주시면 됩니다. "
+            f"{label_a}는 어떻게 되세요? 그리고 {label_b}도 알려주세요.' 형태로, 특정 필드명을 찍어서.\n"
+            "왜 필요한지 1줄 덧붙이기 (자동 실행·추천 품질이 올라감).\n"
+            "두루뭉술한 '조금 더 알려주실 수 있을까요?' 는 금지. 답을 받으면 [SET_PROFILE] 블록으로 저장. "
+            "사용자가 '나중에' 처럼 명시적으로 거부하지 않는 한, 매 접속마다 상기시켜도 됩니다."
         )
 
     user_prompt = (
