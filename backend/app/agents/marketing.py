@@ -26,6 +26,9 @@ from app.agents._artifact import (
     today_context,
 )
 from app.agents._marketing_knowledge import marketing_knowledge_context
+import re as _re
+
+_NAVER_UPLOAD_RE = _re.compile(r"\[NAVER_UPLOAD\]", _re.IGNORECASE)
 
 
 VALID_TYPES: tuple[str, ...] = (
@@ -237,6 +240,12 @@ SYSTEM_PROMPT = (
     + NICKNAME_RULE
     + PROFILE_RULE
     + """
+[네이버 블로그 자동 업로드 규칙]
+사용자가 블로그 포스팅을 작성하면서 동시에 네이버 블로그에 업로드/게시해달라고 명시적으로 요청한 경우:
+- blog_post [ARTIFACT] 블록을 정상 출력한 뒤, 응답 맨 마지막 줄에 [NAVER_UPLOAD] 를 추가하세요.
+- 업로드 요청 없이 blog_post만 작성하는 경우에는 [NAVER_UPLOAD] 를 출력하지 마세요.
+- blog_post 타입이 아닌 경우(sns_post, ad_copy 등)에는 절대 [NAVER_UPLOAD] 를 출력하지 마세요.
+
 작성 원칙:
 - 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
 - 없는 수치(매출·방문자 수·실적 등)는 절대 만들어내지 않음
@@ -292,6 +301,10 @@ async def run(
     )
     reply = resp.choices[0].message.content
 
+    # [NAVER_UPLOAD] 마커 감지 → 업로드 실행 후 마커를 결과 메시지로 교체
+    wants_naver_upload = bool(_NAVER_UPLOAD_RE.search(reply))
+    reply = _NAVER_UPLOAD_RE.sub("", reply).rstrip()
+
     await save_artifact_from_reply(
         account_id,
         "marketing",
@@ -299,4 +312,45 @@ async def run(
         default_title="마케팅 자료",
         valid_types=VALID_TYPES,
     )
+
+    if wants_naver_upload:
+        reply += "\n\n" + await _try_naver_upload(reply)
+
     return reply
+
+
+async def _try_naver_upload(reply: str) -> str:
+    """blog_post 본문을 파싱해 네이버 블로그에 업로드. 결과 문자열 반환."""
+    from app.core.config import settings
+    from app.agents._artifact import _parse_block, _clean_content
+
+    if not settings.naver_blog_id or not settings.naver_blog_pw:
+        return "📌 네이버 블로그 자동 업로드를 사용하려면 `.env`에 `NAVER_BLOG_ID`와 `NAVER_BLOG_PW`를 설정해 주세요."
+
+    parsed = _parse_block(reply)
+    title = (parsed or {}).get("title", "").strip() or "블로그 포스팅"
+    content = _clean_content(reply)
+
+    # 태그 추출 (마지막 줄 #태그 형식)
+    tags: list[str] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("#") and " " not in line.lstrip("#"):
+            tags.append(line.lstrip("#"))
+
+    try:
+        from app.services.naver_blog import upload_post
+        post_url = await upload_post(
+            blog_id=settings.naver_blog_id,
+            blog_pw=settings.naver_blog_pw,
+            title=title,
+            content=content,
+            tags=tags,
+        )
+        if post_url:
+            return f"✅ 네이버 블로그에 업로드했어요!\n🔗 {post_url}"
+        return "✅ 네이버 블로그에 업로드했어요!"
+    except ImportError:
+        return "⚠️ playwright가 설치되지 않았습니다. `pip install playwright && playwright install chromium`을 실행해 주세요."
+    except Exception as e:
+        return f"⚠️ 네이버 블로그 업로드 중 오류가 발생했어요: {e}"
