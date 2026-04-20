@@ -39,6 +39,16 @@ type Memo = {
   updated_at: string;
 };
 
+type SalesRecord = {
+  id: string;
+  recorded_date: string;
+  item_name: string;
+  category: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -107,6 +117,12 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
   const [imageGenerating, setImageGenerating] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
 
+  // Sales records
+  const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesDate, setSalesDate] = useState("");
+  const [deletingRecord, setDeletingRecord] = useState<string | null>(null);
+
   useEffect(() => {
     const sb = createClient();
     sb.auth.getUser().then(({ data }) => setAccountId(data.user?.id ?? null));
@@ -126,13 +142,52 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
     }
   }, [node, accountId]);
 
+  const fetchSalesRecords = useCallback(async (date: string) => {
+    if (!accountId || !date) return;
+    setSalesLoading(true);
+    try {
+      const res = await fetch(
+        `${API}/api/sales?account_id=${accountId}&start_date=${date}&end_date=${date}&limit=100`,
+      );
+      const json = await res.json();
+      setSalesRecords((json.data?.records as SalesRecord[]) ?? []);
+    } finally {
+      setSalesLoading(false);
+    }
+  }, [accountId]);
+
+  const handleDeleteRecord = useCallback(async (recordId: string) => {
+    if (!accountId) return;
+    if (!confirm("이 매출 항목을 삭제할까요?")) return;
+    setDeletingRecord(recordId);
+    try {
+      await fetch(`${API}/api/sales/${recordId}?account_id=${accountId}`, {
+        method: "DELETE",
+      });
+      setSalesRecords((prev) => prev.filter((r) => r.id !== recordId));
+    } finally {
+      setDeletingRecord(null);
+    }
+  }, [accountId]);
+
   useEffect(() => {
     if (open && node && accountId) {
       setDraft("");
       setEditing(null);
       fetchMemos();
+      if (
+        node.domains?.includes("sales") &&
+        node.kind === "artifact" &&
+        node.type === "revenue_entry"
+      ) {
+        const date =
+          (node.metadata?.recorded_date as string) ||
+          (node.created_at ? node.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+        setSalesDate(date);
+        fetchSalesRecords(date);
+      }
     }
-  }, [open, node, accountId, fetchMemos]);
+  }, [open, node, accountId, fetchMemos, fetchSalesRecords]);
 
   const handleCreate = useCallback(async () => {
     if (!node || !accountId) return;
@@ -342,6 +397,106 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                 </div>
               </Section>
             )}
+
+            {node.domains?.includes("sales") &&
+              node.kind === "artifact" &&
+              node.type === "revenue_entry" && (
+                <Section label="Sales Records">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={salesDate}
+                        onChange={(e) => {
+                          setSalesDate(e.target.value);
+                          fetchSalesRecords(e.target.value);
+                        }}
+                        className="rounded border border-[#ddd0b4] bg-transparent px-2 py-1 font-mono text-[11px] text-[#5a5040] focus:border-[#bfae8a] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fetchSalesRecords(salesDate)}
+                        className="rounded border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4]"
+                      >
+                        새로고침
+                      </button>
+                    </div>
+
+                    {salesLoading ? (
+                      <p className="py-2 text-[11px] text-[#8c7e66]">
+                        불러오는 중…
+                      </p>
+                    ) : salesRecords.length === 0 ? (
+                      <p className="py-2 text-[11px] text-[#8c7e66]">
+                        {salesDate} 매출 기록이 없습니다.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b border-[#ddd0b4] text-left text-[#8c7e66]">
+                              <th className="px-2 py-1.5 font-medium">상품</th>
+                              <th className="px-2 py-1.5 font-medium">카테고리</th>
+                              <th className="px-2 py-1.5 text-right font-medium">수량</th>
+                              <th className="px-2 py-1.5 text-right font-medium">금액</th>
+                              <th className="w-6 px-1" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesRecords.map((r) => (
+                              <tr
+                                key={r.id}
+                                className="border-b border-[#ddd0b4]/50 last:border-0"
+                              >
+                                <td className="px-2 py-1.5 text-[#2e2719]">
+                                  {r.item_name}
+                                </td>
+                                <td className="px-2 py-1.5 text-[#5a5040]">
+                                  {r.category}
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-[#2e2719]">
+                                  {r.quantity}
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-[#2e2719]">
+                                  {r.amount.toLocaleString()}원
+                                </td>
+                                <td className="px-1 py-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRecord(r.id)}
+                                    disabled={deletingRecord === r.id}
+                                    className="rounded p-0.5 text-[#bfae8a] hover:bg-[#ebe0ca] hover:text-[#c47865] disabled:opacity-40"
+                                    aria-label="삭제"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-[#ddd0b4]">
+                              <td
+                                colSpan={3}
+                                className="px-2 py-1.5 text-right text-[10px] font-semibold text-[#2e2719]"
+                              >
+                                합계
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-[11px] font-bold text-[#2e2719]">
+                                {salesRecords
+                                  .reduce((s, r) => s + r.amount, 0)
+                                  .toLocaleString()}
+                                원
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </Section>
+              )}
 
             <RelativesBlock label="Parents" list={node.parents} />
             <RelativesBlock label="Children" list={node.children} />

@@ -40,6 +40,7 @@ import {
   type ReviewReplyPayload,
 } from "./ReviewReplyCard";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 
 type UploadCategory =
   | "documents"
@@ -71,6 +72,7 @@ type Message = {
     error?: string;
   };
   confirm?: ConfirmPayload;
+  salesAction?: SalesActionData;
 };
 
 const UPLOAD_ACCEPT =
@@ -118,6 +120,38 @@ const NON_DOC_HINT: Partial<Record<UploadCategory, string>> = {
   other:
     "사업용 문서 분류에 해당하지 않아 저장만 해뒀어요. 필요하면 위 드롭다운에서 타입을 지정해 다시 올려주세요.",
 };
+
+function parseSalesAction(text: string): {
+  clean: string;
+  action: SalesActionData | undefined;
+} {
+  const PREFIX = "[ACTION:OPEN_SALES_TABLE:";
+  const start = text.indexOf(PREFIX);
+  if (start === -1) return { clean: text, action: undefined };
+
+  const jsonStart = start + PREFIX.length;
+  let depth = 0;
+  let jsonEnd = -1;
+  for (let i = jsonStart; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) { jsonEnd = i; break; }
+    }
+  }
+  if (jsonEnd === -1) return { clean: text, action: undefined };
+
+  // } 뒤에 오는 ] 을 직접 탐색 (중간에 공백 등이 끼어도 안전)
+  let markerEnd = jsonEnd + 1;
+  while (markerEnd < text.length && text[markerEnd] !== "]") markerEnd++;
+  markerEnd++; // ] 포함해서 한 칸 더
+
+  let action: SalesActionData | undefined;
+  try { action = JSON.parse(text.slice(jsonStart, jsonEnd + 1)); } catch { /* ignore */ }
+
+  const clean = (text.slice(0, start) + text.slice(markerEnd)).trim();
+  return { clean, action };
+}
 
 const MIN_TEXTAREA = 60;
 const MAX_TEXTAREA = 200;
@@ -179,6 +213,8 @@ export const ChatOverlay = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<string>("auto");
   const [userId, setUserId] = useState<string | null>(null);
+  const [showSalesTable, setShowSalesTable] = useState(false);
+  const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -636,14 +672,19 @@ export const ChatOverlay = () => {
         if (newSessionId && newSessionId !== currentSessionId) {
           setCurrentSessionId(newSessionId);
         }
+        const rawReply = data?.data?.reply ?? "응답을 받지 못했습니다.";
+        // [ACTION:OPEN_SALES_TABLE:{...}] 마커 파싱 + 제거
+        // 정규식 대신 중괄호 깊이를 직접 세서 파싱 (JSON 안의 ]에 끊기지 않도록)
+        const { clean: cleanReply, action: salesAction } = parseSalesAction(rawReply);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: data?.data?.reply ?? "응답을 받지 못했습니다.",
+            content: cleanReply,
             choices: data?.data?.choices?.length
               ? data.data.choices
               : undefined,
+            salesAction,
           },
         ]);
         // 응답이 새 artifact 를 만들었을 수 있으므로 캔버스 재조회 신호
@@ -859,6 +900,22 @@ export const ChatOverlay = () => {
   if (!isChatOpen) return null;
 
   return (
+    <>
+    {showSalesTable && salesTableData && (
+      <SalesInputTable
+        data={salesTableData}
+        apiBase={apiBase ?? ""}
+        onClose={() => setShowSalesTable(false)}
+        onSaved={(message) => {
+          setShowSalesTable(false);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: message },
+          ]);
+          window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+        }}
+      />
+    )}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm animate-in fade-in duration-150"
       onMouseDown={(e) => {
@@ -1089,6 +1146,87 @@ export const ChatOverlay = () => {
                         ))}
                       </div>
                     )}
+                    {msg.role === "assistant" && msg.salesAction && (
+                      <div className="ml-8 flex gap-2">
+                        {msg.salesAction.items.length === 0 ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => send("오늘 매출 글로 입력하기")}
+                              className="flex-1 border-[#7f8f54] bg-[#f5f7f0] text-[#7f8f54] hover:bg-[#e8eedd] text-xs font-medium"
+                            >
+                              ✏️ 글로 입력하기
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSalesTableData(msg.salesAction!);
+                                setShowSalesTable(true);
+                              }}
+                              className="flex-1 border-[#c47865] bg-[#fdf0ec] text-[#c47865] hover:bg-[#fae0d8] text-xs font-medium"
+                            >
+                              📋 표로 추가입력하기
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={async () => {
+                                if (!userId || !apiBase) return;
+                                const action = msg.salesAction!;
+                                try {
+                                  const res = await fetch(`${apiBase}/api/sales`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      account_id: userId,
+                                      items: action.items.map((it) => ({
+                                        ...it,
+                                        amount: it.quantity * it.unit_price,
+                                        recorded_date: action.date,
+                                        source: "chat",
+                                      })),
+                                    }),
+                                  });
+                                  if (res.ok) {
+                                    window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+                                    setMessages((prev) => [
+                                      ...prev,
+                                      {
+                                        role: "assistant" as const,
+                                        content: `매출 ${action.items.length}건이 저장됐어요. 캔버스 Revenue 허브에서 확인할 수 있어요.`,
+                                      },
+                                    ]);
+                                  }
+                                } catch {
+                                  // silent
+                                }
+                              }}
+                              className="flex-1 border-[#7f8f54] bg-[#f5f7f0] text-[#7f8f54] hover:bg-[#e8eedd] text-xs font-medium"
+                            >
+                              💾 저장
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSalesTableData(msg.salesAction!);
+                                setShowSalesTable(true);
+                              }}
+                              className="flex-1 border-[#c47865] bg-[#fdf0ec] text-[#c47865] hover:bg-[#fae0d8] text-xs font-medium"
+                            >
+                              📋 표로 추가입력하기
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1230,5 +1368,6 @@ export const ChatOverlay = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
