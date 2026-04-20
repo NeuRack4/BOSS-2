@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature-marketing
+
+### Added — Marketing 에이전트 전면 확장
+
+- **콘텐츠 타입 9종** — `sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post`. 에이전트를 카페 특화에서 **업종 불문(소상공인 전반)**으로 재작성. 각 타입별 출력 형식 가이드 내장(SNS 해시태그 20~30개·최적 게시 시간, 블로그 마크다운 구조, 공지 5단계, 리뷰 별점별 톤, 상품 소개 4단계).
+- **BGE-M3 RAG 지식베이스** (`backend/app/agents/_marketing_knowledge.py`) — `embed_text` (동기) 를 `asyncio.to_thread` 로 오프로드. `search_marketing_knowledge` RPC 호출 → `subsidy_programs` (정부 지원사업) + `marketing_knowledge_chunks` (소상공인보호법·개인정보보호법) 두 테이블을 **벡터 + FTS RRF 병합 검색**. `source_table` 필드로 지원사업/법령 섹션 분리 후 system 프롬프트에 주입.
+- **`015_marketing_knowledge.sql`** — `subsidy_programs` (107 rows) + `marketing_knowledge_chunks` (1014 rows, BGE-M3 1024dim 임베딩) 테이블. RLS SELECT 공개.
+- **`016_marketing_rag.sql`** — `subsidy_programs` 에 `embedding vector(1024)` + `fts tsvector` 추가. `search_marketing_knowledge(query_embedding, query_text, match_count)` RPC — LANGUAGE sql (plpgsql 컬럼명 모호성 회피), `kc_vec + kc_fts + sp_vec + sp_fts` 4-way CTE RRF. DROP-then-CREATE 로 반환 타입 변경 안전 적용.
+- **`017_marketing_subhubs.sql`** — `bootstrap_workspace` 트리거 업데이트: 신규 가입자에게 Marketing 서브허브 5개 자동 생성. 기존 계정 백필 DO 블록 포함.
+- **Marketing 서브허브 5종 확정** — `Social` (sns_post, product_post) / `Blog` (blog_post) / `Campaigns` (ad_copy, campaign) / `Events` (event_plan, notice, marketing_plan) / `Reviews` (review_reply). `kind='domain'`, `type='category'`.
+- **`backend/app/routers/marketing.py`** — `POST /api/marketing/image` (DALL-E 3 이미지 생성, 프로필 업종·가게명 자동 주입) / `POST /api/marketing/blog/upload` (네이버 블로그 Playwright 업로드) / `GET /api/marketing/subsidies` (지원사업 검색).
+- **`backend/app/services/naver_blog.py`** — `asyncio.to_thread` 래퍼. Windows asyncio 이슈 우회를 위해 `naver_blog_runner.py` 를 subprocess 로 분리 실행.
+- **`backend/app/services/naver_blog_runner.py`** — Playwright 기반 네이버 SE One 에디터 자동화. `parse_content()` 로 markdown blog_post → 제목/단락/태그 파싱. Base64 UTF-16LE 클립보드 방식으로 한글 붙여넣기.
+- **`backend/app/services/naver_login_setup.py`** — 최초 1회 쿠키 설정 스크립트 (`python -m app.services.naver_login_setup`).
+- **`scripts/import_marketing_knowledge.py`** — BOSS(원본 프로젝트) DB에서 `subsidy_programs` 107 rows + `marketing_knowledge_chunks` 1014 rows 를 BOSS2 로 이전. BGE-M3 임베딩 배치 생성 포함. `--subsidy-only` / `--knowledge-only` / `--force` 플래그.
+- **`backend/app/core/config.py`** — `naver_blog_id` / `naver_blog_pw` 선택 설정 추가.
+- **NodeDetailModal — Marketing Actions 패널** — `node.domains?.includes("marketing") && node.kind === "artifact"` 조건 시 "이미지 생성" 버튼 노출. `node.type === "blog_post"` 시 "네이버 블로그 업로드" 버튼 추가 노출. 생성된 이미지 인라인 프리뷰.
+
+### Changed
+
+- **`backend/app/agents/marketing.py`** 전면 재작성 — 업종 불문 프롬프트, 9종 콘텐츠 타입 형식 가이드, 필수 필드 매트릭스, 업종별 플랫폼 가이드, 마케팅 전략 추천 가이드, 계절 컨텍스트, `marketing_knowledge_context` 비동기 주입.
+- **`backend/app/main.py`** — `marketing` 라우터 등록.
+- **Migration 번호 재정렬** — v0.8.0 이 011~014 를 사용함에 따라 marketing 마이그레이션을 015~017 로 재번호.
+
+---
+
 ## [0.8.0] - 2026-04-20
 
 ### Added — 공정성 분석 파이프라인 (Documents 에이전트 확장)

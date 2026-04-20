@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Trash2, Check, X } from "lucide-react";
+import { Pencil, Trash2, Check, X, Upload, ImageIcon } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from "@/lib/supabase/client";
@@ -101,6 +101,12 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
   const [editDraft, setEditDraft] = useState("");
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Marketing actions
+  const [blogUploading, setBlogUploading] = useState(false);
+  const [blogResult, setBlogResult] = useState<string | null>(null);
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+
   useEffect(() => {
     const sb = createClient();
     sb.auth.getUser().then(({ data }) => setAccountId(data.user?.id ?? null));
@@ -184,6 +190,42 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
     [accountId, fetchMemos],
   );
 
+  const handleNaverUpload = useCallback(async () => {
+    if (!node || !accountId) return;
+    setBlogUploading(true);
+    setBlogResult(null);
+    try {
+      const res = await fetch(`${API}/api/marketing/blog/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, artifact_id: node.id }),
+      });
+      const json = await res.json();
+      setBlogResult(res.ok ? "업로드 완료!" : json.detail || "업로드 실패");
+    } catch {
+      setBlogResult("업로드 실패");
+    } finally {
+      setBlogUploading(false);
+    }
+  }, [node, accountId]);
+
+  const handleGenerateImage = useCallback(async () => {
+    if (!node || !accountId) return;
+    setImageGenerating(true);
+    setGeneratedImageUrl(null);
+    try {
+      const res = await fetch(`${API}/api/marketing/image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, artifact_id: node.id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.data?.url) setGeneratedImageUrl(json.data.url);
+    } finally {
+      setImageGenerating(false);
+    }
+  }, [node, accountId]);
+
   if (!node) return null;
 
   return (
@@ -258,6 +300,45 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                       </pre>
                     </div>
                   ))}
+                </div>
+              </Section>
+            )}
+
+            {node.domains?.includes("marketing") && node.kind === "artifact" && (
+              <Section label="Marketing Actions">
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateImage}
+                      disabled={imageGenerating}
+                      className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {imageGenerating ? "생성 중…" : "이미지 생성"}
+                    </button>
+                    {node.type === "blog_post" && (
+                      <button
+                        type="button"
+                        onClick={handleNaverUpload}
+                        disabled={blogUploading}
+                        className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {blogUploading ? "업로드 중…" : "네이버 블로그 업로드"}
+                      </button>
+                    )}
+                  </div>
+                  {generatedImageUrl && (
+                    <img
+                      src={generatedImageUrl}
+                      alt="generated"
+                      className="rounded-md border border-[#ddd0b4] max-w-full"
+                    />
+                  )}
+                  {blogResult && (
+                    <p className="text-[11px] text-[#5a5040]">{blogResult}</p>
+                  )}
                 </div>
               </Section>
             )}

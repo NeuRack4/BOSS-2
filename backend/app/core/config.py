@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""  # 비우면 broker 재사용
     scheduler_tick_seconds: int = 60
 
+    # Naver Blog (optional)
+    naver_blog_id: str = ""
+    naver_blog_pw: str = ""
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축
