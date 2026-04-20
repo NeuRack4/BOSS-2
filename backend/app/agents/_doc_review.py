@@ -387,7 +387,8 @@ async def dispatch_review(
         raise RuntimeError("분석 결과 저장 실패")
     analysis_id = ins.data[0]["id"]
 
-    # analyzed_from 엣지: 원본 문서 → 분석 결과
+    # analyzed_from 엣지: 원본 업로드 문서만 유일한 부모.
+    # (서브허브 contains 엣지는 의도적으로 생성하지 않음 — 분석 결과는 업로드 노드의 자식으로만 존재)
     try:
         sb.table("artifact_edges").insert({
             "account_id": account_id,
@@ -397,57 +398,6 @@ async def dispatch_review(
         }).execute()
     except Exception:
         pass
-
-    # contains 엣지: 원본 문서의 부모(서브허브 또는 메인허브) 를 상속.
-    parent_hub_id: str | None = None
-    try:
-        parent_edges = (
-            sb.table("artifact_edges")
-            .select("parent_id,relation")
-            .eq("child_id", d["id"])
-            .eq("relation", "contains")
-            .execute()
-            .data
-            or []
-        )
-        if parent_edges:
-            parent_ids = [e["parent_id"] for e in parent_edges]
-            hubs = (
-                sb.table("artifacts")
-                .select("id,kind,type")
-                .in_("id", parent_ids)
-                .eq("kind", "domain")
-                .execute()
-                .data
-                or []
-            )
-            # 서브허브 우선 (type='category'), 없으면 메인허브
-            sub = [h for h in hubs if (h.get("type") or "") == "category"]
-            if sub:
-                parent_hub_id = sub[0]["id"]
-            elif hubs:
-                parent_hub_id = hubs[0]["id"]
-    except Exception:
-        pass
-
-    if not parent_hub_id:
-        from app.agents._artifact import pick_documents_parent
-        parent_hub_id = pick_documents_parent(
-            sb,
-            account_id,
-            prefer_keywords=("검토", "분석", "review", "계약", "contract"),
-        )
-
-    if parent_hub_id:
-        try:
-            sb.table("artifact_edges").insert({
-                "account_id": account_id,
-                "parent_id":  parent_hub_id,
-                "child_id":   analysis_id,
-                "relation":   "contains",
-            }).execute()
-        except Exception:
-            pass
 
     try:
         sb.table("activity_logs").insert({

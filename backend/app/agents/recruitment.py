@@ -1,4 +1,22 @@
+"""Recruitment 도메인 에이전트.
+
+v0.9 확장 포인트:
+- 3종 플랫폼 채용공고 자동 생성 (당근알바 / 알바천국 / 사람인) —
+  `[JOB_POSTINGS]...[/JOB_POSTINGS]` 마커 안에 세 섹션을 받아 3개 artifact + 부모 세트 1개 저장.
+- 채용공고 HTML 포스터 생성 (GPT-4o) — `[POSTING_POSTER_REQUEST]` 마커 혹은
+  사용자 발화 휴리스틱. 저장 버킷: `recruitment-posters` (HTML 파일) + artifact.content.
+- hiring_drive (채용 기간) artifact 에 `due_label="채용 마감"` + `end_date` 주입 →
+  스케쥴러 `scanner.find_date_notifications` 가 D-7/3/1/0 리마인드를 자동 발사.
+- profiles.business_type 기반 업종별 CHOICES 분기 (`_recruit_templates.detect_category`).
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+
 from app.core.llm import chat_completion
+from app.core.supabase import get_supabase
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     NICKNAME_RULE,
@@ -10,11 +28,28 @@ from app.agents._suggest import suggest_today_for_domain
 from app.agents._artifact import (
     save_artifact_from_reply,
     list_sub_hub_titles,
+    pick_sub_hub_id,
     today_context,
 )
+from app.agents._recruit_templates import (
+    CATEGORY_CHOICES,
+    PLATFORM_LABELS,
+    POSTING_POSTER_REQUEST_RE,
+    VALID_PLATFORMS,
+    VALID_TYPES,
+    build_recruit_context,
+    detect_category,
+    detect_recruit_intent,
+    parse_platform_sections,
+    wants_posting_poster,
+)
+
+log = logging.getLogger("boss2.recruitment")
 
 
-VALID_TYPES: tuple[str, ...] = (
+# `save_artifact_from_reply` 가 검증하는 일반 타입 허용 목록.
+# (job_posting_set / job_posting_poster 는 전용 파이프라인에서 별도 저장.)
+_GENERIC_VALID_TYPES: tuple[str, ...] = (
     "job_posting",
     "interview_questions",
     "checklist",
@@ -22,42 +57,599 @@ VALID_TYPES: tuple[str, ...] = (
     "hiring_drive",
 )
 
+_JOB_POSTINGS_RE = re.compile(r"\[JOB_POSTINGS\](.*?)\[/JOB_POSTINGS\]", re.DOTALL)
+
 
 def suggest_today(account_id: str) -> list[dict]:
     return suggest_today_for_domain(account_id, "recruitment")
 
 
-SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
+SYSTEM_PROMPT_BASE = """당신은 채용 전문 AI 에이전트입니다.
 소상공인의 채용공고 작성, 면접 질문 생성, 직원 관리 조언을 담당합니다.
 
-가능한 작업:
-- 채용공고 작성 (직종, 급여, 근무조건 포함)
+[제공 가능 작업]
+- **3종 플랫폼 채용공고 동시 작성** (당근알바·알바천국·사람인) — 플랫폼별 톤·포맷 차이 반영
+- 채용공고 **HTML 포스터** 생성 (GPT-4o, 1장) — 사용자가 요청할 때만
 - 직무별 면접 질문 세트 생성
-- 근로계약서 체크리스트
-- 직원 온보딩 가이드
-- 공채/시즌 채용 기간(hiring_drive) 기획
+- 근로계약 체크리스트 / 온보딩 가이드
+- 공채/시즌 채용 기간(hiring_drive) 기획 — start_date/end_date + `due_label="채용 마감"` 필수
 
-[필수 필드 매트릭스 — 모두 확정되기 전엔 [ARTIFACT] 출력 금지]
+[필수 필드 매트릭스 — 모두 확정되기 전엔 아티팩트 블록 금지]
 - 공통: 직종/포지션, 근무지(매장명 또는 지역), 고용 형태(정규/파트/알바)
-- job_posting: + 급여 범위, 근무 시간
+- job_posting / job_posting_set: + 급여(시급/월급/연봉 중 하나 숫자), 주 근무시간, 근무 요일
 - interview_questions: + 직무 레벨(신입/경력/시니어), 질문 수
-- hiring_drive: + 시작일(start_date), 종료일(end_date), 채용 인원
+- hiring_drive: + start_date, end_date, 채용 인원
 
-허용 type: job_posting | interview_questions | checklist | guide | hiring_drive
-응답은 실용적이고 바로 사용 가능한 한국어로 작성하세요.
+[3종 플랫폼 공고 생성 규약]
+사용자가 채용공고를 요청하고 필수 필드가 모두 확정되면, **단일 턴 안에** 아래 블록을 정확히 한 번만 출력하세요:
+
+[JOB_POSTINGS]
+title: <세트를 대표하는 한 줄 제목>
+sub_domain: Job_posting   # 생략 가능
+start_date: YYYY-MM-DD    # 선택 (모집 시작)
+end_date:   YYYY-MM-DD    # 선택 (모집 마감)
+due_label:  모집 마감       # 선택 (기본: 모집 마감)
+---
+[당근알바]
+<당근알바용 공고 본문 — 친근한 톤, 이모지 1~2개, 300~600자, 📍🕒💰🍴✨ 구조>
+
+[알바천국]
+<알바천국용 공고 본문 — 표준 구인 양식, 굵은 헤더 + bullet, 시급을 제목 가까이>
+
+[사람인]
+<사람인용 공고 본문 — 공식 톤, 회사소개→담당업무→자격요건→우대→복리후생→근무조건→전형절차 순>
+[/JOB_POSTINGS]
+
+중요:
+- 3섹션 모두 필수. 빈 섹션/생략 금지.
+- `[당근알바]` 헤더 정확히 사용 (다른 플랫폼 명 혼용 금지). `당근마켓`은 `[당근마켓]` 또는 `[당근알바]` 중 전자도 인정되지만 헤더 라벨 하나만.
+- 시급 표기는 **2026년 최저임금 10,320원 이상 숫자**로. "협의" 금지.
+- 한 턴에 [JOB_POSTINGS] 와 다른 [ARTIFACT] 를 동시 출력하지 마세요.
+
+[채용공고 포스터 생성]
+사용자가 "이미지/포스터 만들어줘" 류를 요청하면, 본문 끝에 아래 마커를 정확히 한 번:
+
+[POSTING_POSTER_REQUEST]
+platform: karrot        # karrot | albamon | saramin (없으면 karrot)
+style:    따뜻한 브라운 톤의 카페 분위기, 미니멀 타이포
+[/POSTING_POSTER_REQUEST]
+
+이 마커는 시스템이 GPT-4o 로 standalone HTML 포스터를 생성 후 `job_posting_poster` artifact 로 저장합니다.
+에이전트가 HTML 코드를 직접 출력하지 마세요. 본문에선 "포스터를 만들고 있어요" 한 줄만.
+포스터 마커를 넣는 턴엔 [ARTIFACT] / [JOB_POSTINGS] 를 함께 넣지 마세요.
+
 """ + ARTIFACT_RULE + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
-예시 (정보 부족 시):
-"채용공고를 작성해드릴게요. 어떤 직종의 공고인가요?
+예시 (직종 불명확):
+"채용공고를 만들어드릴게요. 어떤 포지션의 공고인가요?
 [CHOICES]
+바리스타
 홀 서빙
 주방 보조
-배달/라이더
 기타 (직접 입력)
 [/CHOICES]"
 """
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# profile 조회 (업종 추정용)
+# ──────────────────────────────────────────────────────────────────────────
+def _get_business_type(account_id: str) -> str | None:
+    sb = get_supabase()
+    rows = (
+        sb.table("profiles")
+        .select("business_type")
+        .eq("id", account_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        return None
+    bt = (rows[0].get("business_type") or "").strip()
+    return bt or None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# [JOB_POSTINGS] 블록 파싱 + 3종 저장
+# ──────────────────────────────────────────────────────────────────────────
+def _parse_job_postings_block(reply: str) -> dict | None:
+    m = _JOB_POSTINGS_RE.search(reply)
+    if not m:
+        return None
+    inner = m.group(1)
+    # meta (첫 `---` 기준 split)
+    parts = inner.split("---", 1)
+    meta_raw = parts[0]
+    body = parts[1] if len(parts) > 1 else inner
+
+    meta: dict[str, str] = {}
+    for line in meta_raw.strip().splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            meta[k.strip()] = v.strip()
+
+    sections = parse_platform_sections(body)
+    return {"meta": meta, "sections": sections}
+
+
+def _strip_job_postings_block(reply: str) -> str:
+    return _JOB_POSTINGS_RE.sub("", reply).strip()
+
+
+def _valid_date_or_none(s: str) -> str | None:
+    from datetime import date
+    s = (s or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return None
+    try:
+        date.fromisoformat(s)
+        return s
+    except ValueError:
+        return None
+
+
+async def _save_posting_set(account_id: str, parsed: dict) -> str | None:
+    """부모 `job_posting_set` + 자식 3개 `job_posting` 저장.
+
+    반환: 부모 artifact_id (실패 시 None).
+    """
+    meta_in = parsed.get("meta") or {}
+    sections = parsed.get("sections") or {}
+    title = (meta_in.get("title") or "채용공고 세트").strip()
+
+    metadata: dict = {}
+    for k in ("start_date", "end_date", "due_date"):
+        v = _valid_date_or_none(meta_in.get(k, ""))
+        if v:
+            metadata[k] = v
+    due_label = (meta_in.get("due_label") or "").strip()
+    if due_label:
+        metadata["due_label"] = due_label[:200]
+    elif "end_date" in metadata or "due_date" in metadata:
+        metadata["due_label"] = "모집 마감"
+
+    sb = get_supabase()
+    try:
+        parent_payload = {
+            "account_id": account_id,
+            "domains":    ["recruitment"],
+            "kind":       "artifact",
+            "type":       "job_posting_set",
+            "title":      title,
+            "content":    "\n\n".join(
+                f"## {PLATFORM_LABELS[p]}\n{sections.get(p, '').strip()}"
+                for p in VALID_PLATFORMS
+                if sections.get(p)
+            ),
+            "status":     "draft",
+            "metadata":   metadata or {},
+        }
+        res = sb.table("artifacts").insert(parent_payload).execute()
+        if not res.data:
+            return None
+        parent_id = res.data[0]["id"]
+    except Exception as exc:
+        log.exception("posting_set parent insert failed: %s", exc)
+        return None
+
+    # 서브허브 contains 엣지 (best-effort)
+    sub_name = (meta_in.get("sub_domain") or "Job_posting").strip()
+    hub_id = pick_sub_hub_id(
+        sb, account_id, "recruitment",
+        prefer_keywords=(sub_name, "Job_posting", "posting", "채용"),
+    )
+    if hub_id:
+        try:
+            sb.table("artifact_edges").insert({
+                "account_id": account_id,
+                "parent_id":  hub_id,
+                "child_id":   parent_id,
+                "relation":   "contains",
+            }).execute()
+        except Exception:
+            pass
+
+    # 3종 자식 저장 + contains 엣지
+    for platform in VALID_PLATFORMS:
+        body = (sections.get(platform) or "").strip()
+        if not body:
+            continue
+        child_title = f"{title} — {PLATFORM_LABELS[platform]}"
+        child_meta = {"platform": platform, **metadata}
+        try:
+            c = sb.table("artifacts").insert({
+                "account_id": account_id,
+                "domains":    ["recruitment"],
+                "kind":       "artifact",
+                "type":       "job_posting",
+                "title":      child_title[:180],
+                "content":    body,
+                "status":     "draft",
+                "metadata":   child_meta,
+            }).execute()
+            if not c.data:
+                continue
+            child_id = c.data[0]["id"]
+            sb.table("artifact_edges").insert({
+                "account_id": account_id,
+                "parent_id":  parent_id,
+                "child_id":   child_id,
+                "relation":   "contains",
+            }).execute()
+        except Exception:
+            log.exception("posting child insert failed (platform=%s)", platform)
+
+    # activity_logs + embedding (best-effort)
+    try:
+        sb.table("activity_logs").insert({
+            "account_id":  account_id,
+            "type":        "artifact_created",
+            "domain":      "recruitment",
+            "title":       title,
+            "description": "채용공고 3종 세트 생성 (당근·알바천국·사람인)",
+            "metadata":    {"artifact_id": parent_id},
+        }).execute()
+    except Exception:
+        pass
+    try:
+        from app.rag.embedder import index_artifact
+        await index_artifact(account_id, "recruitment", parent_id, f"{title}\n{parent_payload['content']}")
+    except Exception:
+        pass
+
+    return parent_id
+
+
+async def _maybe_dispatch_posting_set(account_id: str, reply: str) -> str:
+    parsed = _parse_job_postings_block(reply)
+    if not parsed:
+        return reply
+    parent_id = await _save_posting_set(account_id, parsed)
+    cleaned = _strip_job_postings_block(reply)
+    if parent_id:
+        notice = (
+            "\n\n---\n"
+            f"_(채용공고 3종이 캔버스에 저장되었어요 — 세트 artifact: `{parent_id}`)_"
+        )
+        return cleaned + notice
+    return cleaned + "\n\n---\n_(공고 저장 중 오류가 발생했어요. 다시 시도해주세요.)_"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# [POSTING_POSTER_REQUEST] 블록 처리
+# ──────────────────────────────────────────────────────────────────────────
+def _parse_poster_marker(reply: str) -> dict | None:
+    m = POSTING_POSTER_REQUEST_RE.search(reply)
+    if not m:
+        return None
+    parsed: dict[str, str] = {}
+    for line in m.group(1).strip().splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            parsed[k.strip().lower()] = v.strip()
+    return parsed
+
+
+def _strip_poster_marker(reply: str) -> str:
+    return POSTING_POSTER_REQUEST_RE.sub("", reply).strip()
+
+
+def _find_recent_posting_set(account_id: str) -> dict | None:
+    sb = get_supabase()
+    rows = (
+        sb.table("artifacts")
+        .select("id,title,content,metadata,created_at")
+        .eq("account_id", account_id)
+        .eq("kind", "artifact")
+        .eq("type", "job_posting_set")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None
+
+
+async def _maybe_dispatch_poster(account_id: str, reply: str) -> str:
+    marker = _parse_poster_marker(reply)
+    if not marker:
+        return reply
+    cleaned = _strip_poster_marker(reply)
+
+    target = _find_recent_posting_set(account_id)
+    if not target:
+        return cleaned + (
+            "\n\n---\n_(아직 저장된 채용공고 세트가 없어요. 공고를 먼저 만들어주세요 — 그 다음 포스터를 만들어드릴게요.)_"
+        )
+
+    platform = (marker.get("platform") or "karrot").lower()
+    if platform not in VALID_PLATFORMS:
+        platform = "karrot"
+    style = marker.get("style") or ""
+
+    try:
+        from app.core.poster_gen import generate_job_posting_poster
+        poster_artifact = await generate_job_posting_poster(
+            account_id=account_id,
+            posting_set_id=target["id"],
+            platform=platform,
+            style_prompt=style,
+        )
+    except Exception as exc:
+        log.exception("poster generation failed")
+        return cleaned + f"\n\n---\n_(포스터 생성 실패: {str(exc)[:160]})_"
+
+    url = poster_artifact.get("public_url") or ""
+    link = f"\n\n[포스터 미리보기]({url})" if url else ""
+    return cleaned + (
+        f"\n\n---\n"
+        f"_(채용공고 HTML 포스터 생성 완료 — artifact `{poster_artifact['artifact_id']}`, 플랫폼 **{PLATFORM_LABELS[platform]}**)_"
+        f"{link}"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 메인 run
+# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────
+# Capability 인터페이스 (function-calling 라우팅용)
+# ──────────────────────────────────────────────────────────────────────────
+def _fmt_days(days: list[str] | None) -> str:
+    return "·".join(days) if days else ""
+
+
+async def run_posting_set(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    position: str,
+    wage_hourly: int | None = None,
+    wage_monthly: int | None = None,
+    annual_salary: int | None = None,
+    weekly_hours: float | None = None,
+    work_days: list[str] | None = None,
+    work_start: str | None = None,
+    work_end: str | None = None,
+    employment_type: str | None = None,
+    location: str | None = None,
+    headcount: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    extra_note: str | None = None,
+) -> str:
+    """3종 플랫폼 채용공고 동시 작성."""
+    lines: list[str] = [f"[직종] {position}"]
+    if employment_type:
+        lines.append(f"[고용형태] {employment_type}")
+    if headcount:
+        lines.append(f"[모집인원] {headcount}명")
+    if location:
+        lines.append(f"[근무지] {location}")
+    if wage_hourly:
+        lines.append(f"[시급] {wage_hourly:,}원")
+    if wage_monthly:
+        lines.append(f"[월급] {wage_monthly:,}원")
+    if annual_salary:
+        lines.append(f"[연봉] {annual_salary:,}원")
+    if weekly_hours:
+        lines.append(f"[주 근무시간] {weekly_hours}시간")
+    if work_days:
+        lines.append(f"[근무요일] {_fmt_days(work_days)}")
+    if work_start and work_end:
+        lines.append(f"[근무시간대] {work_start}~{work_end}")
+    if start_date:
+        lines.append(f"[모집 시작] {start_date}")
+    if end_date:
+        lines.append(f"[모집 마감] {end_date}")
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+
+    synthetic = (
+        "채용공고를 당근알바·알바천국·사람인 3종 플랫폼으로 만들어주세요. "
+        "아래 조건이 모두 확정되었으니 추가 질문 없이 바로 [JOB_POSTINGS] 블록을 출력하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_posting_poster(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    platform: str = "karrot",
+    style: str = "",
+) -> str:
+    """최근 job_posting_set 을 근거로 HTML 포스터 1장 생성."""
+    if platform not in VALID_PLATFORMS:
+        platform = "karrot"
+    synthetic = (
+        "최근 작성한 채용공고 세트로 HTML 포스터 1장을 생성해주세요. "
+        "아래 마커를 그대로 출력하세요:\n\n"
+        "[POSTING_POSTER_REQUEST]\n"
+        f"platform: {platform}\n"
+        f"style: {style or '깔끔하고 모던한 톤, 따뜻한 브라운 계열'}\n"
+        "[/POSTING_POSTER_REQUEST]"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_interview(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    position: str,
+    level: str = "신입",
+    count: int = 5,
+) -> str:
+    """직종·레벨별 면접 질문 세트 생성."""
+    synthetic = (
+        f"{position} 직무의 {level} 지원자용 면접 질문 {count}개를 생성해주세요. "
+        "추가 질문 없이 바로 [ARTIFACT] 블록을 type=interview_questions 로 저장하세요.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_hiring_drive(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    title: str,
+    start_date: str,
+    end_date: str,
+    headcount: int,
+    target_position: str | None = None,
+) -> str:
+    """공채/시즌 채용 기간 기획 (스케쥴러 D-리마인드 자동)."""
+    pos = target_position or "전 직종"
+    synthetic = (
+        f"'{title}' 라는 이름의 채용 기간(hiring_drive) artifact 를 만들어주세요. "
+        f"기간: {start_date} ~ {end_date}, 모집 인원: {headcount}명, 대상: {pos}.\n"
+        "반드시 metadata 에 start_date/end_date/due_label='채용 마감' 을 포함한 [ARTIFACT] 블록으로 저장.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_checklist_guide(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+    kind: str = "checklist",
+) -> str:
+    """채용 관련 체크리스트 또는 가이드."""
+    artifact_type = "checklist" if kind == "checklist" else "guide"
+    synthetic = (
+        f"'{topic}' 주제로 채용 {kind} 를 작성해주세요. "
+        f"[ARTIFACT] 블록의 type={artifact_type} 로 저장.\n\n"
+        f"원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+def describe(account_id: str) -> list[dict]:
+    """OpenAI tools 스펙용 capability 매니페스트."""
+    caps: list[dict] = [
+        {
+            "name": "recruit_posting_set",
+            "description": (
+                "당근알바·알바천국·사람인 3종 플랫폼 채용공고를 한 번에 작성한다. "
+                "직종(position)은 필수. 시급/주근무시간/요일 등은 알면 채우고 모르면 생략."
+            ),
+            "handler": run_posting_set,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "position":       {"type": "string", "description": "직종 또는 포지션명 (예: 바리스타, 홀서빙)"},
+                    "wage_hourly":    {"type": "integer", "description": "시급(원). 최저임금 이상"},
+                    "wage_monthly":   {"type": "integer", "description": "월급(원)"},
+                    "annual_salary":  {"type": "integer", "description": "연봉(원)"},
+                    "weekly_hours":   {"type": "number", "description": "주 근무시간"},
+                    "work_days":      {"type": "array", "items": {"type": "string"}, "description": "근무 요일 (예: ['월','화','수'])"},
+                    "work_start":     {"type": "string", "description": "근무 시작 시각 HH:MM"},
+                    "work_end":       {"type": "string", "description": "근무 종료 시각 HH:MM"},
+                    "employment_type": {"type": "string", "enum": ["정규직", "계약직", "파트타임", "알바", "단기"]},
+                    "location":       {"type": "string", "description": "근무지/매장명/지역"},
+                    "headcount":      {"type": "integer", "description": "모집 인원"},
+                    "start_date":     {"type": "string", "description": "모집 시작일 YYYY-MM-DD"},
+                    "end_date":       {"type": "string", "description": "모집 마감일 YYYY-MM-DD"},
+                    "extra_note":     {"type": "string", "description": "자유 기술"},
+                },
+                "required": ["position"],
+            },
+        },
+        {
+            "name": "recruit_interview",
+            "description": "특정 직종·레벨 지원자용 면접 질문 세트를 생성한다.",
+            "handler": run_interview,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "string"},
+                    "level":    {"type": "string", "enum": ["신입", "경력", "시니어"], "default": "신입"},
+                    "count":    {"type": "integer", "default": 5, "minimum": 3, "maximum": 20},
+                },
+                "required": ["position"],
+            },
+        },
+        {
+            "name": "recruit_hiring_drive",
+            "description": (
+                "공채·시즌 채용 기간을 artifact 로 등록한다 (스케쥴러가 D-7/3/1/0 리마인드 자동 발사). "
+                "반드시 시작일·종료일·모집 인원이 확정된 경우에만 호출."
+            ),
+            "handler": run_hiring_drive,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":           {"type": "string", "description": "채용 기간 이름 (예: '2026년 상반기 공채')"},
+                    "start_date":      {"type": "string", "description": "시작일 YYYY-MM-DD"},
+                    "end_date":        {"type": "string", "description": "종료일 YYYY-MM-DD"},
+                    "headcount":       {"type": "integer"},
+                    "target_position": {"type": "string", "description": "대상 직종(선택)"},
+                },
+                "required": ["title", "start_date", "end_date", "headcount"],
+            },
+        },
+        {
+            "name": "recruit_checklist_guide",
+            "description": "채용 관련 체크리스트 또는 가이드 문서를 작성한다.",
+            "handler": run_checklist_guide,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "예: '첫 직원 온보딩', '근로계약서 체크리스트'"},
+                    "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
+                },
+                "required": ["topic"],
+            },
+        },
+    ]
+
+    # 포스터 capability 는 최근 posting_set 이 있을 때만 노출
+    if _find_recent_posting_set(account_id):
+        caps.append({
+            "name": "recruit_posting_poster",
+            "description": (
+                "가장 최근 작성된 채용공고 세트를 근거로 GPT-4o 로 standalone HTML 포스터 1장을 생성한다. "
+                "사용자가 '이미지/포스터/배너/썸네일' 을 요청할 때만 호출."
+            ),
+            "handler": run_posting_poster,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "platform": {"type": "string", "enum": list(VALID_PLATFORMS), "default": "karrot"},
+                    "style":    {"type": "string", "description": "자유 디자인 지시 (예: '따뜻한 브라운 톤, 미니멀')"},
+                },
+            },
+        })
+
+    return caps
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 메인 run (legacy fallback 겸 capability wrapper 타겟)
+# ──────────────────────────────────────────────────────────────────────────
 async def run(
     message: str,
     account_id: str,
@@ -65,7 +657,33 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
-    system = SYSTEM_PROMPT + "\n\n" + today_context()
+    # 1. 의도 휴리스틱
+    type_guess, cat_hint = detect_recruit_intent(message)
+    if not type_guess:
+        for h in reversed(history[-6:]):
+            if h.get("role") == "user":
+                t2, c2 = detect_recruit_intent(h.get("content") or "")
+                if t2:
+                    type_guess = t2
+                    cat_hint = cat_hint or c2
+                    break
+
+    # 업종: profile 우선 → 메시지 힌트 fallback
+    business_type = _get_business_type(account_id)
+    if not business_type and cat_hint:
+        business_type = cat_hint
+
+    want_posting = type_guess in ("job_posting", "job_posting_set")
+    want_image = wants_posting_poster(message)
+
+    recruit_ctx = build_recruit_context(
+        business_type=business_type,
+        want_job_posting=want_posting,
+        want_image=want_image,
+    )
+
+    system = SYSTEM_PROMPT_BASE + "\n\n" + today_context() + "\n\n" + recruit_ctx
+
     hubs = list_sub_hub_titles(account_id, "recruitment")
     if hubs:
         system += "\n\n[이 계정의 recruitment 서브허브]\n- " + "\n- ".join(hubs)
@@ -84,12 +702,21 @@ async def run(
             {"role": "user", "content": message},
         ],
     )
-    reply = resp.choices[0].message.content
+    reply = resp.choices[0].message.content or ""
+
+    # 2. 3종 공고 마커 → 세트 + 3개 자식 저장
+    reply = await _maybe_dispatch_posting_set(account_id, reply)
+
+    # 3. 포스터 마커 → GPT-4o 로 HTML 포스터 생성 + Storage(html) + artifact 저장
+    reply = await _maybe_dispatch_poster(account_id, reply)
+
+    # 4. 일반 [ARTIFACT] (interview_questions / hiring_drive / checklist / guide / 단일 job_posting)
     await save_artifact_from_reply(
         account_id,
         "recruitment",
         reply,
         default_title="채용 자료",
-        valid_types=VALID_TYPES,
+        valid_types=_GENERIC_VALID_TYPES,
+        extra_meta_keys=("due_label",),
     )
     return reply
