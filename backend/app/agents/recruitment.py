@@ -30,6 +30,7 @@ from app.agents._artifact import (
     list_sub_hub_titles,
     pick_sub_hub_id,
     today_context,
+    record_artifact_for_focus,
 )
 from app.agents._recruit_templates import (
     CATEGORY_CHOICES,
@@ -55,6 +56,9 @@ _GENERIC_VALID_TYPES: tuple[str, ...] = (
     "checklist",
     "guide",
     "hiring_drive",
+    "onboarding_checklist",
+    "onboarding_plan",
+    "education_material",
 )
 
 _JOB_POSTINGS_RE = re.compile(r"\[JOB_POSTINGS\](.*?)\[/JOB_POSTINGS\]", re.DOTALL)
@@ -117,6 +121,24 @@ style:    따뜻한 브라운 톤의 카페 분위기, 미니멀 타이포
 이 마커는 시스템이 GPT-4o 로 standalone HTML 포스터를 생성 후 `job_posting_poster` artifact 로 저장합니다.
 에이전트가 HTML 코드를 직접 출력하지 마세요. 본문에선 "포스터를 만들고 있어요" 한 줄만.
 포스터 마커를 넣는 턴엔 [ARTIFACT] / [JOB_POSTINGS] 를 함께 넣지 마세요.
+
+[온보딩 자료 생성]
+신규 입사자 온보딩 요청 시 아래 3종 중 하나로 저장하세요. 사용자 발화에서 타입을 자동 감지하고,
+불명확하면 [CHOICES] 로 먼저 물어보세요.
+
+- onboarding_checklist: 입사 전·당일·첫 주 단계별 체크리스트
+- onboarding_plan: 수습 기간 일자별/주별 온보딩 플랜
+- education_material: 업무 교육 자료 (매뉴얼·가이드·SOP)
+
+타입 감지 힌트:
+- "체크리스트/할 일 목록/준비사항" → onboarding_checklist
+- "계획/플랜/일정/단계" → onboarding_plan
+- "교육/매뉴얼/가이드/SOP/자료" → education_material
+
+[ARTIFACT] 블록 규약 (온보딩):
+- sub_domain: Onboarding  ← 반드시 포함
+- type: onboarding_checklist | onboarding_plan | education_material 중 하나
+- 업종과 직책을 반영한 실용적 내용 (일반적 항목 + 업종 특화 항목 포함)
 
 """ + ARTIFACT_RULE + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
@@ -230,6 +252,7 @@ async def _save_posting_set(account_id: str, parsed: dict) -> str | None:
         if not res.data:
             return None
         parent_id = res.data[0]["id"]
+        record_artifact_for_focus(parent_id)
     except Exception as exc:
         log.exception("posting_set parent insert failed: %s", exc)
         return None
@@ -547,6 +570,45 @@ async def run_checklist_guide(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+_ONBOARDING_TYPE_LABELS = {
+    "onboarding_checklist": "온보딩 체크리스트",
+    "onboarding_plan":      "온보딩 플랜",
+    "education_material":   "교육 자료",
+}
+
+
+async def run_onboarding(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    position: str,
+    onboarding_type: str | None = None,
+) -> str:
+    """신규 입사자 온보딩 자료 생성 (체크리스트 / 플랜 / 교육자료)."""
+    business_type = _get_business_type(account_id) or "소상공인"
+
+    if onboarding_type and onboarding_type in _ONBOARDING_TYPE_LABELS:
+        label = _ONBOARDING_TYPE_LABELS[onboarding_type]
+        synthetic = (
+            f"업종 '{business_type}', 직책 '{position}' 신규 입사자를 위한 {label}을 작성해주세요.\n"
+            f"[ARTIFACT] 블록의 type={onboarding_type}, sub_domain=Onboarding 으로 저장.\n"
+            "업종 특화 항목을 포함한 실용적 내용으로 작성하세요.\n\n"
+            f"원본 사용자 요청: {message}"
+        )
+    else:
+        # 타입 불명확 → LLM이 감지하거나 [CHOICES] 출력
+        synthetic = (
+            f"업종 '{business_type}', 직책 '{position}' 신규 입사자를 위한 온보딩 자료를 요청합니다.\n"
+            "사용자 발화에서 원하는 자료 타입(체크리스트/플랜/교육자료)을 감지하세요.\n"
+            "불명확하면 [CHOICES] 로 먼저 물어보고, 명확하면 바로 [ARTIFACT] 블록(sub_domain=Onboarding)으로 저장하세요.\n\n"
+            f"원본 사용자 요청: {message}"
+        )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
 def describe(account_id: str) -> list[dict]:
     """OpenAI tools 스펙용 capability 매니페스트."""
     caps: list[dict] = [
@@ -618,10 +680,34 @@ def describe(account_id: str) -> list[dict]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "예: '첫 직원 온보딩', '근로계약서 체크리스트'"},
+                    "topic": {"type": "string", "description": "예: '근로계약서 체크리스트'"},
                     "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
                 },
                 "required": ["topic"],
+            },
+        },
+        {
+            "name": "recruit_onboarding",
+            "description": (
+                "신규 입사자 온보딩 자료를 생성한다. "
+                "체크리스트(입사 단계별 할 일) / 플랜(수습 기간 일정) / 교육자료(매뉴얼·SOP) 중 "
+                "사용자 요청에 맞는 타입으로 저장. Onboarding 서브허브에 자동 분류."
+            ),
+            "handler": run_onboarding,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "position": {
+                        "type": "string",
+                        "description": "직책 또는 직종 (예: 바리스타, 홀서빙, 주방장)",
+                    },
+                    "onboarding_type": {
+                        "type": "string",
+                        "enum": ["onboarding_checklist", "onboarding_plan", "education_material"],
+                        "description": "자료 타입. 불명확하면 생략 — 에이전트가 감지하거나 [CHOICES] 로 확인.",
+                    },
+                },
+                "required": ["position"],
             },
         },
     ]

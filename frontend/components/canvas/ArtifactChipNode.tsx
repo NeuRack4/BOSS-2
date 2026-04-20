@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Handle, Position, NodeProps, useStoreApi } from "@xyflow/react";
+import { Handle, Position, NodeProps } from "@xyflow/react";
 import {
-  ChevronDown,
   Clock,
   Play,
   FileText,
@@ -118,16 +117,7 @@ const DOMAIN_COLOR: Record<
   },
 };
 
-const ZOOM_FOCUS_THRESHOLD = 0.7;
-
 export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
-  const store = useStoreApi();
-  const [expanded, setExpanded] = useState(false);
-  const toggleExpand = () => {
-    const zoom = store.getState().transform[2];
-    if (zoom < ZOOM_FOCUS_THRESHOLD) return;
-    setExpanded((v) => !v);
-  };
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localStatus, setLocalStatus] = useState<Status | null>(null);
@@ -309,59 +299,6 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
 
   const shortTitle = title.replace(/^\[MOCK\]\s*/, "").trim() || title;
 
-  const detailPanel = expanded ? (
-    <div className="absolute left-1/2 top-full z-40 mt-2 w-[220px] -translate-x-1/2 space-y-1.5 rounded-md border border-[#ddd0b4] bg-[#fffaf2]/97 px-2.5 py-2 shadow-xl">
-      <p className="text-[13px] font-semibold leading-tight text-[#2e2719]">
-        {shortTitle}
-      </p>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge
-          variant="outline"
-          className="rounded-full border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0 text-[11px] uppercase tracking-[0.15em] text-[#8c7e66]"
-        >
-          {KIND_BADGE[kind]}
-        </Badge>
-        {isCross &&
-          domains.map((d) => (
-            <span
-              key={d}
-              className="rounded-full px-1.5 py-0 text-[11px] font-mono uppercase tracking-wider"
-              style={{
-                color: DOMAIN_COLOR[d].hex,
-                border: `1px solid ${DOMAIN_COLOR[d].hex}66`,
-                background: `${DOMAIN_COLOR[d].hex}14`,
-              }}
-            >
-              {d}
-            </span>
-          ))}
-        {!isCross && type && (
-          <span className="font-mono text-[11px] uppercase tracking-wider text-[#8c7e66]">
-            {type}
-          </span>
-        )}
-      </div>
-      {cron && (
-        <p className="font-mono text-[12px] text-[#8c7e66]">
-          cron: <span className="text-[#2e2719]">{cron}</span>
-          {nextRun && (
-            <span className="text-[#8c7e66]"> · next: {nextRun}</span>
-          )}
-        </p>
-      )}
-      {executedAt && (
-        <p className="font-mono text-[12px] text-[#8c7e66]">
-          executed: <span className="text-[#2e2719]">{executedAt}</span>
-        </p>
-      )}
-      {content && (
-        <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[#5a5040]">
-          {content}
-        </p>
-      )}
-    </div>
-  ) : null;
-
   const evalPopover = popoverOpen ? (
     <div
       className="nodrag absolute left-1/2 top-full z-50 mt-1 w-[220px] -translate-x-1/2 space-y-2 rounded-lg border border-[#ddd0b4] bg-[#fffaf2] p-2.5 shadow-xl"
@@ -443,18 +380,7 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
       role="article"
       aria-label={`${kind}: ${title}`}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={toggleExpand}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleExpand();
-          }
-        }}
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#ebe0ca]/60"
-      >
+      <div className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#ebe0ca]/60">
         <div
           className={cn(
             "h-[8px] w-[8px] shrink-0 rounded-full",
@@ -503,12 +429,6 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         >
           {rateButtonIcon}
         </div>
-        <ChevronDown
-          className={cn(
-            "h-[14px] w-[14px] shrink-0 text-[#8c7e66] transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
       </div>
 
       {/* Schedule status — integrated 2nd row */}
@@ -539,7 +459,6 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         </div>
       )}
 
-      {detailPanel}
       {evalPopover}
 
       <Handle

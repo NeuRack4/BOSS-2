@@ -11,10 +11,31 @@
 
 도메인별 확장 키는 에이전트가 `extra_meta_keys` 로 주입 (예: documents 의 contract_subtype).
 """
+import contextvars
 import re
 from datetime import date
 
 from app.core.supabase import get_supabase
+
+# 요청 단위(async task)로 가장 먼저 저장된 artifact_id를 추적.
+# 채팅 응답 후 캔버스 포커스 이동에 사용.
+_focus_artifact_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_focus_artifact_id", default=None
+)
+
+
+def record_artifact_for_focus(artifact_id: str) -> None:
+    """저장된 artifact_id를 포커스 대상으로 등록. 첫 번째 저장만 기록(부모 우선)."""
+    if _focus_artifact_id.get() is None:
+        _focus_artifact_id.set(artifact_id)
+
+
+def get_focus_artifact_id() -> str | None:
+    return _focus_artifact_id.get()
+
+
+def clear_focus_artifact_id() -> None:
+    _focus_artifact_id.set(None)
 
 _ARTIFACT_BLOCK_RE = re.compile(r"\[ARTIFACT\](.*?)\[/ARTIFACT\]", re.DOTALL)
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -174,6 +195,7 @@ async def save_artifact_from_reply(
     valid_types: tuple[str, ...],
     extra_meta_keys: tuple[str, ...] = (),
     subtype_whitelist: dict[str, tuple[str, ...]] | None = None,
+    type_to_subhub: dict[str, str] | None = None,
 ) -> str | None:
     if "[ARTIFACT]" not in reply:
         return None
@@ -223,10 +245,14 @@ async def save_artifact_from_reply(
         if not result.data:
             return None
         artifact_id = result.data[0]["id"]
+        record_artifact_for_focus(artifact_id)
 
         # 서브허브 지정 → 정확히 매칭. 없으면 도메인 메인 허브로 폴백.
         # 어떤 경우든 contains 엣지를 반드시 생성해 캔버스에 위치가 잡히도록 한다.
         sub_domain_name = (parsed.get("sub_domain") or "").strip()
+        # LLM이 sub_domain을 빠뜨렸으면 type_to_subhub 매핑으로 보완
+        if not sub_domain_name and type_to_subhub:
+            sub_domain_name = type_to_subhub.get(artifact_type, "")
         hub_id: str | None = None
         if sub_domain_name:
             hub_id = _find_sub_hub_id(sb, account_id, domain, sub_domain_name)

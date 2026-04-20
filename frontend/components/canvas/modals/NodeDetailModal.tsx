@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { createClient } from "@/lib/supabase/client";
 
 type Domain = "recruitment" | "marketing" | "sales" | "documents";
@@ -309,362 +310,371 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
       title={cleanTitle(node.title)}
       widthClass="w-[820px]"
     >
-      <div className="flex items-center gap-1.5 border-b border-[#ddd0b4] pb-2 mb-3">
-        <span className="rounded-sm border border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
-          {node.kind}
-        </span>
-        {node.type && (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-1.5 border-b border-[#ddd0b4] pb-2 mb-3">
+          <span className="rounded-sm border border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
+            {node.kind}
+          </span>
+          {node.type && (
+            <span className="rounded-sm border border-[#ddd0b4] bg-[#f2e9d5] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
+              {node.type}
+            </span>
+          )}
           <span className="rounded-sm border border-[#ddd0b4] bg-[#f2e9d5] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
-            {node.type}
+            {node.status}
           </span>
-        )}
-        <span className="rounded-sm border border-[#ddd0b4] bg-[#f2e9d5] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
-          {node.status}
-        </span>
-        {node.domains?.map((d) => (
-          <span
-            key={d}
-            className="rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
-            style={{
-              color: DOMAIN_HEX[d],
-              border: `1px solid ${DOMAIN_HEX[d]}66`,
-              background: `${DOMAIN_HEX[d]}14`,
-            }}
-          >
-            {d}
+          {node.domains?.map((d) => (
+            <span
+              key={d}
+              className="rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
+              style={{
+                color: DOMAIN_HEX[d],
+                border: `1px solid ${DOMAIN_HEX[d]}66`,
+                background: `${DOMAIN_HEX[d]}14`,
+              }}
+            >
+              {d}
+            </span>
+          ))}
+          <span className="ml-auto font-mono text-[10px] text-[#8c7e66]">
+            {formatDate(node.created_at)}
           </span>
-        ))}
-        <span className="ml-auto font-mono text-[10px] text-[#8c7e66]">
-          {formatDate(node.created_at)}
-        </span>
-      </div>
+        </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
-        <ScrollArea className="max-h-[520px] min-w-0 pr-2">
-          <div className="min-w-0 space-y-3">
-            {node.content ? (
-              node.type === "job_posting_poster" ? (
-                <Section label="Poster">
-                  <PosterPreview
-                    html={node.content}
-                    publicUrl={
-                      typeof node.metadata?.public_url === "string"
-                        ? (node.metadata.public_url as string)
-                        : undefined
-                    }
-                    filename={
-                      typeof node.metadata?.storage_path === "string"
-                        ? ((node.metadata.storage_path as string)
-                            .split("/")
-                            .pop() ?? "poster.html")
-                        : "poster.html"
-                    }
-                  />
-                </Section>
-              ) : (
-                <Section label="Content">
-                  <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2 text-[12px] leading-relaxed text-[#2e2719]">
-                    {node.content}
-                  </pre>
-                </Section>
-              )
-            ) : null}
+        <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4 min-h-0 flex-1">
+          <ScrollArea className="h-full min-h-0 min-w-0 pr-2">
+            <div className="min-w-0 space-y-3">
+              {node.content ? (
+                node.type === "job_posting_poster" ? (
+                  <Section label="Poster">
+                    <PosterPreview
+                      html={node.content}
+                      publicUrl={
+                        typeof node.metadata?.public_url === "string"
+                          ? (node.metadata.public_url as string)
+                          : undefined
+                      }
+                      filename={
+                        typeof node.metadata?.storage_path === "string"
+                          ? ((node.metadata.storage_path as string)
+                              .split("/")
+                              .pop() ?? "poster.html")
+                          : "poster.html"
+                      }
+                    />
+                  </Section>
+                ) : (
+                  <Section label="Content">
+                    <div className="min-w-0 rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2">
+                      <MarkdownMessage
+                        content={node.content}
+                        className="text-[12px]"
+                      />
+                    </div>
+                  </Section>
+                )
+              ) : null}
 
-            {node.subDomain && (
-              <Section label="Sub-domain">
-                <span className="inline-block max-w-full truncate rounded-full border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[#5a5040]">
-                  {cleanTitle(node.subDomain.title)}
-                </span>
+              {node.subDomain && (
+                <Section label="Sub-domain">
+                  <span className="inline-block max-w-full truncate rounded-full border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[#5a5040]">
+                    {cleanTitle(node.subDomain.title)}
+                  </span>
+                </Section>
+              )}
+
+              {node.metadata && Object.keys(node.metadata).length > 0 && (
+                <Section label="Metadata">
+                  <div className="space-y-0.5 rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2">
+                    {Object.entries(node.metadata).map(([k, v]) => (
+                      <div
+                        key={k}
+                        className="grid grid-cols-[100px_minmax(0,1fr)] gap-2 text-[11px]"
+                      >
+                        <span className="truncate font-mono text-[#8c7e66]">
+                          {k}
+                        </span>
+                        <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[#5a5040]">
+                          {formatValue(v)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {node.domains?.includes("marketing") &&
+                node.kind === "artifact" && (
+                  <Section label="Marketing Actions">
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleGenerateImage}
+                          disabled={imageGenerating}
+                          className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          {imageGenerating ? "생성 중…" : "이미지 생성"}
+                        </button>
+                        {node.type === "blog_post" && (
+                          <button
+                            type="button"
+                            onClick={handleNaverUpload}
+                            disabled={blogUploading}
+                            className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            {blogUploading
+                              ? "업로드 중…"
+                              : "네이버 블로그 업로드"}
+                          </button>
+                        )}
+                      </div>
+                      {generatedImageUrl && (
+                        <img
+                          src={generatedImageUrl}
+                          alt="generated"
+                          className="rounded-md border border-[#ddd0b4] max-w-full"
+                        />
+                      )}
+                      {blogResult && (
+                        <p className="text-[11px] text-[#5a5040]">
+                          {blogResult}
+                        </p>
+                      )}
+                    </div>
+                  </Section>
+                )}
+
+              {node.domains?.includes("sales") &&
+                node.kind === "artifact" &&
+                node.type === "revenue_entry" && (
+                  <Section label="Sales Records">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={salesDate}
+                          onChange={(e) => {
+                            setSalesDate(e.target.value);
+                            fetchSalesRecords(e.target.value);
+                          }}
+                          className="rounded border border-[#ddd0b4] bg-transparent px-2 py-1 font-mono text-[11px] text-[#5a5040] focus:border-[#bfae8a] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fetchSalesRecords(salesDate)}
+                          className="rounded border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4]"
+                        >
+                          새로고침
+                        </button>
+                      </div>
+
+                      {salesLoading ? (
+                        <p className="py-2 text-[11px] text-[#8c7e66]">
+                          불러오는 중…
+                        </p>
+                      ) : salesRecords.length === 0 ? (
+                        <p className="py-2 text-[11px] text-[#8c7e66]">
+                          {salesDate} 매출 기록이 없습니다.
+                        </p>
+                      ) : (
+                        <div className="overflow-hidden rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70">
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="border-b border-[#ddd0b4] text-left text-[#8c7e66]">
+                                <th className="px-2 py-1.5 font-medium">
+                                  상품
+                                </th>
+                                <th className="px-2 py-1.5 font-medium">
+                                  카테고리
+                                </th>
+                                <th className="px-2 py-1.5 text-right font-medium">
+                                  수량
+                                </th>
+                                <th className="px-2 py-1.5 text-right font-medium">
+                                  금액
+                                </th>
+                                <th className="w-6 px-1" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {salesRecords.map((r) => (
+                                <tr
+                                  key={r.id}
+                                  className="border-b border-[#ddd0b4]/50 last:border-0"
+                                >
+                                  <td className="px-2 py-1.5 text-[#2e2719]">
+                                    {r.item_name}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-[#5a5040]">
+                                    {r.category}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-[#2e2719]">
+                                    {r.quantity}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-[#2e2719]">
+                                    {r.amount.toLocaleString()}원
+                                  </td>
+                                  <td className="px-1 py-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteRecord(r.id)}
+                                      disabled={deletingRecord === r.id}
+                                      className="rounded p-0.5 text-[#bfae8a] hover:bg-[#ebe0ca] hover:text-[#c47865] disabled:opacity-40"
+                                      aria-label="삭제"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#ddd0b4]">
+                                <td
+                                  colSpan={3}
+                                  className="px-2 py-1.5 text-right text-[10px] font-semibold text-[#2e2719]"
+                                >
+                                  합계
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-[11px] font-bold text-[#2e2719]">
+                                  {salesRecords
+                                    .reduce((s, r) => s + r.amount, 0)
+                                    .toLocaleString()}
+                                  원
+                                </td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </Section>
+                )}
+
+              <RelativesBlock label="Parents" list={node.parents} />
+              <RelativesBlock label="Children" list={node.children} />
+
+              <Section label="ID">
+                <p className="break-all font-mono text-[10px] text-[#8c7e66]">
+                  {node.id}
+                </p>
               </Section>
-            )}
+            </div>
+          </ScrollArea>
 
-            {node.metadata && Object.keys(node.metadata).length > 0 && (
-              <Section label="Metadata">
-                <div className="space-y-0.5 rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70 px-3 py-2">
-                  {Object.entries(node.metadata).map(([k, v]) => (
+          <div className="flex flex-col border-l border-[#ddd0b4] pl-4">
+            <p className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#8c7e66]">
+              Memo ({memos.length})
+            </p>
+            <div className="mb-2">
+              <textarea
+                ref={draftRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="이 노드에 대한 메모를 남겨보세요. (검색/대화 컨텍스트에 반영됨)"
+                className="w-full min-h-[72px] resize-none rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-2 py-1.5 text-[12px] text-[#2e2719] placeholder-[#8c7e66]/60 focus:border-[#bfae8a] focus:outline-none"
+              />
+              <div className="mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={submitting || !draft.trim() || !accountId}
+                  className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
+                >
+                  {submitting ? "저장 중…" : "메모 추가"}
+                </button>
+              </div>
+            </div>
+
+            <ScrollArea className="flex-1 max-h-[420px] pr-1">
+              {loading ? (
+                <p className="py-4 text-center text-[11px] text-[#8c7e66]">
+                  불러오는 중…
+                </p>
+              ) : memos.length === 0 ? (
+                <p className="py-4 text-center text-[11px] text-[#8c7e66]">
+                  아직 메모가 없습니다.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {memos.map((m) => (
                     <div
-                      key={k}
-                      className="grid grid-cols-[100px_minmax(0,1fr)] gap-2 text-[11px]"
+                      key={m.id}
+                      className="rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-2.5 py-2"
                     >
-                      <span className="truncate font-mono text-[#8c7e66]">
-                        {k}
-                      </span>
-                      <pre className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[#5a5040]">
-                        {formatValue(v)}
-                      </pre>
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="font-mono text-[9px] text-[#8c7e66]">
+                          {formatDate(m.updated_at || m.created_at)}
+                        </span>
+                        <div className="flex gap-0.5">
+                          {editing === m.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdate(m.id)}
+                                className="rounded p-0.5 text-[#7f8f54] hover:bg-[#ebe0ca]"
+                                aria-label="save"
+                              >
+                                <Check className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditing(null);
+                                  setEditDraft("");
+                                }}
+                                className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca]"
+                                aria-label="cancel"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditing(m.id);
+                                  setEditDraft(m.content);
+                                }}
+                                className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                                aria-label="edit"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(m.id)}
+                                className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#c47865]"
+                                aria-label="delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {editing === m.id ? (
+                        <textarea
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          className="w-full min-h-[60px] resize-none rounded border border-[#ddd0b4] bg-[#fffaf2] px-2 py-1 text-[12px] text-[#2e2719] focus:border-[#bfae8a] focus:outline-none"
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[#2e2719]">
+                          {m.content}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
-              </Section>
-            )}
-
-            {node.domains?.includes("marketing") &&
-              node.kind === "artifact" && (
-                <Section label="Marketing Actions">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleGenerateImage}
-                        disabled={imageGenerating}
-                        className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        {imageGenerating ? "생성 중…" : "이미지 생성"}
-                      </button>
-                      {node.type === "blog_post" && (
-                        <button
-                          type="button"
-                          onClick={handleNaverUpload}
-                          disabled={blogUploading}
-                          className="flex items-center gap-1.5 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1.5 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          {blogUploading
-                            ? "업로드 중…"
-                            : "네이버 블로그 업로드"}
-                        </button>
-                      )}
-                    </div>
-                    {generatedImageUrl && (
-                      <img
-                        src={generatedImageUrl}
-                        alt="generated"
-                        className="rounded-md border border-[#ddd0b4] max-w-full"
-                      />
-                    )}
-                    {blogResult && (
-                      <p className="text-[11px] text-[#5a5040]">{blogResult}</p>
-                    )}
-                  </div>
-                </Section>
               )}
-
-            {node.domains?.includes("sales") &&
-              node.kind === "artifact" &&
-              node.type === "revenue_entry" && (
-                <Section label="Sales Records">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="date"
-                        value={salesDate}
-                        onChange={(e) => {
-                          setSalesDate(e.target.value);
-                          fetchSalesRecords(e.target.value);
-                        }}
-                        className="rounded border border-[#ddd0b4] bg-transparent px-2 py-1 font-mono text-[11px] text-[#5a5040] focus:border-[#bfae8a] focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fetchSalesRecords(salesDate)}
-                        className="rounded border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4]"
-                      >
-                        새로고침
-                      </button>
-                    </div>
-
-                    {salesLoading ? (
-                      <p className="py-2 text-[11px] text-[#8c7e66]">
-                        불러오는 중…
-                      </p>
-                    ) : salesRecords.length === 0 ? (
-                      <p className="py-2 text-[11px] text-[#8c7e66]">
-                        {salesDate} 매출 기록이 없습니다.
-                      </p>
-                    ) : (
-                      <div className="overflow-hidden rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70">
-                        <table className="w-full text-[11px]">
-                          <thead>
-                            <tr className="border-b border-[#ddd0b4] text-left text-[#8c7e66]">
-                              <th className="px-2 py-1.5 font-medium">상품</th>
-                              <th className="px-2 py-1.5 font-medium">
-                                카테고리
-                              </th>
-                              <th className="px-2 py-1.5 text-right font-medium">
-                                수량
-                              </th>
-                              <th className="px-2 py-1.5 text-right font-medium">
-                                금액
-                              </th>
-                              <th className="w-6 px-1" />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {salesRecords.map((r) => (
-                              <tr
-                                key={r.id}
-                                className="border-b border-[#ddd0b4]/50 last:border-0"
-                              >
-                                <td className="px-2 py-1.5 text-[#2e2719]">
-                                  {r.item_name}
-                                </td>
-                                <td className="px-2 py-1.5 text-[#5a5040]">
-                                  {r.category}
-                                </td>
-                                <td className="px-2 py-1.5 text-right text-[#2e2719]">
-                                  {r.quantity}
-                                </td>
-                                <td className="px-2 py-1.5 text-right text-[#2e2719]">
-                                  {r.amount.toLocaleString()}원
-                                </td>
-                                <td className="px-1 py-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteRecord(r.id)}
-                                    disabled={deletingRecord === r.id}
-                                    className="rounded p-0.5 text-[#bfae8a] hover:bg-[#ebe0ca] hover:text-[#c47865] disabled:opacity-40"
-                                    aria-label="삭제"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t border-[#ddd0b4]">
-                              <td
-                                colSpan={3}
-                                className="px-2 py-1.5 text-right text-[10px] font-semibold text-[#2e2719]"
-                              >
-                                합계
-                              </td>
-                              <td className="px-2 py-1.5 text-right text-[11px] font-bold text-[#2e2719]">
-                                {salesRecords
-                                  .reduce((s, r) => s + r.amount, 0)
-                                  .toLocaleString()}
-                                원
-                              </td>
-                              <td />
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </Section>
-              )}
-
-            <RelativesBlock label="Parents" list={node.parents} />
-            <RelativesBlock label="Children" list={node.children} />
-
-            <Section label="ID">
-              <p className="break-all font-mono text-[10px] text-[#8c7e66]">
-                {node.id}
-              </p>
-            </Section>
+            </ScrollArea>
           </div>
-        </ScrollArea>
-
-        <div className="flex flex-col border-l border-[#ddd0b4] pl-4">
-          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#8c7e66]">
-            Memo ({memos.length})
-          </p>
-          <div className="mb-2">
-            <textarea
-              ref={draftRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="이 노드에 대한 메모를 남겨보세요. (검색/대화 컨텍스트에 반영됨)"
-              className="w-full min-h-[72px] resize-none rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-2 py-1.5 text-[12px] text-[#2e2719] placeholder-[#8c7e66]/60 focus:border-[#bfae8a] focus:outline-none"
-            />
-            <div className="mt-1 flex justify-end">
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={submitting || !draft.trim() || !accountId}
-                className="rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2.5 py-1 text-[11px] text-[#2e2719] hover:bg-[#ddd0b4] disabled:opacity-40"
-              >
-                {submitting ? "저장 중…" : "메모 추가"}
-              </button>
-            </div>
-          </div>
-
-          <ScrollArea className="flex-1 max-h-[420px] pr-1">
-            {loading ? (
-              <p className="py-4 text-center text-[11px] text-[#8c7e66]">
-                불러오는 중…
-              </p>
-            ) : memos.length === 0 ? (
-              <p className="py-4 text-center text-[11px] text-[#8c7e66]">
-                아직 메모가 없습니다.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {memos.map((m) => (
-                  <div
-                    key={m.id}
-                    className="rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-2.5 py-2"
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="font-mono text-[9px] text-[#8c7e66]">
-                        {formatDate(m.updated_at || m.created_at)}
-                      </span>
-                      <div className="flex gap-0.5">
-                        {editing === m.id ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdate(m.id)}
-                              className="rounded p-0.5 text-[#7f8f54] hover:bg-[#ebe0ca]"
-                              aria-label="save"
-                            >
-                              <Check className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditing(null);
-                                setEditDraft("");
-                              }}
-                              className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca]"
-                              aria-label="cancel"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditing(m.id);
-                                setEditDraft(m.content);
-                              }}
-                              className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-                              aria-label="edit"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(m.id)}
-                              className="rounded p-0.5 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#c47865]"
-                              aria-label="delete"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {editing === m.id ? (
-                      <textarea
-                        value={editDraft}
-                        onChange={(e) => setEditDraft(e.target.value)}
-                        className="w-full min-h-[60px] resize-none rounded border border-[#ddd0b4] bg-[#fffaf2] px-2 py-1 text-[12px] text-[#2e2719] focus:border-[#bfae8a] focus:outline-none"
-                      />
-                    ) : (
-                      <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[#2e2719]">
-                        {m.content}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
         </div>
       </div>
     </Modal>

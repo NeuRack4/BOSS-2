@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from app.agents._artifact import pick_documents_parent, pick_sub_hub_id, today_context
+from app.agents._artifact import pick_documents_parent, pick_sub_hub_id, today_context, record_artifact_for_focus
 from app.core.embedder import embed_text
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
@@ -500,6 +500,7 @@ async def _save_legal_advice(
     if not ins.data:
         return None
     artifact_id = ins.data[0]["id"]
+    record_artifact_for_focus(artifact_id)
 
     # Legal 서브허브 우선 연결. 없으면 documents 메인허브 fallback.
     parent_id = pick_sub_hub_id(sb, account_id, "documents", prefer_keywords=("legal",))
