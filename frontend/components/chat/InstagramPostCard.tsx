@@ -8,10 +8,15 @@ import {
   Send,
   Bookmark,
   MoreHorizontal,
+  Upload,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import { createClient } from "@/lib/supabase/client";
 
 export type InstagramPayload = {
   title: string;
@@ -55,6 +60,8 @@ export const extractInstagramPayload = (
   return { cleaned: text.replace(_IG_POST_RE, "").trimEnd(), payload };
 };
 
+type PublishState = "idle" | "uploading" | "done" | "error";
+
 export const InstagramPostCard = ({
   payload,
 }: {
@@ -63,6 +70,41 @@ export const InstagramPostCard = ({
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [publishState, setPublishState] = useState<PublishState>("idle");
+  const [publishUrl, setPublishUrl] = useState("");
+  const [publishError, setPublishError] = useState("");
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL;
+
+  const handlePublish = async () => {
+    if (publishState === "uploading") return;
+    setPublishState("uploading");
+    setPublishError("");
+
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      const accountId = data.user?.id ?? "";
+
+      const res = await fetch(`${apiBase}/api/marketing/instagram/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: accountId,
+          image_url: payload.image_url,
+          caption: payload.caption,
+          hashtags: payload.hashtags,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "게시 실패");
+      setPublishUrl(json.post_url);
+      setPublishState("done");
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : "게시 실패");
+      setPublishState("error");
+    }
+  };
 
   const caption = payload.caption || "";
   const hashtags = payload.hashtags || [];
@@ -183,6 +225,59 @@ export const InstagramPostCard = ({
           {payload.best_time}
         </div>
       )}
+
+      {/* 피드에 게시 버튼 */}
+      <div className="border-t border-[#f0ece4] px-3 py-2.5">
+        {publishState === "done" ? (
+          <div className="flex items-center gap-1.5 text-[12px] text-[#3b6a4a]">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>게시 완료!</span>
+            {publishUrl && (
+              <a
+                href={publishUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-[#3b7aba] underline"
+              >
+                보기
+              </a>
+            )}
+          </div>
+        ) : publishState === "error" ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[12px] text-[#8a3a28]">
+              <XCircle className="h-4 w-4 shrink-0" />
+              <span className="truncate">{publishError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handlePublish}
+              className="w-full rounded-lg border border-[#ddd0b4] py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handlePublish}
+            disabled={publishState === "uploading"}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#bc1888] py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {publishState === "uploading" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                게시 중...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                인스타그램에 게시
+              </>
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     naver_blog_id: str = ""
     naver_blog_pw: str = ""
 
+    # Meta / Instagram (optional)
+    meta_access_token: str = ""   # 장기 액세스 토큰 (60일)
+    instagram_user_id: str = ""   # Instagram 비즈니스 계정 숫자 ID
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축

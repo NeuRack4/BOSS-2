@@ -743,6 +743,18 @@ async def run(
     )
     reply = resp.choices[0].message.content
 
+    # ── 디버그 로그 (artifact 저장 여부 추적) ──────────────────────────────
+    import logging as _logging
+    _log = _logging.getLogger("boss.marketing")
+    _log.info(
+        "[marketing.run] account=%s | has_ARTIFACT=%s | has_CHOICES=%s | preview=%s",
+        account_id,
+        "[ARTIFACT]" in reply,
+        "[CHOICES]" in reply,
+        reply[:120].replace("\n", " "),
+    )
+    # ────────────────────────────────────────────────────────────────────────
+
     # [NAVER_UPLOAD] 마커 감지 → 업로드 실행 후 마커를 결과 메시지로 교체
     wants_naver_upload = bool(_NAVER_UPLOAD_RE.search(reply))
     reply = _NAVER_UPLOAD_RE.sub("", reply).rstrip()

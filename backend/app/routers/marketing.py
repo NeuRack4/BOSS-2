@@ -206,6 +206,49 @@ async def analyze_review_image(file: UploadFile = File(...)):
     )
 
 
+# ── 인스타그램 자동 게시 ──────────────────────────────────────────────────────
+
+class InstagramPublishRequest(BaseModel):
+    account_id: str
+    image_url: str
+    caption: str
+    hashtags: list[str] = []
+
+
+class InstagramPublishResponse(BaseModel):
+    success: bool
+    post_url: str = ""
+    error: str = ""
+
+
+@router.post("/instagram/publish", response_model=InstagramPublishResponse)
+async def publish_instagram(req: InstagramPublishRequest):
+    """
+    인스타그램 비즈니스 계정에 이미지 피드 게시.
+    META_ACCESS_TOKEN / INSTAGRAM_USER_ID 환경변수 필요.
+    """
+    from app.core.config import settings
+
+    if not settings.meta_access_token or not settings.instagram_user_id:
+        raise HTTPException(
+            status_code=503,
+            detail="META_ACCESS_TOKEN / INSTAGRAM_USER_ID 환경변수가 설정되지 않았습니다.",
+        )
+
+    try:
+        from app.services.instagram import publish_post
+        post_url = await publish_post(
+            account_id=req.account_id,
+            image_url=req.image_url,
+            caption=req.caption,
+            hashtags=req.hashtags,
+        )
+        return InstagramPublishResponse(success=True, post_url=post_url)
+    except Exception as e:
+        log.exception("instagram publish failed")
+        return InstagramPublishResponse(success=False, error=str(e)[:300])
+
+
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────
 
 @router.get("/subsidies")
