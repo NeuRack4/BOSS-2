@@ -115,7 +115,11 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 
 
 def _find_recent_uploaded_doc(account_id: str) -> dict | None:
-    """최근 60분 이내 업로드된 uploaded_doc artifact 1개 반환 (가장 최신)."""
+    """최근 60분 이내 업로드된 uploaded_doc 중 **documents 카테고리 + 충돌 없음** 인 것만 1개 반환.
+
+    - 영수증/세금계산서/신분증/기타는 컨텍스트에 자동 노출하지 않음 → 공정성 분석 플로우 진입 방지.
+    - needs_confirmation=true (자동 vs 유저 선언 충돌 미해결) 인 건 건너뜀.
+    """
     sb = get_supabase()
     since_iso = (datetime.now(timezone.utc) - timedelta(minutes=_UPLOADED_DOC_WINDOW_MIN)).isoformat()
     rows = (
@@ -126,12 +130,21 @@ def _find_recent_uploaded_doc(account_id: str) -> dict | None:
         .eq("type", "uploaded_doc")
         .gte("created_at", since_iso)
         .order("created_at", desc=True)
-        .limit(1)
+        .limit(5)
         .execute()
         .data
         or []
     )
-    return rows[0] if rows else None
+    for row in rows:
+        meta = row.get("metadata") or {}
+        if meta.get("needs_confirmation"):
+            continue
+        classification = meta.get("classification") or {}
+        category = classification.get("category")
+        # classification 메타가 없는 예전 업로드(v1.2 이전)는 관대하게 documents 로 간주
+        if category is None or category == "documents":
+            return row
+    return None
 
 
 def _find_recent_analysis_for(account_id: str, doc_id: str) -> dict | None:
