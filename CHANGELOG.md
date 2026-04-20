@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature/sales-agent
+
+### Added — Sales 도메인 MVP: 텍스트 입력 → 파싱 → 저장 → 캔버스 반영
+
+**`supabase/migrations/021_sales_records.sql`** _(원래 018 이었으나 legal_knowledge 와 번호 충돌로 rename)_
+
+- `sales_records` 테이블 — `account_id, item_name, category, quantity, unit_price, amount, recorded_date, source, raw_input, metadata`. RLS `auth.uid()` 기반.
+- `ensure_standard_sub_hubs` 함수에 `Revenue` 서브허브 추가 (Sales 허브 하위).
+
+**`backend/app/routers/sales.py`** (신규)
+
+- `POST /api/sales` — 매출 다건 저장 + 임베딩 + `revenue_entry` artifact 자동 생성 + Revenue 서브허브 `artifact_edges` 연결.
+- `GET /api/sales` — 기간별 매출 조회.
+- `GET /api/sales/summary` — 일/주/월 집계 (항목별·카테고리별 소계 + 총합계).
+- `DELETE /api/sales/{id}` — 단건 삭제 + 임베딩 제거.
+
+**`backend/app/agents/sales.py`**
+
+- `[ACTION:OPEN_SALES_TABLE:{json}]` 마커 — GPT 응답에 삽입되어 프론트 SalesInputTable 트리거.
+- `_parse_sales_from_message` — 자연어 텍스트에서 품목·수량·단가 파싱 (GPT-4o-mini).
+- `_VAGUE_ENTRY_RE` / `_TABLE_INPUT_RE` / `_EXPLICIT_TEXT_RE` — 입력 의도 분류 정규식.
+- `_SAVE_INTENT_RE` + `_find_last_action_marker` — "저장해줘" 감지 시 history에서 마지막 ACTION 마커 재삽입 (GPT 없이 즉시 반환으로 "저장됐습니다" 오답 방지).
+- `_strip_action_marker` — 파이썬 쪽 중괄호 깊이 파서 (regex 대신).
+- `_build_markdown_table` / `_build_action_marker` 헬퍼.
+
+**`frontend/components/chat/SalesInputTable.tsx`** (신규)
+
+- 품목·카테고리·수량·단가 편집 가능한 모달 테이블.
+- 행 추가/삭제, 합계 실시간 계산, `POST /api/sales` 직접 호출.
+
+**`frontend/components/chat/ChatOverlay.tsx`**
+
+- `parseSalesAction()` — 중괄호 깊이 카운팅 파서 (JSON 배열 안 `]` 오파싱 방지).
+- salesAction 버튼 분기:
+  - `items.length === 0` → "✏️ 글로 입력하기" + "📋 표로 추가입력하기"
+  - `items.length > 0` → "💾 저장" (모달 없이 직접 POST) + "📋 표로 추가입력하기"
+
+**`frontend/components/canvas/modals/NodeDetailModal.tsx`**
+
+- `revenue_entry` artifact 클릭 시 Sales Records 섹션 표시 — 날짜 picker + 새로고침 + 항목별 삭제.
+- `metadata.recorded_date` 우선 사용 (created_at 폴백).
+
+**`frontend/components/canvas/FlowCanvas.tsx`**
+
+- hover 엣지 강조 BFS 확장 — 직계 1hop에서 **전체 subtree(양방향)** 로 개선. `setEdges` setter 내부에서 BFS 수행해 circular dependency 방지.
+
+### Changed
+
+- `backend/app/main.py` — `sales` 라우터 등록.
+
+### Added — Sales Capability 합류 (function-calling V2 경로)
+
+- `backend/app/agents/sales.py` 에 `describe()` + 6종 capability handler 추가:
+  - `sales_revenue_entry` — 자연어 매출 텍스트 파싱 → SalesInputTable 오픈 마커
+  - `sales_report` / `sales_price_strategy` / `sales_customer_script` / `sales_promotion` / `sales_checklist`
+- `backend/app/agents/_capability.py` — `V2_DOMAINS` 에 `sales` 포함 (4개 도메인 전부 function-calling)
+- 이제 총 **21개 capability** 가 orchestrator tools 스펙에 등록됨
+
+---
+
 ## [0.9.0] — feature-documents (Recruitment 대확장 + Capability 라우팅 + Legal 서브브랜치)
 
 ### Added

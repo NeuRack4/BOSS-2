@@ -840,8 +840,27 @@ export const FlowCanvas = () => {
   // Edge reactivity: update edges on filter OR hover change. Skip edges whose
   // opacity/strokeWidth didn't change so React Flow doesn't re-render them.
   useEffect(() => {
-    setEdges((es) =>
-      es.map((e) => {
+    setEdges((es) => {
+      // BFS inside setter to avoid circular dependency with edges state.
+      const connected = new Set<string>();
+      if (hoveredId) {
+        connected.add(hoveredId);
+        const queue = [hoveredId];
+        while (queue.length > 0) {
+          const cur = queue.shift()!;
+          for (const e of es) {
+            if (e.source === cur && !connected.has(e.target)) {
+              connected.add(e.target);
+              queue.push(e.target);
+            }
+            if (e.target === cur && !connected.has(e.source)) {
+              connected.add(e.source);
+              queue.push(e.source);
+            }
+          }
+        }
+      }
+      return es.map((e) => {
         const nodeOp = nodeOpRef.current;
         const src = nodeOp.get(e.source) ?? 1;
         const tgt = nodeOp.get(e.target) ?? 1;
@@ -852,7 +871,8 @@ export const FlowCanvas = () => {
         const baseOpacity = (base.opacity as number) ?? 1;
         const isIncident =
           hoveredId !== null &&
-          (e.source === hoveredId || e.target === hoveredId);
+          connected.has(e.source) &&
+          connected.has(e.target);
         // Radial layout: edges hidden unless hovering an incident node.
         const hoverFactor = hoveredId === null ? 0 : isIncident ? 1 : 0;
         const baseStroke = (base.strokeWidth as number) ?? 1;
@@ -874,8 +894,8 @@ export const FlowCanvas = () => {
             opacity,
           } as React.CSSProperties,
         };
-      }),
-    );
+      });
+    });
   }, [timeRangeDays, selectedDomains, hoveredId, setEdges]);
 
   const getAccountId = useCallback(async (): Promise<string | null> => {

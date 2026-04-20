@@ -1,10 +1,8 @@
 """Capability 레지스트리 — function-calling 기반 라우팅용.
 
 각 도메인 에이전트 모듈이 `describe(account_id) -> list[Capability]` 를 export하면,
-`describe_all(account_id)` 이 3개 도메인(recruitment · documents · marketing)을 모아
+`describe_all(account_id)` 이 4개 도메인(recruitment · documents · marketing · sales)을 모아
 OpenAI `tools` 스펙 + handler dispatch map 을 만들어 돌려준다.
-
-sales 도메인은 다른 팀원이 기능을 채운 뒤 별도 PR 에서 capability 로 리팩터 예정 — 현재는 legacy `run()` 경로 유지.
 
 Capability handler 시그니처는 공통:
     async def handler(*, account_id: str, message: str, history: list[dict],
@@ -29,8 +27,8 @@ class DispatchEntry(TypedDict):
     handler: Callable[..., Awaitable[str]]
 
 
-# V2(capability) 경로로 라우팅되는 도메인. sales 는 팀원 작업 완료 후 추후 합류.
-V2_DOMAINS: tuple[str, ...] = ("recruitment", "documents", "marketing")
+# V2(capability) 경로로 라우팅되는 도메인. 4개 도메인 모두 function-calling.
+V2_DOMAINS: tuple[str, ...] = ("recruitment", "documents", "marketing", "sales")
 
 
 def describe_all(account_id: str) -> tuple[list[dict], dict[str, DispatchEntry]]:
@@ -40,7 +38,7 @@ def describe_all(account_id: str) -> tuple[list[dict], dict[str, DispatchEntry]]
         tools_spec: OpenAI `tools` 인자 그대로 넘길 수 있는 dict 리스트.
         dispatch:   {capability_name: {domain, handler}} — tool_calls 처리용.
     """
-    from app.agents import recruitment, documents, marketing  # 순환 import 회피
+    from app.agents import recruitment, documents, marketing, sales  # 순환 import 회피
 
     tools: list[dict] = []
     dispatch: dict[str, DispatchEntry] = {}
@@ -49,6 +47,7 @@ def describe_all(account_id: str) -> tuple[list[dict], dict[str, DispatchEntry]]
         (recruitment, "recruitment"),
         (documents, "documents"),
         (marketing, "marketing"),
+        (sales, "sales"),
     ):
         describe_fn = getattr(module, "describe", None)
         if not callable(describe_fn):

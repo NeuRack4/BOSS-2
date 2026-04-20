@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal } from "lucide-react";
+import {
+  Heart,
+  MessageCircle,
+  Send,
+  Bookmark,
+  MoreHorizontal,
+} from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -17,8 +23,12 @@ export type InstagramPayload = {
 
 /** 인스타그램 피드 스타일 마크다운 컴포넌트 */
 const IG_COMPONENTS: Components = {
-  p: ({ children }) => <span className="block leading-relaxed">{children}</span>,
-  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  p: ({ children }) => (
+    <span className="block leading-relaxed">{children}</span>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
   em: ({ children }) => <em className="italic">{children}</em>,
   // 인스타 캡션에 제목/코드블록/표는 없으므로 그냥 텍스트로
   h1: ({ children }) => <span className="font-bold">{children}</span>,
@@ -29,8 +39,7 @@ const IG_COMPONENTS: Components = {
   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
 };
 
-const _IG_POST_RE =
-  /\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[\/INSTAGRAM_POST\]\]/;
+const _IG_POST_RE = /\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[\/INSTAGRAM_POST\]\]/;
 
 export const extractInstagramPayload = (
   text: string,
@@ -139,7 +148,10 @@ export const InstagramPostCard = ({
         {caption && (
           <div className="text-[12.5px] leading-relaxed text-[#1a1a1a]">
             <span className="mr-1.5 font-semibold">내 계정</span>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={IG_COMPONENTS}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={IG_COMPONENTS}
+            >
               {displayCaption}
             </ReactMarkdown>
             {isLongCaption && !captionExpanded && (
@@ -157,7 +169,10 @@ export const InstagramPostCard = ({
         {/* Hashtags */}
         {hashtags.length > 0 && (
           <p className="mt-1 text-[12px] leading-relaxed text-[#3b7aba]">
-            {hashtags.slice(0, 20).map((t) => `#${t}`).join(" ")}
+            {hashtags
+              .slice(0, 20)
+              .map((t) => `#${t}`)
+              .join(" ")}
           </p>
         )}
       </div>

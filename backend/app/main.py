@@ -29,6 +29,7 @@ from app.routers import (
     memos,
     recruitment,
     reviews,
+    sales,
     schedules,
     search,
     summary,
@@ -58,6 +59,7 @@ app.include_router(recruitment.router)
 app.include_router(search.router)
 app.include_router(uploads.router)
 app.include_router(reviews.router)
+app.include_router(sales.router)
 
 
 @app.get("/health")

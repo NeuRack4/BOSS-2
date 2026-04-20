@@ -40,6 +40,7 @@ import {
   type ReviewReplyPayload,
 } from "./ReviewReplyCard";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 
 type UploadCategory =
   | "documents"
@@ -71,6 +72,7 @@ type Message = {
     error?: string;
   };
   confirm?: ConfirmPayload;
+  salesAction?: SalesActionData;
 };
 
 const UPLOAD_ACCEPT =
@@ -118,6 +120,45 @@ const NON_DOC_HINT: Partial<Record<UploadCategory, string>> = {
   other:
     "사업용 문서 분류에 해당하지 않아 저장만 해뒀어요. 필요하면 위 드롭다운에서 타입을 지정해 다시 올려주세요.",
 };
+
+function parseSalesAction(text: string): {
+  clean: string;
+  action: SalesActionData | undefined;
+} {
+  const PREFIX = "[ACTION:OPEN_SALES_TABLE:";
+  const start = text.indexOf(PREFIX);
+  if (start === -1) return { clean: text, action: undefined };
+
+  const jsonStart = start + PREFIX.length;
+  let depth = 0;
+  let jsonEnd = -1;
+  for (let i = jsonStart; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        jsonEnd = i;
+        break;
+      }
+    }
+  }
+  if (jsonEnd === -1) return { clean: text, action: undefined };
+
+  // } 뒤에 오는 ] 을 직접 탐색 (중간에 공백 등이 끼어도 안전)
+  let markerEnd = jsonEnd + 1;
+  while (markerEnd < text.length && text[markerEnd] !== "]") markerEnd++;
+  markerEnd++; // ] 포함해서 한 칸 더
+
+  let action: SalesActionData | undefined;
+  try {
+    action = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    /* ignore */
+  }
+
+  const clean = (text.slice(0, start) + text.slice(markerEnd)).trim();
+  return { clean, action };
+}
 
 const MIN_TEXTAREA = 60;
 const MAX_TEXTAREA = 200;
@@ -179,12 +220,18 @@ export const ChatOverlay = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<string>("auto");
   const [userId, setUserId] = useState<string | null>(null);
+  const [showSalesTable, setShowSalesTable] = useState(false);
+  const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(
+    null,
+  );
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const sendRef = useRef<((text: string, messageIndex?: number) => Promise<void>) | null>(null);
+  const sendRef = useRef<
+    ((text: string, messageIndex?: number) => Promise<void>) | null
+  >(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
@@ -369,7 +416,9 @@ export const ChatOverlay = () => {
           other: "플랫폼",
         };
         const platform = platformLabel[data.platform] ?? "플랫폼";
-        const stars = data.star_rating ? `별점 ${data.star_rating}점` : "별점 미확인";
+        const stars = data.star_rating
+          ? `별점 ${data.star_rating}점`
+          : "별점 미확인";
         const reviewText = data.review_text
           ? `\n리뷰 내용: ${data.review_text}`
           : "";
@@ -502,10 +551,14 @@ export const ChatOverlay = () => {
             ...prev,
             ...confirms.map<Message>((it) => {
               const auto = it.classification?.auto;
-              const autoCategory = (auto?.category ?? "other") as UploadCategory;
-              const autoDocType = auto?.doc_type ?? CATEGORY_LABEL[autoCategory];
-              const userCategory = (it.final_category ?? "other") as UploadCategory;
-              const userDocType = it.classification?.doc_type ?? CATEGORY_LABEL[userCategory];
+              const autoCategory = (auto?.category ??
+                "other") as UploadCategory;
+              const autoDocType =
+                auto?.doc_type ?? CATEGORY_LABEL[autoCategory];
+              const userCategory = (it.final_category ??
+                "other") as UploadCategory;
+              const userDocType =
+                it.classification?.doc_type ?? CATEGORY_LABEL[userCategory];
               return {
                 role: "assistant",
                 content: `"${it.title}" — 자동 분류는 **${autoDocType}**, 선택하신 건 **${userDocType}** 인데 어느 쪽이 맞나요?`,
@@ -589,13 +642,25 @@ export const ChatOverlay = () => {
         adjustHeight(textareaRef.current);
 
         const textLower = trimmed.toLowerCase();
-        const recentText = messages.slice(-6).map((m) => m.content).join(" ").toLowerCase();
-        const hasReviewCtx = textLower.includes("리뷰") || recentText.includes("리뷰");
+        const recentText = messages
+          .slice(-6)
+          .map((m) => m.content)
+          .join(" ")
+          .toLowerCase();
+        const hasReviewCtx =
+          textLower.includes("리뷰") || recentText.includes("리뷰");
 
-        if (files.length === 1 && files[0].type.startsWith("image/") && hasReviewCtx) {
+        if (
+          files.length === 1 &&
+          files[0].type.startsWith("image/") &&
+          hasReviewCtx
+        ) {
           // 리뷰 이미지 분석 → 분석 완료 후 send 재호출로 채팅 전송
           if (trimmed) {
-            setMessages((prev) => [...prev, { role: "user" as const, content: trimmed }]);
+            setMessages((prev) => [
+              ...prev,
+              { role: "user" as const, content: trimmed },
+            ]);
           }
           await analyzeReviewImage(files[0]);
           return;
@@ -636,14 +701,20 @@ export const ChatOverlay = () => {
         if (newSessionId && newSessionId !== currentSessionId) {
           setCurrentSessionId(newSessionId);
         }
+        const rawReply = data?.data?.reply ?? "응답을 받지 못했습니다.";
+        // [ACTION:OPEN_SALES_TABLE:{...}] 마커 파싱 + 제거
+        // 정규식 대신 중괄호 깊이를 직접 세서 파싱 (JSON 안의 ]에 끊기지 않도록)
+        const { clean: cleanReply, action: salesAction } =
+          parseSalesAction(rawReply);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: data?.data?.reply ?? "응답을 받지 못했습니다.",
+            content: cleanReply,
             choices: data?.data?.choices?.length
               ? data.data.choices
               : undefined,
+            salesAction,
           },
         ]);
         // 응답이 새 artifact 를 만들었을 수 있으므로 캔버스 재조회 신호
@@ -859,369 +930,491 @@ export const ChatOverlay = () => {
   if (!isChatOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm animate-in fade-in duration-150"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) closeChat();
-      }}
-    >
+    <>
+      {showSalesTable && salesTableData && (
+        <SalesInputTable
+          data={salesTableData}
+          apiBase={apiBase ?? ""}
+          onClose={() => setShowSalesTable(false)}
+          onSaved={(message) => {
+            setShowSalesTable(false);
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: message },
+            ]);
+            window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+          }}
+        />
+      )}
       <div
-        className="relative flex h-[70vh] w-[70vw] max-w-[1100px] overflow-hidden rounded-2xl border border-[#ddd0b4] bg-[#fffaf2] shadow-xl animate-in zoom-in-95 duration-150"
-        role="dialog"
-        aria-label="Orchestrator chat"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm animate-in fade-in duration-150"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) closeChat();
+        }}
       >
-        {/* Left: sessions panel */}
-        <aside className="flex w-[260px] shrink-0 flex-col border-r border-[#ddd0b4] bg-[#ebe0ca]/50">
-          <div className="flex items-center justify-between border-b border-[#ddd0b4] px-3 py-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[#8c7e66]">
-              이전 대화
-            </span>
-            <button
-              type="button"
-              onClick={requestNewSession}
-              className="flex items-center gap-1 rounded-md border border-[#ddd0b4] bg-[#fffaf2] px-2 py-1 text-xs text-[#2e2719] transition-colors hover:bg-[#ebe0ca]"
-              aria-label="새 대화"
-            >
-              <MessageSquarePlus className="h-3.5 w-3.5" />새 대화
-            </button>
-          </div>
-          <ScrollArea className="min-h-0 flex-1 px-2 py-2">
-            {sessionsLoading && sortedSessions.length === 0 && (
-              <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
-                불러오는 중...
-              </div>
-            )}
-            {!sessionsLoading && sortedSessions.length === 0 && (
-              <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
-                아직 대화가 없어요
-              </div>
-            )}
-            <ul className="space-y-1">
-              {sortedSessions.map((s) => {
-                const active = s.id === currentSessionId;
-                return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => requestLoadSession(s.id)}
-                      className={cn(
-                        "group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors",
-                        active
-                          ? "bg-[#ddd0b4] text-[#2e2719]"
-                          : "text-[#5a5040] hover:bg-[#ddd0b4]/60",
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium">
-                          {s.title || "새 대화"}
-                        </div>
-                        <div className="text-[11px] text-[#8c7e66]">
-                          {formatRelative(s.updated_at)}
-                        </div>
-                      </div>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteSession(s.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            deleteSession(s.id);
-                          }
-                        }}
-                        className="invisible rounded p-1 text-[#8c7e66] hover:bg-[#bfae8a]/30 hover:text-[#2e2719] group-hover:visible"
-                        aria-label="세션 삭제"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </ScrollArea>
-        </aside>
-
-        {/* Right: chat area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#ddd0b4] bg-[#ebe0ca]/50 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-[#7f8f54]" />
-              <span className="text-sm font-semibold text-[#2e2719]">
-                Orchestrator
+        <div
+          className="relative flex h-[70vh] w-[70vw] max-w-[1100px] overflow-hidden rounded-2xl border border-[#ddd0b4] bg-[#fffaf2] shadow-xl animate-in zoom-in-95 duration-150"
+          role="dialog"
+          aria-label="Orchestrator chat"
+        >
+          {/* Left: sessions panel */}
+          <aside className="flex w-[260px] shrink-0 flex-col border-r border-[#ddd0b4] bg-[#ebe0ca]/50">
+            <div className="flex items-center justify-between border-b border-[#ddd0b4] px-3 py-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#8c7e66]">
+                이전 대화
               </span>
-              <span className="text-xs text-[#8c7e66]">
-                · AI 운영 어시스턴트
-              </span>
+              <button
+                type="button"
+                onClick={requestNewSession}
+                className="flex items-center gap-1 rounded-md border border-[#ddd0b4] bg-[#fffaf2] px-2 py-1 text-xs text-[#2e2719] transition-colors hover:bg-[#ebe0ca]"
+                aria-label="새 대화"
+              >
+                <MessageSquarePlus className="h-3.5 w-3.5" />새 대화
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={closeChat}
-              className="rounded-md p-1.5 text-[#8c7e66] transition-colors hover:bg-[#ddd0b4] hover:text-[#2e2719]"
-              aria-label="닫기"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Messages */}
-          <ScrollArea className="min-h-0 flex-1 px-5 py-4">
-            <div className="mx-auto max-w-3xl space-y-3">
-              {messages.map((msg, i) => {
-                let displayText = msg.content;
-                let reviewPayload: ReviewPayload | null = msg.review ?? null;
-                let instagramPayload: InstagramPayload | null = msg.instagram ?? null;
-                let reviewReplyPayload: ReviewReplyPayload | null = msg.reviewReply ?? null;
-
-                if (msg.role === "assistant") {
-                  const rrExtracted = extractReviewReplyPayload(displayText || "");
-                  displayText = rrExtracted.cleaned;
-                  if (rrExtracted.payload) reviewReplyPayload = rrExtracted.payload;
-
-                  const igExtracted = extractInstagramPayload(displayText || "");
-                  displayText = igExtracted.cleaned;
-                  if (igExtracted.payload) instagramPayload = igExtracted.payload;
-
-                  const rvExtracted = extractReviewPayload(displayText || "");
-                  displayText = rvExtracted.cleaned;
-                  if (rvExtracted.payload) reviewPayload = rvExtracted.payload;
-                }
-
-                return (
-                  <div key={i} className="space-y-2">
-                    <div
-                      className={cn(
-                        "flex gap-2",
-                        msg.role === "user" ? "justify-end" : "justify-start",
-                      )}
-                    >
-                      {msg.role === "assistant" && (
-                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                          <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
-                        </div>
-                      )}
-                      {msg.attachment ? (
-                        <div
-                          className={cn(
-                            "flex max-w-[80%] items-center gap-2 rounded-2xl rounded-br-sm border px-3 py-2 text-sm",
-                            msg.attachment.status === "error"
-                              ? "border-[#d9a191] bg-[#f4dcd2] text-[#8a3a28]"
-                              : msg.attachment.status === "uploading"
-                                ? "border-[#ddd0b4] bg-[#fffaf2] text-[#5a5040]"
-                                : "border-[#bccab6] bg-[#e3ece2] text-[#3b6a4a]",
-                          )}
-                        >
-                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-medium">
-                              {msg.attachment.filename}
-                            </div>
-                            <div className="text-[10px] opacity-70">
-                              {msg.attachment.sizeKb
-                                ? `${msg.attachment.sizeKb} KB · `
-                                : ""}
-                              {msg.attachment.status === "uploading"
-                                ? "업로드 중..."
-                                : msg.attachment.status === "error"
-                                  ? msg.attachment.error || "실패"
-                                  : "업로드 완료"}
-                            </div>
-                          </div>
-                          {msg.attachment.status === "uploading" && (
-                            <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin" />
-                          )}
-                        </div>
-                      ) : displayText ? (
-                        <div
-                          className={cn(
-                            "max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
-                            msg.role === "user"
-                              ? "whitespace-pre-wrap rounded-br-sm bg-[#2e2719] text-[#fbf6eb]"
-                              : "rounded-bl-sm bg-[#ebe0ca] text-[#2e2719]",
-                          )}
-                        >
-                          {msg.role === "assistant" ? (
-                            <MarkdownMessage content={displayText} />
-                          ) : (
-                            displayText
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                    {reviewPayload && msg.role === "assistant" && (
-                      <div className="ml-8 max-w-[80%]">
-                        <ReviewResultCard payload={reviewPayload} />
-                      </div>
-                    )}
-                    {instagramPayload && msg.role === "assistant" && (
-                      <div className="ml-8">
-                        <InstagramPostCard payload={instagramPayload} />
-                      </div>
-                    )}
-                    {reviewReplyPayload && msg.role === "assistant" && (
-                      <div className="ml-8 max-w-[80%]">
-                        <ReviewReplyCard payload={reviewReplyPayload} />
-                      </div>
-                    )}
-                    {msg.role === "assistant" && msg.choices && (
-                      <div className="ml-8 grid grid-cols-2 gap-1.5">
-                        {msg.choices.map((choice, idx) => (
-                          <Button
-                            key={idx}
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => handleChoiceClick(choice, i)}
-                            className={cn(
-                              "h-auto justify-start whitespace-normal py-1.5 px-2.5 text-left text-xs font-normal leading-snug",
-                              "border-[#ddd0b4] bg-[#fffaf2] text-[#2e2719] hover:bg-[#ebe0ca] hover:text-[#2e2719]",
-                              isOtherChoice(choice) &&
-                                "col-span-2 border-dashed text-[#8c7e66]",
-                            )}
-                          >
-                            {choice}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {loading && (
-                <div className="flex justify-start gap-2">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                    <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
-                  </div>
-                  <div className="rounded-2xl rounded-bl-sm bg-[#ebe0ca] px-3 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#8c7e66]" />
-                  </div>
+            <ScrollArea className="min-h-0 flex-1 px-2 py-2">
+              {sessionsLoading && sortedSessions.length === 0 && (
+                <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
+                  불러오는 중...
                 </div>
               )}
-              <div ref={bottomRef} />
-            </div>
-          </ScrollArea>
-
-          {/* Input */}
-          <div className="border-t border-[#ddd0b4] bg-[#ebe0ca]/40 px-5 py-4">
-            <div className="mx-auto max-w-3xl">
-              <div className="relative rounded-xl border border-[#ddd0b4] bg-[#fffaf2]">
-                {/* Staged 파일 미리보기 */}
-                {stagedFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 border-b border-[#ddd0b4] px-3 pt-2.5 pb-2">
-                    {stagedFiles.map((f, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[12px] text-[#2e2719]"
+              {!sessionsLoading && sortedSessions.length === 0 && (
+                <div className="px-2 py-4 text-center text-xs text-[#8c7e66]">
+                  아직 대화가 없어요
+                </div>
+              )}
+              <ul className="space-y-1">
+                {sortedSessions.map((s) => {
+                  const active = s.id === currentSessionId;
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => requestLoadSession(s.id)}
+                        className={cn(
+                          "group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors",
+                          active
+                            ? "bg-[#ddd0b4] text-[#2e2719]"
+                            : "text-[#5a5040] hover:bg-[#ddd0b4]/60",
+                        )}
                       >
-                        <Paperclip className="h-3 w-3 shrink-0 text-[#8c7e66]" />
-                        <span className="max-w-[160px] truncate">{f.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeStagedFile(i)}
-                          className="ml-0.5 rounded p-0.5 hover:bg-[#ddd0b4]"
-                          aria-label="첨부 파일 제거"
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium">
+                            {s.title || "새 대화"}
+                          </div>
+                          <div className="text-[11px] text-[#8c7e66]">
+                            {formatRelative(s.updated_at)}
+                          </div>
+                        </div>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSession(s.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteSession(s.id);
+                            }
+                          }}
+                          className="invisible rounded p-1 text-[#8c7e66] hover:bg-[#bfae8a]/30 hover:text-[#2e2719] group-hover:visible"
+                          aria-label="세션 삭제"
                         >
-                          <X className="h-3 w-3 text-[#8c7e66]" />
-                        </button>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </ScrollArea>
+          </aside>
+
+          {/* Right: chat area */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#ddd0b4] bg-[#ebe0ca]/50 px-5 py-3">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-[#7f8f54]" />
+                <span className="text-sm font-semibold text-[#2e2719]">
+                  Orchestrator
+                </span>
+                <span className="text-xs text-[#8c7e66]">
+                  · AI 운영 어시스턴트
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={closeChat}
+                className="rounded-md p-1.5 text-[#8c7e66] transition-colors hover:bg-[#ddd0b4] hover:text-[#2e2719]"
+                aria-label="닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <ScrollArea className="min-h-0 flex-1 px-5 py-4">
+              <div className="mx-auto max-w-3xl space-y-3">
+                {messages.map((msg, i) => {
+                  let displayText = msg.content;
+                  let reviewPayload: ReviewPayload | null = msg.review ?? null;
+                  let instagramPayload: InstagramPayload | null =
+                    msg.instagram ?? null;
+                  let reviewReplyPayload: ReviewReplyPayload | null =
+                    msg.reviewReply ?? null;
+
+                  if (msg.role === "assistant") {
+                    const rrExtracted = extractReviewReplyPayload(
+                      displayText || "",
+                    );
+                    displayText = rrExtracted.cleaned;
+                    if (rrExtracted.payload)
+                      reviewReplyPayload = rrExtracted.payload;
+
+                    const igExtracted = extractInstagramPayload(
+                      displayText || "",
+                    );
+                    displayText = igExtracted.cleaned;
+                    if (igExtracted.payload)
+                      instagramPayload = igExtracted.payload;
+
+                    const rvExtracted = extractReviewPayload(displayText || "");
+                    displayText = rvExtracted.cleaned;
+                    if (rvExtracted.payload)
+                      reviewPayload = rvExtracted.payload;
+                  }
+
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div
+                        className={cn(
+                          "flex gap-2",
+                          msg.role === "user" ? "justify-end" : "justify-start",
+                        )}
+                      >
+                        {msg.role === "assistant" && (
+                          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
+                            <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                          </div>
+                        )}
+                        {msg.attachment ? (
+                          <div
+                            className={cn(
+                              "flex max-w-[80%] items-center gap-2 rounded-2xl rounded-br-sm border px-3 py-2 text-sm",
+                              msg.attachment.status === "error"
+                                ? "border-[#d9a191] bg-[#f4dcd2] text-[#8a3a28]"
+                                : msg.attachment.status === "uploading"
+                                  ? "border-[#ddd0b4] bg-[#fffaf2] text-[#5a5040]"
+                                  : "border-[#bccab6] bg-[#e3ece2] text-[#3b6a4a]",
+                            )}
+                          >
+                            <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-medium">
+                                {msg.attachment.filename}
+                              </div>
+                              <div className="text-[10px] opacity-70">
+                                {msg.attachment.sizeKb
+                                  ? `${msg.attachment.sizeKb} KB · `
+                                  : ""}
+                                {msg.attachment.status === "uploading"
+                                  ? "업로드 중..."
+                                  : msg.attachment.status === "error"
+                                    ? msg.attachment.error || "실패"
+                                    : "업로드 완료"}
+                              </div>
+                            </div>
+                            {msg.attachment.status === "uploading" && (
+                              <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin" />
+                            )}
+                          </div>
+                        ) : displayText ? (
+                          <div
+                            className={cn(
+                              "max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
+                              msg.role === "user"
+                                ? "whitespace-pre-wrap rounded-br-sm bg-[#2e2719] text-[#fbf6eb]"
+                                : "rounded-bl-sm bg-[#ebe0ca] text-[#2e2719]",
+                            )}
+                          >
+                            {msg.role === "assistant" ? (
+                              <MarkdownMessage content={displayText} />
+                            ) : (
+                              displayText
+                            )}
+                          </div>
+                        ) : null}
                       </div>
-                    ))}
+                      {reviewPayload && msg.role === "assistant" && (
+                        <div className="ml-8 max-w-[80%]">
+                          <ReviewResultCard payload={reviewPayload} />
+                        </div>
+                      )}
+                      {instagramPayload && msg.role === "assistant" && (
+                        <div className="ml-8">
+                          <InstagramPostCard payload={instagramPayload} />
+                        </div>
+                      )}
+                      {reviewReplyPayload && msg.role === "assistant" && (
+                        <div className="ml-8 max-w-[80%]">
+                          <ReviewReplyCard payload={reviewReplyPayload} />
+                        </div>
+                      )}
+                      {msg.role === "assistant" && msg.choices && (
+                        <div className="ml-8 grid grid-cols-2 gap-1.5">
+                          {msg.choices.map((choice, idx) => (
+                            <Button
+                              key={idx}
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => handleChoiceClick(choice, i)}
+                              className={cn(
+                                "h-auto justify-start whitespace-normal py-1.5 px-2.5 text-left text-xs font-normal leading-snug",
+                                "border-[#ddd0b4] bg-[#fffaf2] text-[#2e2719] hover:bg-[#ebe0ca] hover:text-[#2e2719]",
+                                isOtherChoice(choice) &&
+                                  "col-span-2 border-dashed text-[#8c7e66]",
+                              )}
+                            >
+                              {choice}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                      {msg.role === "assistant" && msg.salesAction && (
+                        <div className="ml-8 flex gap-2">
+                          {msg.salesAction.items.length === 0 ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={loading}
+                                onClick={() => send("오늘 매출 글로 입력하기")}
+                                className="flex-1 border-[#7f8f54] bg-[#f5f7f0] text-[#7f8f54] hover:bg-[#e8eedd] text-xs font-medium"
+                              >
+                                ✏️ 글로 입력하기
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSalesTableData(msg.salesAction!);
+                                  setShowSalesTable(true);
+                                }}
+                                className="flex-1 border-[#c47865] bg-[#fdf0ec] text-[#c47865] hover:bg-[#fae0d8] text-xs font-medium"
+                              >
+                                📋 표로 추가입력하기
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={loading}
+                                onClick={async () => {
+                                  if (!userId || !apiBase) return;
+                                  const action = msg.salesAction!;
+                                  try {
+                                    const res = await fetch(
+                                      `${apiBase}/api/sales`,
+                                      {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                          account_id: userId,
+                                          items: action.items.map((it) => ({
+                                            ...it,
+                                            amount: it.quantity * it.unit_price,
+                                            recorded_date: action.date,
+                                            source: "chat",
+                                          })),
+                                        }),
+                                      },
+                                    );
+                                    if (res.ok) {
+                                      window.dispatchEvent(
+                                        new CustomEvent(
+                                          "boss:artifacts-changed",
+                                        ),
+                                      );
+                                      setMessages((prev) => [
+                                        ...prev,
+                                        {
+                                          role: "assistant" as const,
+                                          content: `매출 ${action.items.length}건이 저장됐어요. 캔버스 Revenue 허브에서 확인할 수 있어요.`,
+                                        },
+                                      ]);
+                                    }
+                                  } catch {
+                                    // silent
+                                  }
+                                }}
+                                className="flex-1 border-[#7f8f54] bg-[#f5f7f0] text-[#7f8f54] hover:bg-[#e8eedd] text-xs font-medium"
+                              >
+                                💾 저장
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSalesTableData(msg.salesAction!);
+                                  setShowSalesTable(true);
+                                }}
+                                className="flex-1 border-[#c47865] bg-[#fdf0ec] text-[#c47865] hover:bg-[#fae0d8] text-xs font-medium"
+                              >
+                                📋 표로 추가입력하기
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {loading && (
+                  <div className="flex justify-start gap-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
+                      <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                    </div>
+                    <div className="rounded-2xl rounded-bl-sm bg-[#ebe0ca] px-3 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#8c7e66]" />
+                    </div>
                   </div>
                 )}
-                <div className="overflow-y-auto">
-                  <Textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      adjustHeight(e.target);
-                    }}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder="메시지를 입력하세요..."
-                    className={cn(
-                      "w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-[#2e2719]",
-                      "placeholder:text-sm placeholder:text-[#8c7e66]",
-                      "focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
-                      "min-h-[60px]",
-                    )}
-                    style={{ overflow: "hidden" }}
-                  />
-                </div>
+                <div ref={bottomRef} />
+              </div>
+            </ScrollArea>
 
-                <div className="flex items-center justify-between p-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept={UPLOAD_ACCEPT}
-                      multiple
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      disabled={uploading || loading || !userId}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca] disabled:opacity-50"
-                      aria-label="문서 첨부 (PDF·DOCX·TXT·RTF·XLSX·CSV·이미지)"
-                      title="PDF·DOCX·TXT·RTF·XLSX·CSV·이미지 첨부 (여러 개 선택 가능, 이미지는 OCR)"
-                    >
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-[#5a5040]" />
-                      ) : (
-                        <Paperclip className="h-4 w-4 text-[#5a5040]" />
-                      )}
-                      <span className="hidden text-xs text-[#8c7e66] transition-opacity group-hover:inline">
-                        {uploading ? "업로드 중" : "첨부"}
-                      </span>
-                    </button>
-                    <select
-                      value={uploadType}
-                      onChange={(e) => setUploadType(e.target.value)}
-                      disabled={uploading || loading}
-                      className="rounded-md border border-[#ddd0b4] bg-transparent px-2 py-1 text-xs text-[#5a5040] focus:border-[#bfae8a] focus:outline-none disabled:opacity-50"
-                      title="업로드 파일 타입 (자동 분류 기본)"
-                      aria-label="업로드 파일 타입"
-                    >
-                      {UPLOAD_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
+            {/* Input */}
+            <div className="border-t border-[#ddd0b4] bg-[#ebe0ca]/40 px-5 py-4">
+              <div className="mx-auto max-w-3xl">
+                <div className="relative rounded-xl border border-[#ddd0b4] bg-[#fffaf2]">
+                  {/* Staged 파일 미리보기 */}
+                  {stagedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 border-b border-[#ddd0b4] px-3 pt-2.5 pb-2">
+                      {stagedFiles.map((f, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-1.5 rounded-lg border border-[#ddd0b4] bg-[#ebe0ca] px-2 py-1 text-[12px] text-[#2e2719]"
+                        >
+                          <Paperclip className="h-3 w-3 shrink-0 text-[#8c7e66]" />
+                          <span className="max-w-[160px] truncate">
+                            {f.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeStagedFile(i)}
+                            className="ml-0.5 rounded p-0.5 hover:bg-[#ddd0b4]"
+                            aria-label="첨부 파일 제거"
+                          >
+                            <X className="h-3 w-3 text-[#8c7e66]" />
+                          </button>
+                        </div>
                       ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="flex items-center justify-between gap-1 rounded-lg border border-dashed border-[#ddd0b4] px-2 py-1 text-sm text-[#8c7e66] transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca]"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                      Project
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => send(input)}
-                      disabled={loading || (!input.trim() && stagedFiles.length === 0)}
+                    </div>
+                  )}
+                  <div className="overflow-y-auto">
+                    <Textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        adjustHeight(e.target);
+                      }}
+                      onKeyDown={handleKeyDown}
+                      onPaste={handlePaste}
+                      placeholder="메시지를 입력하세요..."
                       className={cn(
-                        "flex items-center justify-between gap-1 rounded-lg border border-[#ddd0b4] px-1.5 py-1.5 text-sm transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca] disabled:opacity-50",
-                        (input.trim() || stagedFiles.length > 0)
-                          ? "bg-[#2e2719] text-[#fbf6eb] hover:bg-[#3d3423]"
-                          : "text-[#8c7e66]",
+                        "w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-[#2e2719]",
+                        "placeholder:text-sm placeholder:text-[#8c7e66]",
+                        "focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+                        "min-h-[60px]",
                       )}
-                      aria-label="보내기"
-                    >
-                      <ArrowUpIcon
-                        className={cn(
-                          "h-4 w-4",
-                          (input.trim() || stagedFiles.length > 0) ? "text-[#fbf6eb]" : "text-[#8c7e66]",
-                        )}
+                      style={{ overflow: "hidden" }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={UPLOAD_ACCEPT}
+                        multiple
+                        onChange={handleFileSelect}
+                        className="hidden"
                       />
-                    </button>
+                      <button
+                        type="button"
+                        disabled={uploading || loading || !userId}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca] disabled:opacity-50"
+                        aria-label="문서 첨부 (PDF·DOCX·TXT·RTF·XLSX·CSV·이미지)"
+                        title="PDF·DOCX·TXT·RTF·XLSX·CSV·이미지 첨부 (여러 개 선택 가능, 이미지는 OCR)"
+                      >
+                        {uploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-[#5a5040]" />
+                        ) : (
+                          <Paperclip className="h-4 w-4 text-[#5a5040]" />
+                        )}
+                        <span className="hidden text-xs text-[#8c7e66] transition-opacity group-hover:inline">
+                          {uploading ? "업로드 중" : "첨부"}
+                        </span>
+                      </button>
+                      <select
+                        value={uploadType}
+                        onChange={(e) => setUploadType(e.target.value)}
+                        disabled={uploading || loading}
+                        className="rounded-md border border-[#ddd0b4] bg-transparent px-2 py-1 text-xs text-[#5a5040] focus:border-[#bfae8a] focus:outline-none disabled:opacity-50"
+                        title="업로드 파일 타입 (자동 분류 기본)"
+                        aria-label="업로드 파일 타입"
+                      >
+                        {UPLOAD_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="flex items-center justify-between gap-1 rounded-lg border border-dashed border-[#ddd0b4] px-2 py-1 text-sm text-[#8c7e66] transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca]"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        Project
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => send(input)}
+                        disabled={
+                          loading || (!input.trim() && stagedFiles.length === 0)
+                        }
+                        className={cn(
+                          "flex items-center justify-between gap-1 rounded-lg border border-[#ddd0b4] px-1.5 py-1.5 text-sm transition-colors hover:border-[#bfae8a] hover:bg-[#ebe0ca] disabled:opacity-50",
+                          input.trim() || stagedFiles.length > 0
+                            ? "bg-[#2e2719] text-[#fbf6eb] hover:bg-[#3d3423]"
+                            : "text-[#8c7e66]",
+                        )}
+                        aria-label="보내기"
+                      >
+                        <ArrowUpIcon
+                          className={cn(
+                            "h-4 w-4",
+                            input.trim() || stagedFiles.length > 0
+                              ? "text-[#fbf6eb]"
+                              : "text-[#8c7e66]",
+                          )}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1229,6 +1422,6 @@ export const ChatOverlay = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
