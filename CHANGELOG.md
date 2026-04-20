@@ -126,6 +126,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — feature-marketing
 
+### Added — 인스타그램 Meta Graph API 자동 게시
+
+**`backend/app/services/instagram.py`** (신규)
+- Meta Graph API v19.0 클라이언트
+- DALL-E 이미지(1시간 만료) → Supabase Storage `instagram-images` 버킷에 영구 저장 → 공개 URL 확보
+- 2단계 게시: 미디어 컨테이너 생성 → `media_publish`
+- `publish_post(account_id, image_url, caption, hashtags)` — 게시된 포스트 URL 반환
+
+**`POST /api/marketing/instagram/publish`**
+- `META_ACCESS_TOKEN` / `INSTAGRAM_USER_ID` 환경변수 없으면 503 반환
+- 성공 시 `{ success: true, post_url }` 반환
+
+**`InstagramPostCard.tsx` — "인스타그램에 게시" 버튼 추가**
+- 인스타그램 그라디언트 버튼 (업로드 중 스피너, 완료 시 포스트 링크, 오류 시 재시도)
+- Supabase Auth로 `account_id` 자동 주입
+
+**Supabase Storage 버킷 `instagram-images`**
+- 공개 버킷, 5MB 제한, jpeg/png/webp 허용
+- RLS: 공개 읽기 + 인증/서비스롤 쓰기
+
+**`backend/app/core/config.py`**
+- `meta_access_token`, `instagram_user_id` 설정 추가 (선택)
+
+---
+
 ### Added — 채팅 마케팅 UI 카드 + 리뷰 이미지 분석 + 파일 스테이징
 
 **인스타그램 피드 미리보기 카드 (`InstagramPostCard.tsx`)**
