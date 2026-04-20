@@ -49,9 +49,10 @@ async def delete_artifact(artifact_id: str, req: DeleteArtifactRequest):
         for c in children:
             new_edges.append(
                 {
-                    "parent_id": p["parent_id"],
-                    "child_id": c["child_id"],
-                    "relation": c.get("relation") or p.get("relation") or "contains",
+                    "account_id": req.account_id,
+                    "parent_id":  p["parent_id"],
+                    "child_id":   c["child_id"],
+                    "relation":   c.get("relation") or p.get("relation") or "contains",
                 }
             )
     if new_edges:

@@ -40,7 +40,8 @@ type Relation =
   | "derives_from"
   | "scheduled_by"
   | "revises"
-  | "logged_from";
+  | "logged_from"
+  | "analyzed_from";
 
 type ArtifactRow = {
   id: string;
@@ -382,6 +383,12 @@ const RELATION_STYLE: Record<Relation, React.CSSProperties> = {
     opacity: 0.9,
     strokeWidth: 1.3,
   },
+  analyzed_from: {
+    stroke: "#8e5572",
+    strokeDasharray: "5 3",
+    opacity: 0.9,
+    strokeWidth: 1.5,
+  },
 };
 
 const nodeTypes: NodeTypes = {
@@ -450,6 +457,13 @@ export const FlowCanvas = () => {
     window.addEventListener("boss:reset-layout", handler);
     return () => window.removeEventListener("boss:reset-layout", handler);
   }, [resetLayout]);
+
+  // 채팅에서 업로드/분석 등으로 artifact 가 생성되면 알림을 받아 재조회.
+  useEffect(() => {
+    const handler = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("boss:artifacts-changed", handler);
+    return () => window.removeEventListener("boss:artifacts-changed", handler);
+  }, []);
 
   const focusNodeById = useCallback((id: string): boolean => {
     const inst = flowRef.current;

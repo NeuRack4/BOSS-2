@@ -24,6 +24,9 @@
 
 - `orchestrator.py` — 의도 분류 + 도메인 라우팅 + **복수 도메인 합성** + **plan 모드** + **로그인 브리핑** + **닉네임/프로필 추출**. 비즈니스 로직 없음
 - `recruitment.py` / `marketing.py` / `sales.py` / `documents.py` — 각 도메인 독립 에이전트. 각 모듈은 `suggest_today(account_id)` 를 export (`_suggest.suggest_today_for_domain` 래핑).
+- `documents.py` (v0.7.0~) — type 매트릭스(`contract | estimate | proposal | notice | checklist | guide`) + 계약서 subtype 7종(`labor | lease | service | supply | partnership | franchise | nda`) 으로 분기. 서브타입별 스켈레톤/법령·관행 조항은 `_doc_templates.py` 가 주입하고 원본 markdown 은 `_doc_knowledge/<subtype>/{acceptable,risks}.md` 에 위치. 저장 시 `metadata.contract_subtype` + `due_label` 을 동반.
+- `documents.py` (v0.8.0~ 공정성 분석) — 최근 60분 이내 업로드된 `uploaded_doc` artifact 를 자동 감지 → 역할 CHOICES(갑/을/미지정) → `[REVIEW_REQUEST]` 마커 출력 → `_doc_review.dispatch_review` 가 analysis artifact + `analyzed_from` 엣지 생성 + gap/eul/risk_clauses 메타 저장 → 응답 끝에 `[[REVIEW_JSON]]` 구조화 페이로드 (프론트 `ReviewResultCard` 렌더용).
+- `_doc_review.py` — `analyze(content, user_role, doc_type, contract_subtype) → ReviewResult` + `dispatch_review(...)` (라우터/에이전트 공용 저장 헬퍼). RAG: `search_{law,pattern,acceptable}_contract_knowledge` RPC 3-way.
 - `_suggest.py` — 도메인 공용 `suggest_today_for_domain(account_id, domain)` 헬퍼. 마감/시작 임박 artifact + 오늘~내일 예정 schedule 을 섞어 최대 3개 반환.
 - `_feedback.py` — 도메인 에이전트 system 프롬프트에 주입되는 과거 down-vote 피드백 컨텍스트.
 - 에이전트 간 직접 호출 금지. 반드시 orchestrator를 통해 라우팅
@@ -88,7 +91,7 @@
 - `tasks.tick` — Beat 이 60s 마다 호출하는 스캐너. `scanner.find_due_schedules` → per-item `run_schedule_artifact.delay(id)` fan-out. `scanner.find_date_notifications` → tick 안에서 바로 `activity_logs.schedule_notify` insert (중복은 `(artifact_id, notify_kind, for_date)` 로 방지).
 - `tasks.run_schedule_artifact(id)` — 단일 schedule 실행. `artifacts.status = running` 전이 → `orchestrator.run_scheduled(artifact, account_id)` → 결과 반영(`status=active`, `metadata.executed_at`, `metadata.next_run = croniter.get_next`) + `task_logs` 성공/실패 insert + `activity_logs.schedule_run` insert + `log_nodes.create_log_node` 로 `kind='log'` artifact 노드를 캔버스에 추가(`artifact_edges.relation='logged_from'`).
 - `scanner.find_due_schedules(now)` — `kind='schedule' AND status='active' AND metadata.next_run <= now`.
-- `scanner.find_date_notifications(today)` — 일회성 artifact 중 `metadata.start_date == today` 또는 `metadata.due_date ∈ {today, today+1}`. 오늘자 `activity_logs.schedule_notify` 로그가 이미 있는 건 필터.
+- `scanner.find_date_notifications(today)` — 일회성 artifact 의 `start_date`/`due_date`(= `end_date` fallback) 를 **D-7 / D-3 / D-1 / D-0** 오프셋으로 스캔. notify_kind 규약: `start` · `start_d1` · `start_d3` · `due_d0` · `due_d1` · `due_d3` · `due_d7`. 오늘자 `activity_logs.schedule_notify` 로그가 이미 있는 `(artifact_id, notify_kind, for_date)` 는 필터. 알림 메시지는 `metadata.due_label` ("납품기한"/"계약 만료" 등) 을 본문에 주입.
 - `log_nodes.create_log_node(sb, schedule_artifact, status, content, executed_at)` — `kind='log'` 노드 insert + `artifact_edges(parent=schedule, child=log, relation='logged_from')`. `schedules` 라우터의 수동 `run_now` 경로도 이 함수를 공유.
 - 태스크 실행 결과는 항상 `artifacts`(status/metadata) + `task_logs` + `activity_logs` + `kind='log'` 노드 **4곳에 동시 기록**.
 
@@ -106,7 +109,7 @@ profiles              — auth.users 확장, display_name (닉네임), last_seen
 artifacts             — account_id(auth.uid), domains text[] (recruitment|marketing|sales|documents),
                         kind(anchor|domain|artifact|schedule|log), type, title, content, status,
                         metadata(jsonb: pinned, position, cron, ...), created_at
-artifact_edges        — parent_id, child_id, relation(contains|derives_from|scheduled_by|revises|logged_from)
+artifact_edges        — parent_id, child_id, relation(contains|derives_from|scheduled_by|revises|logged_from|analyzed_from)
 evaluations           — artifact_id, account_id, rating(up|down), feedback
 embeddings            — account_id, source_type, source_id, embedding(vector 1024), fts, content
                         (source_type 확장: schedule | log | hub | memo — 006/007 마이그레이션 기준)
@@ -125,7 +128,12 @@ memos                 — account_id, artifact_id(FK→artifacts), content, crea
 - `kind === "anchor"`는 계정당 1개, 4개 도메인 허브의 부모.
 - `kind === "domain"`은 도메인 허브 계층:
   - **메인 허브** — `type` 필드 없음/기본값. 4개 (recruitment/marketing/sales/documents).
-  - **서브 허브** — `type = 'category'`. 메인 허브당 4~5개 카테고리 (예: Job Postings, Interviews, Social, Ads, Reports, Contracts 등).
+  - **서브 허브** — `type = 'category'`. **모든 계정 공통 17개 표준 세트**(`014_standard_sub_hubs` 마이그레이션이 `bootstrap_workspace` 트리거 + backfill 로 보장):
+    - Recruitment: `Job_posting` · `Interviews` · `Onboarding` · `Evaluations`
+    - Documents: `Contracts` · `Tax&HR` · `Legal` · `Operations`
+    - Sales: `Reports` · `Customers` · `Pricing` · `Costs`
+    - Marketing: `Social` · `Blog` · `Campaigns` · `Events` · `Reviews`
+    - 헬퍼 `public.ensure_standard_sub_hubs(account_id)` 는 idempotent — 동일 (domain, title) 이 있으면 skip.
 - `kind === "artifact"` + `type === 'archive'` — 아카이브 폴더 노드. 자식 artifact들을 묶는 컨테이너. 타이틀에 개수 표시 (예: "📦 과거 Ads (3개)").
 - 크로스 도메인 artifact는 `domains`에 여러 값 저장 (예: `['recruitment','documents']`). 30 × 2-dom / 10 × 3-dom / 2 × 4-dom 분포로 mock 시드.
 
@@ -133,18 +141,20 @@ memos                 — account_id, artifact_id(FK→artifacts), content, crea
 
 `artifacts.metadata`는 스키마 없는 jsonb지만 다음 키들은 표준으로 합의된 공용 필드다. 새 키를 도입할 땐 여기에 먼저 등록한다.
 
-| key              | 타입                    | 대상 kind         | 의미                                                |
-| ---------------- | ----------------------- | ----------------- | --------------------------------------------------- |
-| `pinned`         | boolean                 | 전체              | 캔버스 위치 고정 (사용자 드래그 좌표 유지)          |
-| `position`       | {x,y}                   | 전체              | pinned=true일 때 저장된 좌표                        |
-| `is_archive`     | boolean                 | artifact          | 아카이브 폴더 노드 여부 (`type='archive'`와 페어링) |
-| `count`          | number                  | artifact(archive) | 아카이브가 포함한 자식 수                           |
-| `cron`           | string                  | schedule          | cron 표현식 (5필드)                                 |
-| `next_run`       | ISO dt                  | schedule          | 다음 실행 예정 (UTC)                                |
-| `executed_at`    | ISO dt                  | log               | 실행 완료 시각                                      |
-| **`start_date`** | ISO date (`YYYY-MM-DD`) | artifact          | **기간성 artifact의 시작일** (선택)                 |
-| **`end_date`**   | ISO date (`YYYY-MM-DD`) | artifact          | **기간성 artifact의 종료일** (선택)                 |
-| **`due_date`**   | ISO date (`YYYY-MM-DD`) | artifact          | **마감일** (`end_date`와 양자택일, 선택)            |
+| key                    | 타입                    | 대상 kind                   | 의미                                                                                                                   |
+| ---------------------- | ----------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----- | ------- | ------ | ----------- | --------- | ------------------------------ |
+| `pinned`               | boolean                 | 전체                        | 캔버스 위치 고정 (사용자 드래그 좌표 유지)                                                                             |
+| `position`             | {x,y}                   | 전체                        | pinned=true일 때 저장된 좌표                                                                                           |
+| `is_archive`           | boolean                 | artifact                    | 아카이브 폴더 노드 여부 (`type='archive'`와 페어링)                                                                    |
+| `count`                | number                  | artifact(archive)           | 아카이브가 포함한 자식 수                                                                                              |
+| `cron`                 | string                  | schedule                    | cron 표현식 (5필드)                                                                                                    |
+| `next_run`             | ISO dt                  | schedule                    | 다음 실행 예정 (UTC)                                                                                                   |
+| `executed_at`          | ISO dt                  | log                         | 실행 완료 시각                                                                                                         |
+| **`start_date`**       | ISO date (`YYYY-MM-DD`) | artifact                    | **기간성 artifact의 시작일** (선택)                                                                                    |
+| **`end_date`**         | ISO date (`YYYY-MM-DD`) | artifact                    | **기간성 artifact의 종료일** (선택)                                                                                    |
+| **`due_date`**         | ISO date (`YYYY-MM-DD`) | artifact                    | **마감일** (`end_date`와 양자택일, 선택)                                                                               |
+| **`due_label`**        | string                  | artifact                    | due_date의 의미 라벨 (예: "계약 만료", "납품기한", "견적 유효기간", "공지 게시일"). 스케쥴러 D-N 알림 문구 생성에 사용 |
+| **`contract_subtype`** | enum                    | artifact(`type='contract'`) | `labor                                                                                                                 | lease | service | supply | partnership | franchise | nda` — documents 에이전트 전용 |
 
 - 일회성 기간(캠페인/계약/면접/프로모션)은 `start_date`+`end_date` 혹은 `due_date`로 표현. 반복은 `cron`.
 - 일정 관리 모달은 `kind='schedule'` ∪ (`metadata`에 `start_date|end_date|due_date` 중 하나 이상 있는 `kind='artifact'`)를 대상으로 한다.
@@ -261,6 +271,44 @@ supabase/
     ├── seed_mock_data.sql           # test@test.com 용 mock 시드
     └── cleanup_mock_data.sql        # '[MOCK]%' 일괄 제거
 ```
+
+> v0.7.0 (documents 에이전트 + D-7/3/1/0 리마인드) 는 **마이그레이션 불필요** — `due_label` / `contract_subtype` / 확장 `notify_kind` 모두 `metadata` jsonb 안에서 처리.
+>
+> v0.8.x (공정성 분석) 는 011 + 012 마이그레이션 도입:
+>
+> - `011_contract_knowledge.sql` — `law_contract_knowledge_chunks` / `pattern_contract_knowledge_chunks` / `acceptable_contract_knowledge_chunks` 3종 지식 테이블 + HNSW/trgm/FTS 인덱스 + RLS(SELECT 공개, INSERT 는 service_role).
+> - `012_contract_knowledge_search.sql` — 3-way RRF RPC 3종 (`search_law/pattern/acceptable_contract_knowledge`).
+> - 인제스트 스크립트: `backend/scripts/ingest_contract_{laws,risks,acceptable}.py`. BAAI/bge-m3 로컬 임베딩.
+
+### documents 에이전트 자산 (v0.7.0 + v0.8.x)
+
+```
+backend/app/agents/
+├── _doc_templates.py                # TYPE_SPEC + SKELETONS + build_doc_context + detect_doc_intent
+├── _doc_review.py                   # analyze + dispatch_review (RAG 3-way + gpt-4o-mini JSON)
+└── _doc_knowledge/                  # 스켈레톤 주입용 markdown (런타임 인라인 로드)
+    ├── labor/{acceptable,risks}.md
+    ├── lease/{acceptable,risks}.md
+    ├── service/{acceptable,risks}.md
+    ├── supply/{acceptable,risks}.md
+    ├── partnership/{acceptable,risks}.md
+    ├── franchise/{acceptable,risks}.md
+    └── nda/                         # 분석 단계에서 채움 (아직 비어있음)
+
+backend/app/core/
+├── doc_parser.py                    # PDF(PyMuPDF) / DOCX(python-docx) / 이미지(gpt-4o vision OCR)
+└── ocr.py                           # extract_text_from_image (OpenAI vision)
+
+backend/app/routers/
+├── uploads.py                       # POST /api/uploads/document — Supabase Storage(documents-uploads) + uploaded_doc artifact
+└── reviews.py                       # POST /api/reviews — dispatch_review 래퍼
+```
+
+업로드/분석 artifact 타입:
+
+- `type='uploaded_doc'` — 업로드 원본. `metadata: {storage_path, bucket, mime_type, size_bytes, original_name, parsed_len}`. 캔버스에서 📎 아이콘.
+- `type='analysis'` — 공정성 분석. `metadata: {analyzed_doc_id, gap_ratio, eul_ratio, risk_clauses[], user_role, contract_subtype}`. 캔버스에서 ⚖️ 아이콘 + `갑N:을M` pill. 원본과 `analyzed_from` 엣지로 연결 (시각적으로 대시 스트로크).
+- 채팅: Paperclip 버튼으로 PDF/DOCX/이미지 업로드 → `ChatOverlay` 가 자동으로 분석 트리거 메시지 전송 → 에이전트가 역할 CHOICES → 확정 시 `[REVIEW_REQUEST]` 마커 → `[[REVIEW_JSON]]` 페이로드 → `ReviewResultCard` 렌더.
 
 ### 임베딩 백필
 

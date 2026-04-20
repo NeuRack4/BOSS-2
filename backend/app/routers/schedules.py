@@ -172,9 +172,10 @@ async def create_schedule(req: ScheduleCreateRequest):
 
     sb.table("artifact_edges").insert(
         {
-            "parent_id": req.artifact_id,
-            "child_id": schedule_id,
-            "relation": "scheduled_by",
+            "account_id": req.account_id,
+            "parent_id":  req.artifact_id,
+            "child_id":   schedule_id,
+            "relation":   "scheduled_by",
         }
     ).execute()
 

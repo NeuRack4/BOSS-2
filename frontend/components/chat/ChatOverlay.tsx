@@ -24,12 +24,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useChat, type ChatSession } from "./ChatContext";
+import {
+  ReviewResultCard,
+  extractReviewPayload,
+  type ReviewPayload,
+} from "./ReviewResultCard";
+import { MarkdownMessage } from "./MarkdownMessage";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
   choices?: string[];
+  review?: ReviewPayload;
+  attachment?: {
+    status: "uploading" | "done" | "error";
+    filename: string;
+    sizeKb?: number;
+    error?: string;
+  };
 };
+
+const UPLOAD_ACCEPT =
+  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif," +
+  "application/pdf," +
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
+  "application/msword," +
+  "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";
+const UPLOAD_MAX_MB = 20;
 
 const MIN_TEXTAREA = 60;
 const MAX_TEXTAREA = 200;
@@ -88,10 +109,12 @@ export const ChatOverlay = () => {
   const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
@@ -248,6 +271,8 @@ export const ChatOverlay = () => {
               : undefined,
           },
         ]);
+        // 응답이 새 artifact 를 만들었을 수 있으므로 캔버스 재조회 신호
+        window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
         if (sessionCreated) {
           // 제목 생성은 백그라운드라 살짝 늦게 리프레시
           setTimeout(fetchSessions, 1200);
@@ -278,6 +303,102 @@ export const ChatOverlay = () => {
       send(text);
     });
   }, [registerSender, send]);
+
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (!userId || uploading || loading) return;
+      if (file.size > UPLOAD_MAX_MB * 1024 * 1024) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `파일이 너무 큽니다 (${UPLOAD_MAX_MB}MB 이하만 업로드 가능).`,
+          },
+        ]);
+        return;
+      }
+
+      setUploading(true);
+      const placeholderIndex = messages.length;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "user",
+          content: "",
+          attachment: {
+            status: "uploading",
+            filename: file.name,
+            sizeKb: Math.round(file.size / 1024),
+          },
+        },
+      ]);
+
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("account_id", userId);
+        form.append("original_name", file.name);
+        const res = await fetch(`${apiBase}/api/uploads/document`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "업로드 실패" }));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const json = await res.json();
+        const data = json?.data ?? {};
+
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[placeholderIndex]) {
+            next[placeholderIndex] = {
+              ...next[placeholderIndex],
+              attachment: {
+                status: "done",
+                filename: file.name,
+                sizeKb: Math.round(file.size / 1024),
+              },
+            };
+          }
+          return next;
+        });
+
+        // 업로드된 uploaded_doc artifact 를 캔버스에 반영
+        window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+
+        // 업로드 완료 후 자동으로 분석 트리거 메시지 전송
+        const autoMessage = `방금 업로드한 "${data.title || file.name}" 문서를 공정성 분석해주세요.`;
+        await send(autoMessage);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "업로드 실패";
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[placeholderIndex]) {
+            next[placeholderIndex] = {
+              ...next[placeholderIndex],
+              attachment: {
+                status: "error",
+                filename: file.name,
+                sizeKb: Math.round(file.size / 1024),
+                error: msg,
+              },
+            };
+          }
+          return next;
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [apiBase, userId, uploading, loading, messages.length, send],
+  );
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
+    e.target.value = "";
+  };
 
   // Esc to close (only when input empty)
   useEffect(() => {
@@ -458,53 +579,103 @@ export const ChatOverlay = () => {
           {/* Messages */}
           <ScrollArea className="min-h-0 flex-1 px-5 py-4">
             <div className="mx-auto max-w-3xl space-y-3">
-              {messages.map((msg, i) => (
-                <div key={i} className="space-y-2">
-                  <div
-                    className={cn(
-                      "flex gap-2",
-                      msg.role === "user" ? "justify-end" : "justify-start",
-                    )}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                        <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
-                      </div>
-                    )}
+              {messages.map((msg, i) => {
+                const extracted =
+                  msg.role === "assistant"
+                    ? extractReviewPayload(msg.content || "")
+                    : { cleaned: msg.content, payload: msg.review ?? null };
+                const displayText = extracted.cleaned;
+                const reviewPayload = msg.review ?? extracted.payload;
+                return (
+                  <div key={i} className="space-y-2">
                     <div
                       className={cn(
-                        "max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
-                        msg.role === "user"
-                          ? "rounded-br-sm bg-[#2e2719] text-[#fbf6eb]"
-                          : "rounded-bl-sm bg-[#ebe0ca] text-[#2e2719]",
+                        "flex gap-2",
+                        msg.role === "user" ? "justify-end" : "justify-start",
                       )}
                     >
-                      {msg.content}
-                    </div>
-                  </div>
-                  {msg.role === "assistant" && msg.choices && (
-                    <div className="ml-8 grid grid-cols-2 gap-1.5">
-                      {msg.choices.map((choice, idx) => (
-                        <Button
-                          key={idx}
-                          variant="outline"
-                          size="sm"
-                          disabled={loading}
-                          onClick={() => handleChoiceClick(choice, i)}
+                      {msg.role === "assistant" && (
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
+                          <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                        </div>
+                      )}
+                      {msg.attachment ? (
+                        <div
                           className={cn(
-                            "h-auto justify-start whitespace-normal py-1.5 px-2.5 text-left text-xs font-normal leading-snug",
-                            "border-[#ddd0b4] bg-[#fffaf2] text-[#2e2719] hover:bg-[#ebe0ca] hover:text-[#2e2719]",
-                            isOtherChoice(choice) &&
-                              "col-span-2 border-dashed text-[#8c7e66]",
+                            "flex max-w-[80%] items-center gap-2 rounded-2xl rounded-br-sm border px-3 py-2 text-sm",
+                            msg.attachment.status === "error"
+                              ? "border-[#d9a191] bg-[#f4dcd2] text-[#8a3a28]"
+                              : msg.attachment.status === "uploading"
+                                ? "border-[#ddd0b4] bg-[#fffaf2] text-[#5a5040]"
+                                : "border-[#bccab6] bg-[#e3ece2] text-[#3b6a4a]",
                           )}
                         >
-                          {choice}
-                        </Button>
-                      ))}
+                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-medium">
+                              {msg.attachment.filename}
+                            </div>
+                            <div className="text-[10px] opacity-70">
+                              {msg.attachment.sizeKb
+                                ? `${msg.attachment.sizeKb} KB · `
+                                : ""}
+                              {msg.attachment.status === "uploading"
+                                ? "업로드 중..."
+                                : msg.attachment.status === "error"
+                                  ? msg.attachment.error || "실패"
+                                  : "업로드 완료"}
+                            </div>
+                          </div>
+                          {msg.attachment.status === "uploading" && (
+                            <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin" />
+                          )}
+                        </div>
+                      ) : displayText ? (
+                        <div
+                          className={cn(
+                            "max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
+                            msg.role === "user"
+                              ? "whitespace-pre-wrap rounded-br-sm bg-[#2e2719] text-[#fbf6eb]"
+                              : "rounded-bl-sm bg-[#ebe0ca] text-[#2e2719]",
+                          )}
+                        >
+                          {msg.role === "assistant" ? (
+                            <MarkdownMessage content={displayText} />
+                          ) : (
+                            displayText
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {reviewPayload && msg.role === "assistant" && (
+                      <div className="ml-8 max-w-[80%]">
+                        <ReviewResultCard payload={reviewPayload} />
+                      </div>
+                    )}
+                    {msg.role === "assistant" && msg.choices && (
+                      <div className="ml-8 grid grid-cols-2 gap-1.5">
+                        {msg.choices.map((choice, idx) => (
+                          <Button
+                            key={idx}
+                            variant="outline"
+                            size="sm"
+                            disabled={loading}
+                            onClick={() => handleChoiceClick(choice, i)}
+                            className={cn(
+                              "h-auto justify-start whitespace-normal py-1.5 px-2.5 text-left text-xs font-normal leading-snug",
+                              "border-[#ddd0b4] bg-[#fffaf2] text-[#2e2719] hover:bg-[#ebe0ca] hover:text-[#2e2719]",
+                              isOtherChoice(choice) &&
+                                "col-span-2 border-dashed text-[#8c7e66]",
+                            )}
+                          >
+                            {choice}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {loading && (
                 <div className="flex justify-start gap-2">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
@@ -545,14 +716,28 @@ export const ChatOverlay = () => {
 
                 <div className="flex items-center justify-between p-3">
                   <div className="flex items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={UPLOAD_ACCEPT}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                     <button
                       type="button"
-                      className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca]"
-                      aria-label="첨부"
+                      disabled={uploading || loading || !userId}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="group flex items-center gap-1 rounded-lg p-2 transition-colors hover:bg-[#ebe0ca] disabled:opacity-50"
+                      aria-label="문서 첨부 (PDF · DOCX · 이미지)"
+                      title="PDF·DOCX·이미지를 첨부하면 공정성 분석을 도와드려요 (이미지는 OCR)"
                     >
-                      <Paperclip className="h-4 w-4 text-[#5a5040]" />
+                      {uploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-[#5a5040]" />
+                      ) : (
+                        <Paperclip className="h-4 w-4 text-[#5a5040]" />
+                      )}
                       <span className="hidden text-xs text-[#8c7e66] transition-opacity group-hover:inline">
-                        첨부
+                        {uploading ? "업로드 중" : "첨부"}
                       </span>
                     </button>
                   </div>

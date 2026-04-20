@@ -7,6 +7,8 @@ import {
   Clock,
   Play,
   FileText,
+  Paperclip,
+  Scale,
   ThumbsUp,
   ThumbsDown,
   Loader2,
@@ -73,6 +75,11 @@ const KIND_ICON: Record<Kind, React.ComponentType<{ className?: string }>> = {
   artifact: FileText,
   schedule: Clock,
   log: Play,
+};
+
+const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
+  uploaded_doc: Paperclip,
+  analysis: Scale,
 };
 
 const KIND_BADGE: Record<Kind, string> = {
@@ -173,7 +180,14 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
     return () => window.removeEventListener("boss:open-evaluate", handler);
   }, [id]);
 
-  const Icon = KIND_ICON[kind];
+  const Icon = TYPE_ICON[type] ?? KIND_ICON[kind];
+  const isAnalysis = type === "analysis";
+  const gapRatio = isAnalysis
+    ? (metadata.gap_ratio as number | undefined)
+    : undefined;
+  const eulRatio = isAnalysis
+    ? (metadata.eul_ratio as number | undefined)
+    : undefined;
   const cron = metadata.cron as string | undefined;
   const nextRun = localNextRun ?? (metadata.next_run as string | undefined);
   const executedAt =
@@ -458,6 +472,18 @@ export const ArtifactChipNode = ({ data, selected, id }: NodeProps) => {
         <p className="flex-1 truncate text-[16px] font-medium leading-tight text-[#2e2719]">
           {shortTitle}
         </p>
+        {isAnalysis &&
+          typeof gapRatio === "number" &&
+          typeof eulRatio === "number" && (
+            <span
+              className="shrink-0 rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-1.5 py-0 font-mono text-[10px] tracking-tight text-[#5a5040]"
+              title={`갑에게 ${gapRatio}% / 을에게 ${eulRatio}% 유리`}
+            >
+              <span className="text-[#a35c4a]">갑{gapRatio}</span>
+              <span className="px-0.5 text-[#8c7e66]">:</span>
+              <span className="text-[#6a7843]">을{eulRatio}</span>
+            </span>
+          )}
         <div
           role="button"
           tabIndex={0}

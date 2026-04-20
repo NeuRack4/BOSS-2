@@ -110,3 +110,23 @@ class SessionTouchResponse(BaseModel):
     data: dict[str, Any]
     error: str | None = None
     meta: dict[str, Any] = {}
+
+
+class UploadDocumentResponse(BaseModel):
+    data: dict[str, Any]
+    error: str | None = None
+    meta: dict[str, Any] = {}
+
+
+class ReviewRequest(BaseModel):
+    account_id: str
+    doc_artifact_id: str
+    user_role: str = "미지정"            # '갑' | '을' | '미지정'
+    contract_subtype: str | None = None  # 'labor' | 'lease' | ... | None
+    doc_type: str = "계약서"              # '계약서' | '제안서' | '기타'
+
+
+class ReviewResponse(BaseModel):
+    data: dict[str, Any]
+    error: str | None = None
+    meta: dict[str, Any] = {}

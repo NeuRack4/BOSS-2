@@ -31,12 +31,23 @@ def _next_run_iso(cron_expr: str | None, base: datetime) -> str | None:
         return None
 
 
-def _notify_kind_to_text(kind: str) -> tuple[str, str]:
-    return {
-        "start": ("시작일 알림", "오늘부터 시작되는 항목입니다."),
-        "due_d0": ("마감일 당일", "오늘이 마감일입니다."),
-        "due_d1": ("마감 하루 전", "내일이 마감일입니다."),
-    }.get(kind, ("알림", ""))
+_NOTIFY_KIND_TEMPLATES: dict[str, tuple[str, str]] = {
+    "start":    ("D-0 시작",       "오늘부터 시작되는 {label}입니다."),
+    "start_d1": ("D-1 시작 하루 전", "내일부터 시작됩니다 — {label}."),
+    "start_d3": ("D-3 시작 임박",   "3일 뒤 시작됩니다 — {label}."),
+    "due_d0":   ("D-0 마감",       "오늘이 {label} 입니다."),
+    "due_d1":   ("D-1 마감 하루 전", "내일이 {label} 입니다."),
+    "due_d3":   ("D-3 마감 임박",   "3일 뒤 {label} 입니다."),
+    "due_d7":   ("D-7 마감 일주일 전", "일주일 뒤 {label} 입니다."),
+}
+
+
+def _notify_kind_to_text(kind: str, due_label: str | None) -> tuple[str, str]:
+    prefix, template = _NOTIFY_KIND_TEMPLATES.get(kind, ("알림", "{label}"))
+    label = (due_label or "").strip()
+    if not label:
+        label = "마감" if kind.startswith("due") else "일정"
+    return prefix, template.format(label=label)
 
 
 @celery_app.task(name="app.scheduler.tasks.tick")
@@ -53,7 +64,9 @@ def tick() -> dict:
     notif_count = 0
     for t in notifications:
         art = t["artifact"]
-        title_prefix, desc = _notify_kind_to_text(t["notify_kind"])
+        art_meta = art.get("metadata") or {}
+        due_label = art_meta.get("due_label")
+        title_prefix, desc = _notify_kind_to_text(t["notify_kind"], due_label)
         try:
             sb.table("activity_logs").insert(
                 {
@@ -66,6 +79,7 @@ def tick() -> dict:
                         "artifact_id": art["id"],
                         "notify_kind": t["notify_kind"],
                         "for_date": t["for_date"],
+                        "due_label": due_label,
                     },
                 }
             ).execute()

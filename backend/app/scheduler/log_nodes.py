@@ -42,6 +42,11 @@ def create_log_node(sb, schedule_artifact: dict, *, status: str, content: str, e
         return None
 
     sb.table("artifact_edges").insert(
-        {"parent_id": parent_id, "child_id": log_id, "relation": "logged_from"}
+        {
+            "account_id": account_id,
+            "parent_id":  parent_id,
+            "child_id":   log_id,
+            "relation":   "logged_from",
+        }
     ).execute()
     return log_id

@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-20
+
+### Added — 공정성 분석 파이프라인 (Documents 에이전트 확장)
+
+- **지식 베이스 1,349 청크** — 법령(법제처 Open API 7개 법령 × 조문·항 2단계 청킹, ~1,171), 위험 조항 패턴(6 subtype × risks.md, 100), 관행 허용 조항(6 subtype × acceptable.md, 78). `011_contract_knowledge.sql` 로 3개 테이블 + HNSW(m=16, ef=64) + trigram GIN + FTS GIN 인덱스 + RLS(SELECT 공개). `012_contract_knowledge_search.sql` 로 3-way RRF RPC 3개(`search_{law,pattern,acceptable}_contract_knowledge`) — PostgREST 직렬화 우회를 위해 임베딩을 text 로 받아 내부 ::vector 캐스팅.
+- **`backend/app/agents/_doc_review.py`** — `analyze(content, user_role, doc_type, contract_subtype) → ReviewResult` : 문서 앞 2000자로 임베딩 1회 + 3 RPC 호출로 RAG 컨텍스트 구성 → `gpt-4o-mini` JSON 모드 로 갑/을 유불리 비율(합=100) + 위험 조항(clause/reason/severity/suggestion_from→to) 추출. `dispatch_review(...)` 는 라우터/에이전트 공용 저장 헬퍼로 analysis artifact + `analyzed_from` 엣지 + activity_logs + embedding 을 **한 번에** 처리.
+- **파일 업로드** — `POST /api/uploads/document` (`backend/app/routers/uploads.py`) 가 multipart 로 PDF/DOCX/이미지(JPG/PNG/WEBP/BMP/TIFF/GIF) 를 수신. Supabase Storage 버킷 `documents-uploads` 에 `{account_id}/{uuid}.{ext}` (ASCII-only 키) 로 업로드 → `doc_parser.parse_file` (async) 가 PDF(PyMuPDF)·DOCX(python-docx)·이미지(OpenAI `gpt-4o` vision OCR) 분기 → `uploaded_doc` artifact 생성(metadata: storage_path/mime/size/original_name/parsed_len) + 임베딩 인덱싱.
+- **분석 실행** — `POST /api/reviews` (`backend/app/routers/reviews.py`) 가 `dispatch_review` 래퍼. 채팅 플로우: 사용자 업로드 → `documents.py` 에이전트가 최근 60분 이내 `uploaded_doc` 을 system 컨텍스트로 주입 → 역할 CHOICES(갑/을/미지정) → `[REVIEW_REQUEST]` 마커 출력 → `_maybe_dispatch_review` 가 실행 → 응답 끝에 `[[REVIEW_JSON]]` 구조화 페이로드 append.
+- **프론트엔드 분석 카드** — `frontend/components/chat/ReviewResultCard.tsx` 가 `[[REVIEW_JSON]]` 마커를 파싱해 **갑/을 이중 바** + 위험 조항 테이블(severity 색상 · 수정 before→after) 렌더. `stripMarkers` 유틸이 `[CHOICES]`/`[ARTIFACT]`/`[SET_NICKNAME]`/`[SET_PROFILE]`/`[REVIEW_REQUEST]` 잔여 블록을 추가 방어.
+- **채팅 마크다운 렌더** — `frontend/components/chat/MarkdownMessage.tsx` (`react-markdown` + `remark-gfm`) 로 assistant 응답의 `**bold**` / `### header` / `---` / 리스트 / 테이블 / 인라인 코드를 Sand/Paper 테마로 렌더. 사용자 메시지는 plain 유지.
+- **채팅 파일 첨부** — `ChatOverlay` 의 Paperclip 버튼에 hidden `<input type=file>` 배선. 업로드 중/완료/실패 말풍선 tone 구분, 성공 직후 "방금 업로드한 ... 공정성 분석해주세요" 자동 전송.
+- **캔버스 통합** — `ArtifactChipNode` 가 `type='uploaded_doc'` 은 📎 Paperclip / `type='analysis'` 는 ⚖️ Scale 아이콘 + `갑N:을M` 모노 pill (분석 metadata 기반). `FlowCanvas` 의 `Relation` 타입에 `analyzed_from` 추가 + mauve 대시 스트로크 스타일. `boss:artifacts-changed` CustomEvent 로 업로드/분석 직후 자동 재조회.
+
+### Added — 표준 서브허브 + 캔버스 안정화
+
+- **`014_standard_sub_hubs.sql`** — `public.ensure_standard_sub_hubs(account_id)` idempotent 헬퍼 + `bootstrap_workspace` 트리거 확장 + 전체 profile backfill. 모든 계정에 17 서브허브 표준 세트(Recruitment 4 + Documents 4 + Sales 4 + Marketing 5) 보장.
+- **`013_artifact_edges_analyzed_from.sql`** — `artifact_edges.relation` CHECK 제약에 `'analyzed_from'` 추가.
+- **`backend/app/agents/_artifact.py`** — `pick_sub_hub_id` / `pick_main_hub_id` / `pick_documents_parent` 헬퍼. 우선순위: 서브허브(키워드 매칭 → 첫 번째) → 메인허브. `save_artifact_from_reply` 는 `extra_meta_keys` + `subtype_whitelist` 파라미터 지원 (documents 에이전트가 `due_label` / `contract_subtype` 추출·검증에 사용).
+
+### Fixed
+
+- **`artifact_edges.account_id` NOT NULL 누락 — silently fail 대란**: 5개 경로(uploads / \_doc_review / \_artifact / log_nodes / schedules / artifacts 라우터)의 INSERT 가 `account_id` 를 빠뜨려 try/except 로 조용히 실패해왔던 버그 전부 수정. 이로 인해 스케쥴 실행 로그 노드의 `logged_from` 엣지도 실제로는 DB 에 들어가지 않았었음.
+- **Supabase Storage 한글 키 InvalidKey 에러** — `{account_id}/{uuid}-{원본파일명}.pdf` 경로가 한글 때문에 400 반환. `_storage_key_for` 가 UUID + 확장자만으로 경로 구성, 원본명은 `metadata.original_name` 에만 보관.
+- **`[CHOICES]` 블록 본문 노출** — 프론트 `extractReviewPayload` 가 이제 `stripMarkers` 로 CHOICES/ARTIFACT/SET_NICKNAME/SET_PROFILE/REVIEW_REQUEST 잔여 블록을 본문에서 제거. 백엔드 스트립에 구멍이 있어도 UI 에 원문 마커가 뜨지 않도록 방어.
+
+### Changed
+
+- **`documents.py` 에이전트 system 프롬프트 재작성** — 신규 작성 플로우(type/subtype 결정 → 필수 필드 매트릭스 → ARTIFACT 블록) 와 공정성 분석 플로우(역할 CHOICES → REVIEW_REQUEST 마커) 를 한 파일에서 분기. `detect_doc_intent` 휴리스틱으로 최근 user 턴까지 훑어 subtype 조기 추론.
+- **README / CLAUDE.md / metadata 규약** — `due_label` (계약 만료 / 납품기한 / 공지 게시일 등), `contract_subtype` (7종 enum), `uploaded_doc` / `analysis` artifact type, `analyzed_from` edge relation, notify_kind 확장(`start_d1/start_d3/due_d3/due_d7`) 전부 문서화.
+
+---
+
+## [0.7.0] - 2026-04-20
+
+### Added — Documents 에이전트 신설 (템플릿 + D-N 리마인드)
+
+- **type 매트릭스 + 계약서 subtype 7종** — `documents.py` 의 `VALID_TYPES = (contract | estimate | proposal | notice | checklist | guide)`. 계약서는 `metadata.contract_subtype ∈ {labor | lease | service | supply | partnership | franchise | nda}` 로 세분. `_doc_templates.py` 가 type × subtype 별 markdown 스켈레톤 + 한국 법령·관행 조항(`_doc_knowledge/<subtype>/{acceptable,risks}.md`) 을 system 프롬프트에 주입. 필수필드 매트릭스(계약: 당사자/조건/기간, 견적: 품목·수량·유효기간, 공지: 게시일·대상 ...)
+- **`_doc_knowledge/` 12개 md** — BOSS 원본 `docs/contract_{risks,acceptable}/*.md` 에서 복사한 노동/임대/용역/납품/파트너십/프랜차이즈 6종 × {위험패턴, 허용조항}. v1.1 공정성 분석의 RAG 인제스트 소스로 재활용.
+- **스케쥴러 D-7 / D-3 / D-1 / D-0 알림** — `scanner.find_date_notifications` 가 기존 `start/due_d0/due_d1` 3종에서 `start/start_d1/start_d3/due_d0/due_d1/due_d3/due_d7` **7종** 으로 확장. `tasks._notify_kind_to_text` 가 `metadata.due_label` (예: "납품기한", "계약 만료") 을 본문에 삽입해 `"일주일 뒤 계약 만료 입니다."` 식으로 문장 완성.
+- **`ActivityModal` D-N 뱃지** — `metadata.notify_kind` 를 감지해 D-7/D-3/D-1/D-0 색상 뱃지 + `due_label` 을 우측에 덧붙여 표시 (severity 차등 색상).
+- **`_artifact.py` 공용 저장 확장** — `extra_meta_keys` + `subtype_whitelist` 파라미터로 도메인별 자유 메타 (`due_label`, `contract_subtype` 등) 저장/검증. ARTIFACT_RULE 블록 스키마에 문서화.
+
+### Changed
+
+- **metadata 규약 테이블**(`CLAUDE.md`) 에 `due_label`, `contract_subtype` 공식 등재. `due_date + due_label` 조합으로 납품기한/제출기한/게시일 등 특수 마감을 별도 키 신설 없이 통일.
+
+---
+
 ## [0.6.0] - 2026-04-19
 
 ### Added — Orchestrator 대규모 확장 (`backend/app/agents/orchestrator.py` +800 라인)
