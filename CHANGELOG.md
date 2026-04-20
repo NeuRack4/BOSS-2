@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature-marketing (Instagram 카드 렌더링 수정 + 오케스트레이터 라우팅 보강)
+
+### Fixed
+
+**Instagram 카드 미표시 문제 (`backend/app/routers/chat.py`)**
+
+- `reply.split("[ARTIFACT]")[0]` 방식이 `[ARTIFACT]` 이후 `[[INSTAGRAM_POST]]` 마커까지 잘라내던 버그 수정
+- `_ARTIFACT_BLOCK_RE` 정규식으로 `[ARTIFACT]...[/ARTIFACT]` 블록만 제거 → 뒤따르는 `[[마커]]` 유지
+
+**Instagram 카드 생성 로직 강화 (`backend/app/agents/marketing.py`)**
+
+- `_maybe_instagram_preview` 해시태그 감지 완화 — 단일 줄 5개 이상 강제에서 reply 전체 해시태그 5개 이상으로 변경
+- `_extract_sns_content` — "해시태그: #..." 라벨 붙은 줄 파싱 지원, 여러 줄 분산 해시태그 누적 + 중복 제거
+- `run_sns_post` capability — `[[INSTAGRAM_POST]]` 마커 누락 시 강제 생성 (DALL-E 이미지 포함)
+- `sns_post` 타입 artifact가 있으면 캡션/해시태그 추출 실패해도 카드 생성 보장
+- SYSTEM_PROMPT에 "인스타 피드 즉시 생성 규칙" 추가 — 캡션/해시태그 제공 시 CHOICES 재질문 없이 바로 출력
+
+**오케스트레이터 sticky routing 보강 (`backend/app/agents/orchestrator.py`)**
+
+- `_CONTEXT_REFERENCE_KEYWORDS` 확장 — `예시처럼`, `업로드까지`, `카드로`, `이런 식으로` 등 추가
+- `_DOMAIN_ACTION_SIGNALS` 확장 — `[[instagram_post]]`, `인스타그램 피드`, `게시물을 저장` 등 추가 → Instagram 피드 생성 후 후속 요청이 refuse로 분류되는 오류 수정
+
+---
+
 ## [Unreleased] — feature/sales-agent
 
 ### Added — Sales 도메인 MVP: 텍스트 입력 → 파싱 → 저장 → 캔버스 반영

@@ -88,7 +88,9 @@ async def chat(req: ChatRequest):
     if is_first_user_msg:
         asyncio.create_task(_maybe_title(account_id, session_id, req.message))
 
-    without_artifact = reply.split("[ARTIFACT]")[0].strip()
+    # [ARTIFACT] 블록은 제거하되, 그 뒤에 붙은 [[마커]]는 유지
+    _ARTIFACT_BLOCK_RE = re.compile(r"\[ARTIFACT\].*?\[/ARTIFACT\]", re.DOTALL)
+    without_artifact = _ARTIFACT_BLOCK_RE.sub("", reply).strip()
     clean_reply, choices = _extract_choices(without_artifact)
 
     return ChatResponse(
