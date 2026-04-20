@@ -40,6 +40,16 @@ VALID_TYPES: tuple[str, ...] = (
     "guide",
 )
 
+# 타입 → 서브허브 매핑 (LLM이 ARTIFACT 블록에 sub_domain 자동 주입)
+_TYPE_TO_SUBHUB: dict[str, str] = {
+    "contract":  "Contracts",
+    "estimate":  "Operations",
+    "proposal":  "Operations",
+    "notice":    "Operations",
+    "checklist": "Tax&HR",
+    "guide":     "Tax&HR",
+}
+
 _REVIEW_REQUEST_RE = re.compile(r"\[REVIEW_REQUEST\](.*?)\[/REVIEW_REQUEST\]", re.DOTALL)
 _UPLOADED_DOC_WINDOW_MIN = 60  # 최근 60분 이내 업로드만 컨텍스트로 자동 노출
 
@@ -67,6 +77,10 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
    - 제안 회신 기한 → due_date + due_label='제안 회신 기한'
    자연어 기한은 YYYY-MM-DD 로 환산.
 5. 법령·관행 근거가 주입되면 그 범위 안에서만 판단하세요. 새 판례 날조 금지.
+6. artifact 저장 시 sub_domain 필드를 반드시 포함하세요:
+   - contract                    → sub_domain: Contracts
+   - estimate, proposal, notice  → sub_domain: Operations
+   - checklist, guide            → sub_domain: Tax&HR
 
 [계약서 subtype 가이드]
 - labor (근로계약서) — 근로기준법·최저임금법
@@ -487,7 +501,7 @@ def describe(account_id: str) -> list[dict]:
             "name": "doc_contract",
             "description": (
                 "계약서 초안을 작성한다 (근로·임대차·용역·납품·파트너십·프랜차이즈·NDA 7종). "
-                "subtype·갑·을 확정 시에만 호출."
+                "subtype·갑·을 확정 시에만 호출. [sub_domain: Contracts]"
             ),
             "handler": run_contract,
             "parameters": {
@@ -506,7 +520,7 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_estimate",
-            "description": "견적서 초안을 작성한다.",
+            "description": "견적서 초안을 작성한다. [sub_domain: Operations]",
             "handler": run_estimate,
             "parameters": {
                 "type": "object",
@@ -521,7 +535,7 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_proposal",
-            "description": "제안서 초안을 작성한다.",
+            "description": "제안서 초안을 작성한다. [sub_domain: Operations]",
             "handler": run_proposal,
             "parameters": {
                 "type": "object",
@@ -536,7 +550,7 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_notice",
-            "description": "직원/고객/거래처 대상 공지문을 작성한다.",
+            "description": "직원/고객/거래처 대상 공지문을 작성한다. [sub_domain: Operations]",
             "handler": run_notice,
             "parameters": {
                 "type": "object",
@@ -550,7 +564,7 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_checklist_guide",
-            "description": "서류 관리 관련 체크리스트 또는 가이드.",
+            "description": "세무·인사·운영 관련 체크리스트 또는 가이드. [sub_domain: Tax&HR]",
             "handler": run_checklist_guide,
             "parameters": {
                 "type": "object",
@@ -680,5 +694,6 @@ async def run(
         valid_types=VALID_TYPES,
         extra_meta_keys=("due_label", "contract_subtype"),
         subtype_whitelist={"contract_subtype": VALID_CONTRACT_SUBTYPES},
+        type_to_subhub=_TYPE_TO_SUBHUB,
     )
     return reply

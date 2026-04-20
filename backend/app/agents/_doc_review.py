@@ -27,6 +27,7 @@ from typing import Literal
 from app.core.embedder import embed_text
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
+from app.agents._artifact import record_artifact_for_focus
 
 log = logging.getLogger(__name__)
 
@@ -386,6 +387,7 @@ async def dispatch_review(
     if not ins.data:
         raise RuntimeError("분석 결과 저장 실패")
     analysis_id = ins.data[0]["id"]
+    record_artifact_for_focus(analysis_id)
 
     # analyzed_from 엣지: 원본 업로드 문서만 유일한 부모.
     # (서브허브 contains 엣지는 의도적으로 생성하지 않음 — 분석 결과는 업로드 노드의 자식으로만 존재)

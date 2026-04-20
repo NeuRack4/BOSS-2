@@ -4,6 +4,7 @@ import re
 from fastapi import APIRouter, HTTPException, Query
 
 from app.agents import orchestrator
+from app.agents._artifact import get_focus_artifact_id, clear_focus_artifact_id
 from app.memory import compressor, long_term, sessions, short_term
 from app.models.schemas import (
     ChatRequest,
@@ -72,6 +73,7 @@ async def chat(req: ChatRequest):
     long_term_context = "\n".join(m["content"] for m in memories) if memories else ""
 
     # 5. Orchestrator 실행
+    clear_focus_artifact_id()
     reply = await orchestrator.run(
         message=req.message,
         account_id=account_id,
@@ -93,14 +95,17 @@ async def chat(req: ChatRequest):
     without_artifact = _ARTIFACT_BLOCK_RE.sub("", reply).strip()
     clean_reply, choices = _extract_choices(without_artifact)
 
-    return ChatResponse(
-        data={
-            "reply": clean_reply,
-            "choices": choices,
-            "session_id": session_id,
-            "session_created": session_created,
-        }
-    )
+    response_data: dict = {
+        "reply": clean_reply,
+        "choices": choices,
+        "session_id": session_id,
+        "session_created": session_created,
+    }
+    focus_id = get_focus_artifact_id()
+    if focus_id:
+        response_data["artifact_id"] = focus_id
+
+    return ChatResponse(data=response_data)
 
 
 @router.get("/sessions", response_model=SessionListResponse)
