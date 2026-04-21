@@ -10,6 +10,7 @@ import {
   ScrollText,
   TrendingUp,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   review_reply: Megaphone,
   sales_entry: TrendingUp,
   revenue_report: TrendingUp,
+  revenue_entry: TrendingUp,
+  cost_report: Wallet,
 };
 
 const dayDiff = (iso: string): number => {
@@ -88,10 +91,11 @@ type Props = {
   dragging?: boolean;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onClick?: () => void;
 };
 
 export const KanbanCard = forwardRef<HTMLDivElement, Props>(
-  ({ card, domain, dragging, onDragStart, onDragEnd }, ref) => {
+  ({ card, domain, dragging, onDragStart, onDragEnd, onClick }, ref) => {
     const meta = DOMAIN_META[domain];
     const Icon = (card.type && TYPE_ICON[card.type]) || FileText;
     const md = card.metadata || {};
@@ -105,10 +109,12 @@ export const KanbanCard = forwardRef<HTMLDivElement, Props>(
         draggable
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onClick={onClick}
         className={cn(
-          "group relative cursor-grab overflow-hidden rounded-[5px] border p-3 transition-all active:cursor-grabbing",
+          "group relative overflow-hidden rounded-[5px] border p-3 transition-all",
           "border-[color:var(--kb-border)] bg-[color:var(--kb-card)]",
           "hover:-translate-y-0.5 hover:border-[color:var(--kb-border-strong)] hover:bg-[color:var(--kb-card-hover)]",
+          onClick ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           dragging && "opacity-40",
         )}
       >

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { KanbanColumn } from "./KanbanColumn";
 import type { KanbanCardData } from "./KanbanCard";
 import type { DomainKey } from "./types";
+import { SalesDetailModal } from "@/components/sales/SalesDetailModal";
 
 type SubHub = {
   id: string;
@@ -23,6 +24,8 @@ type Props = {
   domain: DomainKey;
 };
 
+const SALES_DETAIL_TYPES = new Set(["revenue_entry", "cost_report"]);
+
 export const KanbanBoard = ({ accountId, domain }: Props) => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   const [board, setBoard] = useState<BoardData | null>(null);
@@ -30,6 +33,15 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const draggingRef = useRef<{ id: string; from: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Sales 상세 모달
+  const [detailCard, setDetailCard] = useState<KanbanCardData | null>(null);
+
+  const handleCardClick = useCallback((card: KanbanCardData) => {
+    if (domain === "sales" && card.type && SALES_DETAIL_TYPES.has(card.type)) {
+      setDetailCard(card);
+    }
+  }, [domain]);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +62,12 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener("boss:artifacts-changed", handler);
+    return () => window.removeEventListener("boss:artifacts-changed", handler);
   }, [load]);
 
   const movingIdsRef = useRef<Set<string>>(new Set());
@@ -152,6 +170,19 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
 
   return (
     <div className="relative">
+      {/* Sales 상세 모달 */}
+      {detailCard && (
+        <SalesDetailModal
+          open={!!detailCard}
+          onClose={() => setDetailCard(null)}
+          accountId={accountId}
+          artifactId={detailCard.id}
+          artifactType={detailCard.type ?? ""}
+          recordedDate={(detailCard.metadata?.recorded_date as string) ?? ""}
+          artifactTitle={detailCard.title}
+        />
+      )}
+
       {board.unassigned.length > 0 && (
         <div className="mb-4 rounded-[5px] border border-[color:var(--kb-warn-border)] bg-[color:var(--kb-warn-bg)] px-4 py-3 text-[11px] text-[color:var(--kb-warn-fg)]">
           아직 서브허브에 배정되지 않은 항목 {board.unassigned.length}개. 아래
@@ -170,6 +201,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
             onCardDragStart={onCardDragStart}
             onCardDragEnd={onCardDragEnd}
             onCardDrop={onCardDrop}
+            onCardClick={handleCardClick}
           />
         )}
         {board.sub_hubs.map((h) => (
@@ -183,6 +215,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
             onCardDragStart={onCardDragStart}
             onCardDragEnd={onCardDragEnd}
             onCardDrop={onCardDrop}
+            onCardClick={handleCardClick}
           />
         ))}
       </div>
