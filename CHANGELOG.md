@@ -134,7 +134,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **`frontend/components/chat/ChatOverlay.tsx`**
 
 - `[[SHORTS_WIZARD]]` 마커 파싱 + `ShortsWizardCard` 렌더 연결.
-  > > > > > > > origin/dev
+
+### Changed (v1.0.1 패치)
+
+**`frontend/components/chat/ShortsWizardCard.tsx`**
+
+- **드래그 앤 드롭 순서 변경** — 사진 업로드 탭에서 슬라이드 항목을 드래그로 순서 재배치. 드래그 중 항목 반투명(opacity-40) + 드롭 대상 빨간 ring 표시.
+- **스텝 탭 클릭 이동** — 상단 ① ② ③ ④ 탭을 클릭해 방문한 스텝 간 자유 이동 가능. 미방문 스텝은 회색(disabled). `goToStep()`으로 방문 기록(`unlockedSteps`) 관리.
+- **즉시 트리거** — "유튜브 쇼츠 만들고 싶어" 입력 시 파라미터 질문 없이 마법사 카드 바로 표시. `mkt_shorts_video` capability `required: []` + description에 즉시 호출 지시 추가.
+
+**`backend/app/services/shorts_gen.py`**
+
+- **이미지 풀스크린** — `scale+pad`(검은 여백) → `scale+crop`(화면 꽉 채우기)으로 변경.
+- **자막 트렌디 스타일** — 박스 배경 제거, 폰트 54px → 68px, 흰 글자 + 검은 외곽선(5px) + 그림자로 틱톡/쇼츠 스타일 적용. 위치 `y=h-150` → `y=h*0.80`.
+
+**`frontend/components/chat/InstagramPostCard.tsx`**
+
+- "다시 시도" 버튼 `handlePublish` (미정의 참조 오류) → `setShowLibrary(true)` 수정.
+
+**`backend/app/agents/marketing.py`**
+
+- `run_shorts_wizard` `topic` 파라미터 optional(`str = ""`)로 변경, 기본값 `"YouTube Shorts"` 설정.
 
 ---
 

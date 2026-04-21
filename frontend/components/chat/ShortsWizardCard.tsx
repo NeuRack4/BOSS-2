@@ -10,8 +10,6 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  GripVertical,
-  Pencil,
   Link,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -63,8 +61,13 @@ export const ShortsWizardCard = ({
 }) => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   const [step, setStep] = useState<Step>("upload");
+  const [unlockedSteps, setUnlockedSteps] = useState<Set<Step>>(
+    new Set(["upload"]),
+  );
   const [slides, setSlides] = useState<SlideItem[]>([]);
   const [loadingSubtitles, setLoadingSubtitles] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // settings
   const [title, setTitle] = useState(payload.topic);
@@ -106,6 +109,12 @@ export const ShortsWizardCard = ({
     checkYtStatus();
   }, [checkYtStatus]);
 
+  // 스텝 이동 (unlock 포함)
+  const goToStep = (s: Step) => {
+    setStep(s);
+    setUnlockedSteps((prev) => new Set([...prev, s]));
+  };
+
   // 파일 선택
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -120,6 +129,29 @@ export const ShortsWizardCard = ({
 
   const removeSlide = (i: number) => {
     setSlides((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  // 드래그 앤 드롭
+  const handleDragStart = (i: number) => setDragIndex(i);
+  const handleDragOver = (e: React.DragEvent, i: number) => {
+    e.preventDefault();
+    setDragOverIndex(i);
+  };
+  const handleDrop = (e: React.DragEvent, i: number) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === i) return;
+    setSlides((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(i, 0, moved);
+      return next;
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   // 자막 AI 생성
@@ -144,7 +176,7 @@ export const ShortsWizardCard = ({
       setSlides((prev) =>
         prev.map((s, i) => ({ ...s, subtitle: subs[i] ?? s.subtitle })),
       );
-      setStep("subtitles");
+      goToStep("subtitles");
     } catch (err) {
       alert(err instanceof Error ? err.message : "자막 생성 실패");
     } finally {
@@ -227,8 +259,6 @@ export const ShortsWizardCard = ({
     }
   };
 
-  const stepIdx = STEPS.indexOf(step);
-
   return (
     <div className="w-[340px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
       {/* Header */}
@@ -241,18 +271,26 @@ export const ShortsWizardCard = ({
 
       {/* Step indicator */}
       <div className="flex border-b border-[#f0ece4] bg-[#fbf6eb]">
-        {STEPS.map((s, i) => (
-          <div
-            key={s}
-            className={`flex-1 py-1.5 text-center text-[10px] font-medium transition-colors ${
-              step === s
-                ? "border-b-2 border-[#ff0000] text-[#ff0000]"
-                : "text-[#8c7e66]"
-            }`}
-          >
-            {STEP_LABELS[s]}
-          </div>
-        ))}
+        {STEPS.map((s) => {
+          const unlocked = unlockedSteps.has(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={!unlocked}
+              onClick={() => unlocked && goToStep(s)}
+              className={`flex-1 py-1.5 text-center text-[10px] font-medium transition-colors ${
+                step === s
+                  ? "border-b-2 border-[#ff0000] text-[#ff0000]"
+                  : unlocked
+                    ? "cursor-pointer text-[#5a5040] hover:text-[#ff0000]"
+                    : "cursor-not-allowed text-[#c4b89a]"
+              }`}
+            >
+              {STEP_LABELS[s]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="p-4">
@@ -275,7 +313,7 @@ export const ShortsWizardCard = ({
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#ddd0b4] py-8 text-[#8c7e66] hover:border-[#ff0000]/50 hover:bg-[#fff5f5] transition-colors"
+                className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#ddd0b4] py-8 text-[#8c7e66] transition-colors hover:border-[#ff0000]/50 hover:bg-[#fff5f5]"
               >
                 <Upload className="h-7 w-7 opacity-50" />
                 <span className="text-[12px]">
@@ -285,7 +323,21 @@ export const ShortsWizardCard = ({
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {slides.map((s, i) => (
-                  <div key={i} className="relative">
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragOver={(e) => handleDragOver(e, i)}
+                    onDrop={(e) => handleDrop(e, i)}
+                    onDragEnd={handleDragEnd}
+                    className={`relative cursor-grab transition-opacity active:cursor-grabbing ${
+                      dragIndex === i ? "opacity-40" : "opacity-100"
+                    } ${
+                      dragOverIndex === i && dragIndex !== i
+                        ? "rounded-lg ring-2 ring-[#ff0000] ring-offset-1"
+                        : ""
+                    }`}
+                  >
                     <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-[#f0ece4]">
                       <Image
                         src={s.preview}
@@ -311,7 +363,7 @@ export const ShortsWizardCard = ({
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="flex aspect-[9/16] w-full items-center justify-center rounded-lg border-2 border-dashed border-[#ddd0b4] text-2xl text-[#8c7e66] hover:border-[#ff0000]/50 hover:bg-[#fff5f5] transition-colors"
+                    className="flex aspect-[9/16] w-full items-center justify-center rounded-lg border-2 border-dashed border-[#ddd0b4] text-2xl text-[#8c7e66] transition-colors hover:border-[#ff0000]/50 hover:bg-[#fff5f5]"
                   >
                     +
                   </button>
@@ -365,7 +417,7 @@ export const ShortsWizardCard = ({
                       setSlides((prev) =>
                         prev.map((sl, idx) =>
                           idx === i ? { ...sl, subtitle: e.target.value } : sl,
-                        ),
+                        )
                       )
                     }
                     className="flex-1 rounded-lg border border-[#ddd0b4] px-2 py-1.5 text-[12px] outline-none focus:border-[#ff0000]"
@@ -377,14 +429,14 @@ export const ShortsWizardCard = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setStep("upload")}
+                onClick={() => goToStep("upload")}
                 className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
               >
                 <ChevronLeft className="h-3.5 w-3.5" /> 이전
               </button>
               <button
                 type="button"
-                onClick={() => setStep("settings")}
+                onClick={() => goToStep("settings")}
                 className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90"
               >
                 다음 <ChevronRight className="h-3.5 w-3.5" />
@@ -466,14 +518,14 @@ export const ShortsWizardCard = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setStep("subtitles")}
+                onClick={() => goToStep("subtitles")}
                 className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
               >
                 <ChevronLeft className="h-3.5 w-3.5" /> 이전
               </button>
               <button
                 type="button"
-                onClick={() => setStep("generate")}
+                onClick={() => goToStep("generate")}
                 className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90"
               >
                 다음 <ChevronRight className="h-3.5 w-3.5" />
@@ -504,7 +556,7 @@ export const ShortsWizardCard = ({
             </div>
 
             {/* 요약 */}
-            <div className="rounded-lg border border-[#f0ece4] p-3 text-[12px] text-[#5a5040] space-y-1">
+            <div className="space-y-1 rounded-lg border border-[#f0ece4] p-3 text-[12px] text-[#5a5040]">
               <div>
                 <strong>제목:</strong> {title}
               </div>
@@ -578,7 +630,7 @@ export const ShortsWizardCard = ({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setStep("settings")}
+                    onClick={() => goToStep("settings")}
                     disabled={genState !== "idle"}
                     className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4] disabled:opacity-50"
                   >

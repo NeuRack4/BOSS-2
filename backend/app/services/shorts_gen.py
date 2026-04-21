@@ -104,21 +104,23 @@ def _build_ffmpeg_cmd(
         )
         scale_pad = (
             f"[{i}:v]"
-            f"scale=1080:1920:force_original_aspect_ratio=decrease,"
-            f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920"
         )
         if safe_text:
             drawtext = (
                 f",drawtext="
                 f"fontfile='{_FONT_PATH_ESC}':"
                 f"text='{safe_text}':"
-                f"fontsize=54:"
+                f"fontsize=68:"
                 f"fontcolor=white:"
+                f"bordercolor=black:"
+                f"borderw=5:"
+                f"shadowcolor=black@0.6:"
+                f"shadowx=3:"
+                f"shadowy=3:"
                 f"x=(w-text_w)/2:"
-                f"y=h-150:"
-                f"box=1:"
-                f"boxcolor=black@0.55:"
-                f"boxborderw=12"
+                f"y=h*0.80"
             )
         else:
             drawtext = ""
