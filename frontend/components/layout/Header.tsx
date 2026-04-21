@@ -11,7 +11,9 @@ import {
   History,
   LayoutGrid,
   LogOut,
+  Moon,
   Search,
+  Sun,
 } from "lucide-react";
 import { ScheduleManagerModal } from "@/components/layout/ScheduleManagerModal";
 import { ActivityModal } from "@/components/layout/ActivityModal";
@@ -23,6 +25,23 @@ export const Header = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [darkBg, setDarkBg] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("boss2:bg-dark");
+    if (stored === "true") {
+      setDarkBg(true);
+      document.documentElement.setAttribute("data-bg", "dark");
+    }
+  }, []);
+
+  const toggleBg = () => {
+    const next = !darkBg;
+    setDarkBg(next);
+    if (next) document.documentElement.setAttribute("data-bg", "dark");
+    else document.documentElement.removeAttribute("data-bg");
+    localStorage.setItem("boss2:bg-dark", String(next));
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -33,6 +52,17 @@ export const Header = () => {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const onOpenSchedule = () => setScheduleOpen(true);
+    const onOpenActivity = () => setActivityOpen(true);
+    window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
+    window.addEventListener("boss:open-activity-modal", onOpenActivity);
+    return () => {
+      window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
+      window.removeEventListener("boss:open-activity-modal", onOpenActivity);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -105,6 +135,20 @@ export const Header = () => {
         >
           <History className="h-4 w-4 mr-1.5" />
           활동이력
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleBg}
+          title={darkBg ? "배경 밝게" : "배경 어둡게"}
+          className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+        >
+          {darkBg ? (
+            <Sun className="h-4 w-4 mr-1.5" />
+          ) : (
+            <Moon className="h-4 w-4 mr-1.5" />
+          )}
+          {darkBg ? "Light" : "Dark"}
         </Button>
         <Button
           variant="ghost"

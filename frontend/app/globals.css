@@ -6,11 +6,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans:
-    "Pretendard Variable", Pretendard, "Geist", "Geist Fallback", ui-sans-serif,
-    system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
-  --font-mono:
-    "JetBrains Mono", "JetBrains Mono Variable", "Geist Mono",
-    "Geist Mono Fallback", ui-monospace, monospace;
+    var(--font-roboto), "Roboto", ui-sans-serif, system-ui, -apple-system,
+    "Apple SD Gothic Neo", sans-serif;
+  --font-mono: var(--font-roboto-mono), "Roboto Mono", ui-monospace, monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -132,4 +130,28 @@
 }
 .glow-pulse {
   animation: glow-pulse 1.6s ease-in-out infinite;
+}
+
+/* ─── Bento dashboard shell — warm off-white (default) / black (data-bg="dark") ─── */
+.bento-shell {
+  background: #f4f1ed;
+  color: #030303;
+}
+html[data-bg="dark"] .bento-shell {
+  background: #030303;
+  color: #fcfcfc;
+}
+.bento-shell header {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(3, 3, 3, 0.08);
+  color: #030303;
+  backdrop-filter: blur(12px);
+}
+.bento-shell header a,
+.bento-shell header button {
+  color: rgba(3, 3, 3, 0.7);
+}
+.bento-shell header button:hover {
+  background: rgba(3, 3, 3, 0.05);
+  color: #030303;
 }
