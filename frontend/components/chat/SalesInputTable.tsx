@@ -95,10 +95,7 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
       const saved = await res.json();
       const count = saved?.data?.saved ?? items.length;
       const artifactId: string | undefined = saved?.data?.artifact_id;
-      onSaved?.(
-        `매출 ${count}건이 저장됐어요.`,
-        artifactId,
-      );
+      onSaved?.(`매출 ${count}건이 저장됐어요.`, artifactId);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");

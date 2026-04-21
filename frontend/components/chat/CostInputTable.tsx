@@ -5,7 +5,14 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-const CATEGORIES = ["재료비", "인건비", "임대료", "공과금", "마케팅", "기타"] as const;
+const CATEGORIES = [
+  "재료비",
+  "인건비",
+  "임대료",
+  "공과금",
+  "마케팅",
+  "기타",
+] as const;
 
 export type CostActionData = {
   date: string;
@@ -158,7 +165,9 @@ export const CostInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                       className="bg-transparent text-[#5a5040] focus:outline-none"
                     >
                       {CATEGORIES.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
                       ))}
                     </select>
                   </td>
@@ -168,7 +177,11 @@ export const CostInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                       value={it.amount}
                       min={0}
                       onChange={(e) =>
-                        update(i, "amount", Math.max(0, parseInt(e.target.value) || 0))
+                        update(
+                          i,
+                          "amount",
+                          Math.max(0, parseInt(e.target.value) || 0),
+                        )
                       }
                       className="w-28 bg-transparent text-right text-[#2e2719] focus:outline-none"
                     />

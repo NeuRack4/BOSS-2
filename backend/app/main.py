@@ -25,7 +25,9 @@ from app.routers import (
     auth,
     chat,
     costs,
+    dashboard,
     evaluations,
+    kanban,
     marketing,
     memos,
     recruitment,
@@ -54,6 +56,8 @@ app.include_router(evaluations.router)
 app.include_router(schedules.router)
 app.include_router(artifacts.router)
 app.include_router(summary.router)
+app.include_router(dashboard.router)
+app.include_router(kanban.router)
 app.include_router(marketing.router)
 app.include_router(memos.router)
 app.include_router(recruitment.router)

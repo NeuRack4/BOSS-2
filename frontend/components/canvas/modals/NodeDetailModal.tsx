@@ -148,7 +148,9 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
   const [costRecords, setCostRecords] = useState<CostRecord[]>([]);
   const [costLoading, setCostLoading] = useState(false);
   const [costDate, setCostDate] = useState("");
-  const [deletingCostRecord, setDeletingCostRecord] = useState<string | null>(null);
+  const [deletingCostRecord, setDeletingCostRecord] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const sb = createClient();
@@ -642,7 +644,9 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                       </div>
 
                       {costLoading ? (
-                        <p className="py-2 text-[11px] text-[#8c7e66]">불러오는 중…</p>
+                        <p className="py-2 text-[11px] text-[#8c7e66]">
+                          불러오는 중…
+                        </p>
                       ) : costRecords.length === 0 ? (
                         <p className="py-2 text-[11px] text-[#8c7e66]">
                           {costDate} 비용 기록이 없습니다.
@@ -652,24 +656,39 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                           <table className="w-full text-[11px]">
                             <thead>
                               <tr className="border-b border-[#ddd0b4] text-left text-[#8c7e66]">
-                                <th className="px-2 py-1.5 font-medium">항목</th>
-                                <th className="px-2 py-1.5 font-medium">분류</th>
-                                <th className="px-2 py-1.5 text-right font-medium">금액</th>
+                                <th className="px-2 py-1.5 font-medium">
+                                  항목
+                                </th>
+                                <th className="px-2 py-1.5 font-medium">
+                                  분류
+                                </th>
+                                <th className="px-2 py-1.5 text-right font-medium">
+                                  금액
+                                </th>
                                 <th className="w-6 px-1" />
                               </tr>
                             </thead>
                             <tbody>
                               {costRecords.map((r) => (
-                                <tr key={r.id} className="border-b border-[#ddd0b4]/50 last:border-0">
-                                  <td className="px-2 py-1.5 text-[#2e2719]">{r.item_name}</td>
-                                  <td className="px-2 py-1.5 text-[#5a5040]">{r.category}</td>
+                                <tr
+                                  key={r.id}
+                                  className="border-b border-[#ddd0b4]/50 last:border-0"
+                                >
+                                  <td className="px-2 py-1.5 text-[#2e2719]">
+                                    {r.item_name}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-[#5a5040]">
+                                    {r.category}
+                                  </td>
                                   <td className="px-2 py-1.5 text-right text-[#2e2719]">
                                     {r.amount.toLocaleString()}원
                                   </td>
                                   <td className="px-1 py-1.5">
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteCostRecord(r.id)}
+                                      onClick={() =>
+                                        handleDeleteCostRecord(r.id)
+                                      }
                                       disabled={deletingCostRecord === r.id}
                                       className="rounded p-0.5 text-[#bfae8a] hover:bg-[#ebe0ca] hover:text-[#c47865] disabled:opacity-40"
                                       aria-label="삭제"
@@ -682,11 +701,17 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                             </tbody>
                             <tfoot>
                               <tr className="border-t border-[#ddd0b4]">
-                                <td colSpan={2} className="px-2 py-1.5 text-right text-[10px] font-semibold text-[#2e2719]">
+                                <td
+                                  colSpan={2}
+                                  className="px-2 py-1.5 text-right text-[10px] font-semibold text-[#2e2719]"
+                                >
                                   합계
                                 </td>
                                 <td className="px-2 py-1.5 text-right text-[11px] font-bold text-[#2e2719]">
-                                  {costRecords.reduce((s, r) => s + r.amount, 0).toLocaleString()}원
+                                  {costRecords
+                                    .reduce((s, r) => s + r.amount, 0)
+                                    .toLocaleString()}
+                                  원
                                 </td>
                                 <td />
                               </tr>

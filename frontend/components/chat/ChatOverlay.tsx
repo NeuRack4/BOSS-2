@@ -178,7 +178,10 @@ function parseCostAction(text: string): {
     if (text[i] === "{") depth++;
     else if (text[i] === "}") {
       depth--;
-      if (depth === 0) { jsonEnd = i; break; }
+      if (depth === 0) {
+        jsonEnd = i;
+        break;
+      }
     }
   }
   if (jsonEnd === -1) return { clean: text, action: undefined };
@@ -188,7 +191,11 @@ function parseCostAction(text: string): {
   markerEnd++;
 
   let action: CostActionData | undefined;
-  try { action = JSON.parse(text.slice(jsonStart, jsonEnd + 1)); } catch { /* ignore */ }
+  try {
+    action = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    /* ignore */
+  }
 
   const clean = (text.slice(0, start) + text.slice(markerEnd)).trim();
   return { clean, action };
@@ -255,9 +262,13 @@ export const ChatOverlay = () => {
   const [uploadType, setUploadType] = useState<string>("auto");
   const [userId, setUserId] = useState<string | null>(null);
   const [showSalesTable, setShowSalesTable] = useState(false);
-  const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(null);
+  const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(
+    null,
+  );
   const [showCostTable, setShowCostTable] = useState(false);
-  const [costTableData, setCostTableData] = useState<CostActionData | null>(null);
+  const [costTableData, setCostTableData] = useState<CostActionData | null>(
+    null,
+  );
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -736,14 +747,18 @@ export const ChatOverlay = () => {
           setCurrentSessionId(newSessionId);
         }
         const rawReply = data?.data?.reply ?? "응답을 받지 못했습니다.";
-        const { clean: afterSales, action: salesAction } = parseSalesAction(rawReply);
-        const { clean: cleanReply, action: costAction } = parseCostAction(afterSales);
+        const { clean: afterSales, action: salesAction } =
+          parseSalesAction(rawReply);
+        const { clean: cleanReply, action: costAction } =
+          parseCostAction(afterSales);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
             content: cleanReply,
-            choices: data?.data?.choices?.length ? data.data.choices : undefined,
+            choices: data?.data?.choices?.length
+              ? data.data.choices
+              : undefined,
             salesAction,
             costAction,
           },
@@ -971,7 +986,11 @@ export const ChatOverlay = () => {
             setShowSalesTable(false);
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", content: message, savedArtifactId: artifactId },
+              {
+                role: "assistant",
+                content: message,
+                savedArtifactId: artifactId,
+              },
             ]);
             window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
           }}
@@ -986,7 +1005,11 @@ export const ChatOverlay = () => {
             setShowCostTable(false);
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", content: message, savedArtifactId: artifactId },
+              {
+                role: "assistant",
+                content: message,
+                savedArtifactId: artifactId,
+              },
             ]);
             window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
           }}
@@ -1304,8 +1327,11 @@ export const ChatOverlay = () => {
                                       },
                                     );
                                     if (res.ok) {
-                                      const json = await res.json().catch(() => ({}));
-                                      const artifactId: string | undefined = json?.data?.artifact_id;
+                                      const json = await res
+                                        .json()
+                                        .catch(() => ({}));
+                                      const artifactId: string | undefined =
+                                        json?.data?.artifact_id;
                                       window.dispatchEvent(
                                         new CustomEvent(
                                           "boss:artifacts-changed",
@@ -1347,7 +1373,8 @@ export const ChatOverlay = () => {
                                     ...prev,
                                     {
                                       role: "assistant" as const,
-                                      content: "새 매출을 입력해 주세요! 품목·수량·금액을 알려주세요.",
+                                      content:
+                                        "새 매출을 입력해 주세요! 품목·수량·금액을 알려주세요.",
                                     },
                                   ]);
                                 }}
@@ -1385,22 +1412,34 @@ export const ChatOverlay = () => {
                                   if (!userId || !apiBase) return;
                                   const action = msg.costAction!;
                                   try {
-                                    const res = await fetch(`${apiBase}/api/costs`, {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({
-                                        account_id: userId,
-                                        items: action.items.map((it) => ({
-                                          ...it,
-                                          recorded_date: action.date,
-                                          source: "chat",
-                                        })),
-                                      }),
-                                    });
+                                    const res = await fetch(
+                                      `${apiBase}/api/costs`,
+                                      {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                          account_id: userId,
+                                          items: action.items.map((it) => ({
+                                            ...it,
+                                            recorded_date: action.date,
+                                            source: "chat",
+                                          })),
+                                        }),
+                                      },
+                                    );
                                     if (res.ok) {
-                                      const json = await res.json().catch(() => ({}));
-                                      const artifactId: string | undefined = json?.data?.artifact_id;
-                                      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+                                      const json = await res
+                                        .json()
+                                        .catch(() => ({}));
+                                      const artifactId: string | undefined =
+                                        json?.data?.artifact_id;
+                                      window.dispatchEvent(
+                                        new CustomEvent(
+                                          "boss:artifacts-changed",
+                                        ),
+                                      );
                                       setMessages((prev) => [
                                         ...prev,
                                         {
@@ -1410,7 +1449,9 @@ export const ChatOverlay = () => {
                                         },
                                       ]);
                                     }
-                                  } catch { /* silent */ }
+                                  } catch {
+                                    /* silent */
+                                  }
                                 }}
                                 className="flex-1 border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium"
                               >
@@ -1435,7 +1476,8 @@ export const ChatOverlay = () => {
                                     ...prev,
                                     {
                                       role: "assistant" as const,
-                                      content: "새 비용을 입력해 주세요! 항목명·분류·금액을 알려주세요.",
+                                      content:
+                                        "새 비용을 입력해 주세요! 항목명·분류·금액을 알려주세요.",
                                     },
                                   ]);
                                 }}
