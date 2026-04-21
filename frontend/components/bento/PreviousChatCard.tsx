@@ -1,50 +1,71 @@
 "use client";
 
+import { useMemo, type KeyboardEvent } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { useChat } from "@/components/chat/ChatContext";
 
-type Item = {
-  id: string;
-  title: string;
-};
+const cleanTitle = (t: string | null | undefined) =>
+  (t ?? "").replace(/^\[MOCK\]\s*/, "").trim() || "New chat";
 
-type Props = {
-  items?: Item[];
-};
+export const PreviousChatCard = () => {
+  const { sessions, requestLoadSession } = useChat();
+  const shown = useMemo(
+    () =>
+      [...sessions]
+        .sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+        )
+        .slice(0, 4),
+    [sessions],
+  );
 
-export const PreviousChatCard = ({ items }: Props) => {
-  const { openChat } = useChat();
-  const shown = (items ?? []).slice(0, 4);
+  const openModal = () =>
+    window.dispatchEvent(new CustomEvent("boss:open-chat-history-modal"));
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openModal();
+    }
+  };
 
   return (
-    <button
-      type="button"
-      onClick={() => openChat()}
-      className="group flex h-full w-full flex-col overflow-hidden rounded-[5px] bg-[#dfe6e7] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openModal}
+      onKeyDown={onKey}
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#d4e5e3] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold tracking-tight text-[#030303]">
+        <span className="text-base font-semibold tracking-tight text-[#030303]">
           Chat History
         </span>
         <ArrowUpRight className="h-5 w-5 opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:opacity-100" />
       </div>
 
       {shown.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-xs text-[#030303]/60">
-          아직 대화 기록이 없어요
+        <div className="flex flex-1 items-center justify-center text-sm text-[#030303]/50">
+          Nothing here yet
         </div>
       ) : (
-        <ul className="space-y-1.5 overflow-y-auto">
+        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
           {shown.map((it) => (
-            <li
-              key={it.id}
-              className="rounded-lg bg-[#fcfcfc]/40 px-3 py-2 text-xs text-[#030303] transition-colors hover:bg-[#fcfcfc]/60"
-            >
-              · {it.title}
+            <li key={it.id}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  requestLoadSession(it.id);
+                }}
+                className="w-full rounded-[5px] bg-[#fcfcfc]/50 px-3 py-2 text-left text-sm text-[#030303] transition-colors hover:bg-[#fcfcfc]/80"
+              >
+                · {cleanTitle(it.title)}
+              </button>
             </li>
           ))}
         </ul>
       )}
-    </button>
+    </div>
   );
 };

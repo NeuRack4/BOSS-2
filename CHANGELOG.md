@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — feature-documents (Bento 대시보드 + Inline Chat + UI 영어화)
+
+### Added — Bento Dashboard (`/dashboard`)
+
+- **`BentoGrid.tsx`** — 12-열 grid 레이아웃. 상단: `ChatCenterCard` (6×4) + DomainCard 4개 (3×4, 2열 × 2컬럼). 하단: `PreviousChatCard` + `ScheduleCard` + `ActivityCard` (3:3:6 비율).
+- **`ProfileMemorySidebar.tsx`** — `min-[1500px]:flex` 좌측 세로 사이드바. 3:3:3 비율로 `ProfileCard` / `LongMemoryCard` / `MemosCard` 3장 스택. 각 카드 우상단 `ArrowUpRight` 버튼만 모달을 열고, 빈 공간/아이템 본문 클릭은 별개 stopPropagation 버튼에 할당.
+- **`DomainCard.tsx` 통계 블록** — Active / Due / Recent 3-열 그리드 (큰 숫자 + 모노스페이스 uppercase 라벨, 세로 divider). 제목 바로 아래 배치. 최근 항목은 `mt-auto flex flex-col justify-end` 로 카드 하단에서 위로 쌓임(최신이 맨 위), 최대 4개 pill.
+- **대시보드 모달 6종 (720×560 통일)** — `ChatHistoryModal` / `ScheduleManagerModal` / `ActivityModal` / `ProfileModal` / `LongTermMemoryModal` / `MemosModal`. 모두 `rounded-[5px]` + `variant="dashboard"` (배경 `#f4f1ed`, 잉크 `#030303`, 테마 고정).
+- **`ChatHistoryModal.tsx` 세션 CRUD** — 세션 목록 + 각 row hover 시 🗑 버튼. 클릭 → confirm → `DELETE /api/chat/sessions/:id` → 로컬 상태 + 현재 세션이 삭제된 경우 `requestNewSession()`.
+- **`ProfileModal.tsx`** — `profiles` 테이블 core 7필드 + `profile_meta` 추가 필드 섹션.
+- **`LongTermMemoryModal.tsx`** — `memory_long` importance desc 200개, 별점 표시.
+- **`MemosModal.tsx`** — 2열 그리드 카드. artifact 제목 pill + 본문 + 상대시간.
+
+### Added — Inline Chat (`InlineChat.tsx`)
+
+- 구 `ChatOverlay` (1,641줄, 풀스크린 모달) 의 전체 기능을 `ChatCenterCard` 안으로 인라인 이식: 메시지 히스토리, 파일 업로드 (PDF/DOCX/이미지 + 리뷰 이미지 `gpt-4o vision` OCR), `[CHOICES]`, 분류 confirm, `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 버튼, Markdown, `ReviewResultCard` / `InstagramPostCard` / `ReviewReplyCard`, 세션 로드/새 대화 tick 반응, 로그인 브리핑 흡수.
+- **Empty state** — 메시지가 0개일 때 카드 중앙에 `ASK THE CHATBOT.` + 4개 제안 프롬프트 세로 스택 (좌측 50% 폭). 매 mount / 새 세션 / 빈 세션 로드마다 `pickSuggested()` 가 도메인별 10개 풀(40개)에서 도메인당 1개씩 랜덤 샘플링.
+- **ChatCenterCard 헤더** — "I'm BOSS" 타이틀 + 우상단 "New Session" 버튼 (`MessageSquarePlus`). 클릭 시 `requestNewSession()`.
+
+### Added — `Modal` Portal + `dashboard` variant (`ui/modal.tsx`)
+
+- `createPortal(..., document.body)` — 헤더의 `backdrop-filter: blur(12px)` 가 `position: fixed` 의 containing block 을 만들어 모달/검색 팔레트가 헤더 안에 갇히던 버그 수정.
+- `variant: "sand" | "dashboard"` prop — sand 기본값(기존 캔버스 7개 모달 영향 없음) + dashboard (`rounded-[5px]` / `bg-[#f4f1ed]` / `border-[#030303]/10` / 잉크 글자) 추가.
+
+### Changed — Kanban 테마 토큰 (`globals.css` + `bento/Kanban*.tsx`)
+
+- 하드코딩된 `text-white/…`, `bg-white/[0.0x]`, `border-white/[0.0x]` 를 CSS 변수(`--kb-fg`, `--kb-border`, `--kb-surface`, `--kb-card`, `--kb-dday-urgent/soon`, `--kb-warn-*`, `--kb-fg-on-banner` 등) 로 치환. `html[data-bg="dark"] .bento-shell` 에서 오버라이드하여 light/dark 토글 둘 다 제대로 보이게 수정.
+- DomainPage hero banner 곡률 `rounded-3xl` → `rounded-[5px]`, 흰 글자(`#ecdbca` 탠 배경 위 흰 글자 버그) → `var(--kb-fg-on-banner)` 짙은 잉크로 고정.
+
+### Changed — Header (`layout/Header.tsx`)
+
+- **Layout 버튼 제거** (`boss:reset-layout` 이벤트 발행자 소멸, FlowCanvas 수신자만 남음).
+- 배경을 `rgba(255,255,255,0.85)` + `backdrop-filter: blur(12px)` → 솔리드 `#ffffff` 로 변경 (light/dark 테마 무관 화이트 고정).
+- 모든 라벨/aria-label/tooltip 영어화: `정렬 → Layout`(삭제됨) / `일정 관리 → Schedule` / `활동이력 → Activity` / `배경 밝게/어둡게 → Switch to light/dark` / `로그아웃 → Logout` / 검색창 placeholder `노드·메모 검색… → Search…`.
+
+### Changed — 대시보드 UI 영어화 / 공통 곡률
+
+- 모든 카드 + 모달 + 모달 내 내부 박스 `rounded-lg / rounded-md / rounded-xl` → `rounded-[5px]` 통일.
+- 벤토 카드 글자 크기 전반 상향: 제목 `text-sm → text-base`, 본문 `text-xs → text-[13px]`, 모노스페이스 라벨 `text-[10px] → text-[11px]`, DomainCard 통계 숫자 `text-base → text-lg`.
+- Empty-state 문구 **하나의 표현 `Nothing here yet` 으로 통일** (bento 카드, 모달, 검색 팔레트, 칸반 컬럼·보드, 캔버스 모달, NodeDetailModal 매출/비용/메모 3곳 등).
+- 대시보드 모달 3종(ChatHistory/Schedule/Activity) 전체 한글 UI 영어화 + `FilterContext.DOMAIN_LABEL` 영어화(`채용 → Recruitment`, `마케팅 → Marketing`, `매출 → Sales`, `서류 → Documents`).
+- 검색 팔레트 UI/Tooltip 영어화 (`Search nodes, content, memos…` / `↑↓ navigate` / `↵ open` / `Searching…` / `memo match` / `N results`).
+- ActivityCard / PreviousChatCard / ChatHistoryModal `formatRelative` 영어화 (`just now` / `Nm ago` / `Nh ago` / `Nd ago` / `en-US` 로케일).
+
+### Changed — Context 및 이벤트
+
+- **`ChatContext.tsx` 단순화** — `isChatOpen` / `openChat` / `closeChat` / `seedText` / `consumeSeed` 제거 (InlineChat 이 항상 마운트되어 있어서 "열기" 개념 불필요). `registerSender` / `send` / `requestLoadSession` / `requestNewSession` / `openChatWithBriefing` 는 유지.
+- **CustomEvent 추가** — `boss:open-chat-history-modal`, `boss:open-profile-modal`, `boss:open-longmem-modal`, `boss:open-memos-modal`. Header 에서 모두 수신.
+- **ScheduleCard / ActivityCard 아이템 클릭** → 각 모달 열기(`stopPropagation` 으로 카드 자체 이벤트와 분리). **PreviousChatCard 세션 아이템** → `requestLoadSession(id)` 직접 호출 (canvas 가 대시보드에 없으므로 `boss:focus-node` 는 의도적으로 사용 안 함).
+
+### Removed
+
+- **`frontend/app/canvas-legacy/`** 디렉토리 삭제 (route 제거).
+- **`components/chat/ChatOverlay.tsx`** 삭제 (1,641줄 → `InlineChat.tsx` 로 이식).
+- **`components/bento/AdBanner.tsx`** 사용처 제거 (BentoGrid 에서 `ProfileMemorySidebar` 로 교체).
+- **`ChatCenterCard`** — "전체 열기" 버튼 제거 (오버레이 경로 소멸).
+
+### Backend
+
+- **`backend/app/routers/dashboard.py`** — `recent_titles` 상위 3개 → 5개 확대 (큰 도메인 카드에서 여유 표시).
+
+---
+
 ## [Unreleased] — feature/sales-analytics (비용 입력 + 매출 UX 개선)
 
 ### Added

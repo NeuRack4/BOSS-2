@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
-import { ChatOverlay } from "@/components/chat/ChatOverlay";
 import { ChatProvider } from "@/components/chat/ChatContext";
 import { BriefingLoader } from "@/components/chat/BriefingLoader";
 import { BentoGrid } from "@/components/bento/BentoGrid";
@@ -29,7 +28,6 @@ export default function DashboardPage() {
             </div>
           )}
         </main>
-        <ChatOverlay />
         <BriefingLoader />
       </div>
     </ChatProvider>

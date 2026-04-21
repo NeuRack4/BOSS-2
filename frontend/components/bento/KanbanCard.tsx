@@ -64,10 +64,10 @@ const formatDDay = (iso: string): string => {
 
 const dDayTone = (iso: string): string => {
   const d = dayDiff(iso);
-  if (d < 0) return "text-white/30";
-  if (d <= 1) return "text-[#ff8577]";
-  if (d <= 3) return "text-[#ffc86b]";
-  return "text-white/55";
+  if (d < 0) return "text-[color:var(--kb-fg-faint)]";
+  if (d <= 1) return "text-[color:var(--kb-dday-urgent)]";
+  if (d <= 3) return "text-[color:var(--kb-dday-soon)]";
+  return "text-[color:var(--kb-fg-muted)]";
 };
 
 const formatShortDate = (iso: string): string => {
@@ -76,10 +76,10 @@ const formatShortDate = (iso: string): string => {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  active: "bg-emerald-400",
-  paused: "bg-amber-400",
-  running: "bg-sky-400",
-  archived: "bg-white/20",
+  active: "bg-emerald-500",
+  paused: "bg-amber-500",
+  running: "bg-sky-500",
+  archived: "bg-[color:var(--kb-status-archived)]",
 };
 
 type Props = {
@@ -96,7 +96,8 @@ export const KanbanCard = forwardRef<HTMLDivElement, Props>(
     const Icon = (card.type && TYPE_ICON[card.type]) || FileText;
     const md = card.metadata || {};
     const due = (md.due_date ?? md.end_date) as string | undefined;
-    const statusDot = STATUS_TONE[card.status] ?? "bg-white/20";
+    const statusDot =
+      STATUS_TONE[card.status] ?? "bg-[color:var(--kb-status-archived)]";
 
     return (
       <div
@@ -105,29 +106,30 @@ export const KanbanCard = forwardRef<HTMLDivElement, Props>(
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         className={cn(
-          "group relative cursor-grab overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035] p-3 transition-all active:cursor-grabbing",
-          "hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.06]",
+          "group relative cursor-grab overflow-hidden rounded-[5px] border p-3 transition-all active:cursor-grabbing",
+          "border-[color:var(--kb-border)] bg-[color:var(--kb-card)]",
+          "hover:-translate-y-0.5 hover:border-[color:var(--kb-border-strong)] hover:bg-[color:var(--kb-card-hover)]",
           dragging && "opacity-40",
         )}
       >
         <div
-          className="absolute left-0 top-0 h-full w-[2px] opacity-40 transition-opacity group-hover:opacity-90"
+          className="absolute left-0 top-0 h-full w-[2px] opacity-60 transition-opacity group-hover:opacity-100"
           style={{ backgroundColor: meta.accent }}
           aria-hidden
         />
 
         <div className="flex items-start gap-2.5">
           <div
-            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] text-white/70"
+            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-icon-bg)] text-[color:var(--kb-fg-muted)]"
             aria-hidden
           >
             <Icon className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="line-clamp-2 text-[13px] font-medium leading-snug text-white/95">
+            <div className="line-clamp-2 text-[13px] font-medium leading-snug text-[color:var(--kb-fg)]">
               {card.title}
             </div>
-            <div className="mt-1.5 flex items-center gap-2 text-[10px] text-white/40">
+            <div className="mt-1.5 flex items-center gap-2 text-[10px] text-[color:var(--kb-fg-subtle)]">
               <span
                 className={cn("h-1.5 w-1.5 rounded-full", statusDot)}
                 aria-hidden

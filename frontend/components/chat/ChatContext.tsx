@@ -22,11 +22,6 @@ type ChatSendFn = (text: string) => void;
 type ChatContextValue = {
   registerSender: (fn: ChatSendFn) => () => void;
   send: (text: string) => void;
-  isChatOpen: boolean;
-  openChat: (seed?: string) => void;
-  closeChat: () => void;
-  seedText: string | null;
-  consumeSeed: () => void;
   currentSessionId: string | null;
   setCurrentSessionId: (id: string | null) => void;
   sessions: ChatSession[];
@@ -45,8 +40,6 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const senderRef = useRef<ChatSendFn | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [seedText, setSeedText] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [newSessionTick, setNewSessionTick] = useState(0);
@@ -63,19 +56,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const openChat = useCallback((seed?: string) => {
-    if (typeof seed === "string") setSeedText(seed);
-    setIsChatOpen(true);
-  }, []);
-
-  const closeChat = useCallback(() => {
-    setIsChatOpen(false);
-  }, []);
-
-  const consumeSeed = useCallback(() => {
-    setSeedText(null);
-  }, []);
-
   const requestNewSession = useCallback(() => {
     setCurrentSessionId(null);
     setNewSessionTick((t) => t + 1);
@@ -87,13 +67,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const send = useCallback((text: string) => {
-    setIsChatOpen(true);
     senderRef.current?.(text);
   }, []);
 
   const openChatWithBriefing = useCallback((content: string) => {
     setPendingBriefing(content);
-    setIsChatOpen(true);
   }, []);
 
   const consumeBriefing = useCallback(() => {
@@ -104,11 +82,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       registerSender,
       send,
-      isChatOpen,
-      openChat,
-      closeChat,
-      seedText,
-      consumeSeed,
       currentSessionId,
       setCurrentSessionId,
       sessions,
@@ -125,11 +98,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     [
       registerSender,
       send,
-      isChatOpen,
-      openChat,
-      closeChat,
-      seedText,
-      consumeSeed,
       currentSessionId,
       sessions,
       requestNewSession,

@@ -541,7 +541,7 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                         </p>
                       ) : salesRecords.length === 0 ? (
                         <p className="py-2 text-[11px] text-[#8c7e66]">
-                          {salesDate} 매출 기록이 없습니다.
+                          Nothing here yet
                         </p>
                       ) : (
                         <div className="overflow-hidden rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70">
@@ -649,7 +649,7 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                         </p>
                       ) : costRecords.length === 0 ? (
                         <p className="py-2 text-[11px] text-[#8c7e66]">
-                          {costDate} 비용 기록이 없습니다.
+                          Nothing here yet
                         </p>
                       ) : (
                         <div className="overflow-hidden rounded-md border border-[#ddd0b4] bg-[#f2e9d5]/70">
@@ -765,7 +765,7 @@ export const NodeDetailModal = ({ open, onClose, node }: Props) => {
                 </p>
               ) : memos.length === 0 ? (
                 <p className="py-4 text-center text-[11px] text-[#8c7e66]">
-                  아직 메모가 없습니다.
+                  Nothing here yet
                 </p>
               ) : (
                 <div className="space-y-2">

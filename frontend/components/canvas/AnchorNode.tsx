@@ -7,10 +7,15 @@ import { cn } from "@/lib/utils";
 import { useChat } from "@/components/chat/ChatContext";
 
 export const AnchorNode = (_: NodeProps) => {
-  const { openChat } = useChat();
+  const { send } = useChat();
   const [value, setValue] = useState("");
 
-  const expand = () => openChat(value);
+  const expand = () => {
+    const t = value.trim();
+    if (!t) return;
+    send(t);
+    setValue("");
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -39,13 +44,7 @@ export const AnchorNode = (_: NodeProps) => {
           <input
             type="text"
             value={value}
-            onChange={(e) => {
-              const next = e.target.value;
-              const wasEmpty = value.length === 0;
-              setValue(next);
-              // 첫 글자 입력 순간에만 채팅창 오픈 (focus만으로는 열지 않음)
-              if (wasEmpty && next.length > 0) openChat(next);
-            }}
+            onChange={(e) => setValue(e.target.value)}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}
             placeholder="BOSS에게 무엇이든 시켜보세요..."

@@ -35,13 +35,13 @@ type Activity = {
 };
 
 const NOTIFY_BADGE: Record<NotifyKind, { label: string; tone: string }> = {
-  start: { label: "D-0 시작", tone: "bg-[#cfe3d0] text-[#2e5a3a]" },
-  start_d1: { label: "D-1 시작", tone: "bg-[#d9e7dd] text-[#3b6a4a]" },
-  start_d3: { label: "D-3 시작", tone: "bg-[#e3ece2] text-[#5a7560]" },
-  due_d0: { label: "D-0 마감", tone: "bg-[#e9c9c0] text-[#8a3a28]" },
-  due_d1: { label: "D-1 마감", tone: "bg-[#ecd3c6] text-[#9c5130]" },
-  due_d3: { label: "D-3 마감", tone: "bg-[#efdfc8] text-[#8a6a2c]" },
-  due_d7: { label: "D-7 마감", tone: "bg-[#eee5d0] text-[#6a5a36]" },
+  start: { label: "D-0 start", tone: "bg-[#cfe3d0] text-[#2e5a3a]" },
+  start_d1: { label: "D-1 start", tone: "bg-[#d9e7dd] text-[#3b6a4a]" },
+  start_d3: { label: "D-3 start", tone: "bg-[#e3ece2] text-[#5a7560]" },
+  due_d0: { label: "D-0 due", tone: "bg-[#e9c9c0] text-[#8a3a28]" },
+  due_d1: { label: "D-1 due", tone: "bg-[#ecd3c6] text-[#9c5130]" },
+  due_d3: { label: "D-3 due", tone: "bg-[#efdfc8] text-[#8a6a2c]" },
+  due_d7: { label: "D-7 due", tone: "bg-[#eee5d0] text-[#6a5a36]" },
 };
 
 const DOMAIN_ICONS: Record<Domain, ReactNode> = {
@@ -59,17 +59,17 @@ const DOMAIN_COLORS: Record<Domain, string> = {
 };
 
 const DOMAIN_LABELS: Record<Domain, string> = {
-  recruitment: "채용",
-  marketing: "마케팅",
-  sales: "매출",
-  documents: "서류",
+  recruitment: "Recruitment",
+  marketing: "Marketing",
+  sales: "Sales",
+  documents: "Documents",
 };
 
 const TYPE_LABELS: Record<Activity["type"], string> = {
-  artifact_created: "생성",
-  agent_run: "실행",
-  schedule_run: "자동실행",
-  schedule_notify: "알림",
+  artifact_created: "Created",
+  agent_run: "Run",
+  schedule_run: "Auto-run",
+  schedule_notify: "Notify",
 };
 
 const formatTime = (iso: string) =>
@@ -150,19 +150,19 @@ export const ActivityModal = ({ open, onClose }: Props) => {
     <Modal
       open={open}
       onClose={onClose}
-      title="활동이력"
-      widthClass="w-[640px]"
+      title="Recent Activity"
+      widthClass="w-[720px]"
+      variant="dashboard"
     >
-      <div className="h-[480px]">
+      <div className="h-[560px]">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-[#8c7e66]">
-            불러오는 중...
+          <div className="flex h-full items-center justify-center text-sm text-[#030303]/60">
+            Loading…
           </div>
         ) : activities.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-[#8c7e66]">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-[#030303]/60">
             <Bot className="h-8 w-8 opacity-30" />
-            <p className="text-sm">아직 활동이 없습니다.</p>
-            <p className="text-xs">Orchestrator와 대화를 시작해 보세요.</p>
+            <p className="text-sm">Nothing here yet</p>
           </div>
         ) : (
           <ScrollArea className="h-full pr-2">
@@ -172,20 +172,20 @@ export const ActivityModal = ({ open, onClose }: Props) => {
                   <button
                     type="button"
                     onClick={() => handleNavigate(a)}
-                    title="노드로 이동"
-                    className="flex w-full items-start gap-3 py-3 text-left rounded-md px-2 -mx-2 hover:bg-[#ebe0ca]/60 transition-colors"
+                    title="Open node"
+                    className="flex w-full items-start gap-3 py-3 text-left rounded-md px-2 -mx-2 hover:bg-[#fcfcfc]/60 transition-colors"
                   >
                     <div
                       className={cn(
                         "mt-0.5 shrink-0",
-                        DOMAIN_COLORS[a.domain] ?? "text-[#8c7e66]",
+                        DOMAIN_COLORS[a.domain] ?? "text-[#030303]/60",
                       )}
                     >
                       {DOMAIN_ICONS[a.domain] ?? <Bot className="h-4 w-4" />}
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium text-[#2e2719]">
+                        <span className="text-sm font-medium text-[#030303]">
                           {a.title}
                         </span>
                         <Badge
@@ -216,12 +216,12 @@ export const ActivityModal = ({ open, onClose }: Props) => {
                           )}
                       </div>
                       {a.description && (
-                        <p className="text-xs text-[#5a5040]">
+                        <p className="text-xs text-[#030303]/80">
                           {a.description}
                         </p>
                       )}
                     </div>
-                    <span className="mt-0.5 shrink-0 text-[11px] text-[#8c7e66]">
+                    <span className="mt-0.5 shrink-0 text-[11px] text-[#030303]/60">
                       {formatTime(a.created_at)}
                     </span>
                   </button>

@@ -77,14 +77,14 @@ const DOMAIN_RING: Record<Domain, string> = {
 };
 
 const SORT_LABEL: Record<SortKey, string> = {
-  created_asc: "생성 시간 순",
-  created_desc: "최근 생성 순",
-  upcoming: "다가오는 순",
-  ended_only: "종료된 일정",
+  created_asc: "Created (oldest)",
+  created_desc: "Created (newest)",
+  upcoming: "Upcoming",
+  ended_only: "Ended only",
 };
 
 const fmtDT = (iso: string) =>
-  new Date(iso).toLocaleString("ko-KR", {
+  new Date(iso).toLocaleString("en-US", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -94,7 +94,7 @@ const fmtDT = (iso: string) =>
 const fmtDate = (s: string) => {
   const d = parseDate(s);
   if (!d) return s;
-  return d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+  return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit" });
 };
 
 const parseDate = (s?: string): Date | null => {
@@ -116,7 +116,7 @@ const cronHuman = (expr?: string) => {
   const [m, h, dom, mon, dow] = parts;
   if (dom === "*" && mon === "*" && dow === "*") {
     if (dow === "*") {
-      return `매일 ${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+      return `Daily ${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
     }
   }
   return expr;
@@ -297,23 +297,24 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
     <Modal
       open={open}
       onClose={onClose}
-      title="일정 관리"
+      title="Schedule Manager"
       widthClass="w-[720px]"
+      variant="dashboard"
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex gap-1 rounded-md border border-[#ddd0b4] p-0.5">
+        <div className="flex gap-1 rounded-md border border-[#030303]/10 p-0.5">
           <button
             type="button"
             onClick={() => setView("list")}
             className={cn(
               "flex items-center gap-1 rounded px-2 py-1 text-xs",
               view === "list"
-                ? "bg-[#ebe0ca] text-[#2e2719]"
-                : "text-[#8c7e66] hover:text-[#2e2719]",
+                ? "bg-[#fcfcfc] text-[#030303]"
+                : "text-[#030303]/60 hover:text-[#030303]",
             )}
           >
             <ListIcon className="h-3.5 w-3.5" />
-            리스트
+            List
           </button>
           <button
             type="button"
@@ -321,19 +322,19 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
             className={cn(
               "flex items-center gap-1 rounded px-2 py-1 text-xs",
               view === "calendar"
-                ? "bg-[#ebe0ca] text-[#2e2719]"
-                : "text-[#8c7e66] hover:text-[#2e2719]",
+                ? "bg-[#fcfcfc] text-[#030303]"
+                : "text-[#030303]/60 hover:text-[#030303]",
             )}
           >
             <CalendarDays className="h-3.5 w-3.5" />
-            캘린더
+            Calendar
           </button>
         </div>
 
         <select
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value as SortKey)}
-          className="h-7 rounded-md border border-[#ddd0b4] bg-[#ebe0ca] px-2 text-xs text-[#2e2719] focus:outline-none focus:ring-1 focus:ring-[#bfae8a]"
+          className="h-7 rounded-md border border-[#030303]/10 bg-[#fcfcfc] px-2 text-xs text-[#030303] focus:outline-none focus:ring-1 focus:ring-[#030303]/30"
         >
           {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
             <option key={k} value={k}>
@@ -344,8 +345,8 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-[10px] font-mono uppercase tracking-[0.15em] text-[#8c7e66]">
-          도메인
+        <span className="mr-1 text-[10px] font-mono uppercase tracking-[0.15em] text-[#030303]/60">
+          Domain
         </span>
         {ALL_DOMAINS.map((d) => {
           const on = selectedDomains.has(d);
@@ -358,7 +359,7 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
                 "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
                 on
                   ? DOMAIN_RING[d]
-                  : "border-[#ddd0b4] bg-[#ebe0ca]/50 text-[#8c7e66] hover:border-[#bfae8a]",
+                  : "border-[#030303]/10 bg-[#fcfcfc]/40 text-[#030303]/60 hover:border-[#030303]/25",
               )}
             >
               <span className={cn("h-1.5 w-1.5 rounded-full", DOMAIN_DOT[d])} />
@@ -375,18 +376,18 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
                 : new Set(ALL_DOMAINS),
             )
           }
-          className="ml-1 rounded border border-[#ddd0b4] px-2 py-0.5 text-[10px] text-[#8c7e66] hover:text-[#2e2719]"
+          className="ml-1 rounded border border-[#030303]/10 px-2 py-0.5 text-[10px] text-[#030303]/60 hover:text-[#030303]"
         >
           {selectedDomains.size === ALL_DOMAINS.length
-            ? "모두 해제"
-            : "모두 선택"}
+            ? "Clear all"
+            : "Select all"}
         </button>
       </div>
 
-      <div className="h-[500px]">
+      <div className="h-[560px]">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-[#8c7e66]">
-            불러오는 중...
+          <div className="flex h-full items-center justify-center text-sm text-[#030303]/60">
+            Loading…
           </div>
         ) : view === "list" ? (
           <ListView
@@ -429,12 +430,12 @@ const itemDateLine = (i: ScheduleItem): string => {
   if (i.itemKind === "cron") {
     const c = cronHuman(i.metadata?.cron);
     const nr = i.metadata?.next_run
-      ? `다음: ${fmtDT(i.metadata.next_run)}`
+      ? `Next: ${fmtDT(i.metadata.next_run)}`
       : "";
     return [c, nr].filter(Boolean).join(" · ");
   }
   if (i.itemKind === "due") {
-    return i.metadata?.due_date ? `마감: ${fmtDate(i.metadata.due_date)}` : "";
+    return i.metadata?.due_date ? `Due: ${fmtDate(i.metadata.due_date)}` : "";
   }
   const s = i.metadata?.start_date ? fmtDate(i.metadata.start_date) : "";
   const e = i.metadata?.end_date ? fmtDate(i.metadata.end_date) : "";
@@ -455,8 +456,8 @@ const ListView = ({
 }) => {
   if (items.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#8c7e66]">
-        표시할 일정이 없습니다.
+      <div className="flex h-full items-center justify-center text-sm text-[#030303]/60">
+        Nothing here yet
       </div>
     );
   }
@@ -468,23 +469,23 @@ const ListView = ({
           return (
             <li
               key={i.id}
-              className="flex items-center gap-3 rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-2 hover:border-[#bfae8a] hover:bg-[#ebe0ca]/70 transition-colors"
+              className="flex items-center gap-3 rounded-md border border-[#030303]/10 bg-[#fcfcfc]/50 px-3 py-2 hover:border-[#030303]/25 hover:bg-[#fcfcfc]/80 transition-colors"
             >
               <span
                 className={cn(
                   "h-2 w-2 shrink-0 rounded-full",
-                  dom ? DOMAIN_DOT[dom] : "bg-[#bfae8a]",
+                  dom ? DOMAIN_DOT[dom] : "bg-[#030303]/40",
                 )}
                 aria-hidden
               />
               <button
                 type="button"
                 onClick={() => onNavigate(i.id)}
-                title="노드로 이동"
+                title="Open node"
                 className="min-w-0 flex-1 text-left"
               >
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-sm text-[#2e2719]">
+                  <span className="truncate text-sm text-[#030303]">
                     {i.title}
                   </span>
                   {dom && (
@@ -496,7 +497,7 @@ const ListView = ({
                     </Badge>
                   )}
                 </div>
-                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-[#8c7e66]">
+                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-[#030303]/60">
                   <span className="flex items-center gap-1">
                     <ItemKindIcon kind={i.itemKind} />
                     {itemDateLine(i)}
@@ -528,14 +529,14 @@ const StatusToggle = ({
   const paused = item.status === "paused";
   const expired = !paused && isTimeExpired(item);
 
-  const label = paused ? "일시정지" : expired ? "종료" : "활성";
-  const nextLabel = paused ? "활성화" : "일시정지";
+  const label = paused ? "Paused" : expired ? "Ended" : "Active";
+  const nextLabel = paused ? "Activate" : "Pause";
   const Icon = paused ? Play : expired ? CircleSlash : Pause;
 
   const tone = paused
-    ? "bg-[#bfae8a]/25 text-[#5a5040] hover:bg-[#bfae8a]/40 hover:text-[#2e2719]"
+    ? "bg-[#030303]/10 text-[#030303]/80 hover:bg-[#030303]/20 hover:text-[#030303]"
     : expired
-      ? "bg-[#ebe0ca] text-[#8c7e66] hover:bg-[#ddd0b4] hover:text-[#2e2719]"
+      ? "bg-[#fcfcfc] text-[#030303]/60 hover:bg-[#030303]/[0.08] hover:text-[#030303]"
       : "bg-[#7f8f54]/15 text-[#6a7843] hover:bg-[#7f8f54]/25 hover:text-[#3a5c46]";
 
   return (
@@ -543,14 +544,14 @@ const StatusToggle = ({
       type="button"
       onClick={onClick}
       disabled={pending}
-      title={`클릭하여 ${nextLabel}`}
+      title={`Click to ${nextLabel.toLowerCase()}`}
       className={cn(
         "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] transition-colors disabled:opacity-60",
         tone,
       )}
     >
       <Icon className="h-3 w-3" />
-      {pending ? "처리 중..." : label}
+      {pending ? "Saving…" : label}
     </button>
   );
 };
@@ -613,13 +614,16 @@ const CalendarView = ({
             setCursor(new Date(year, month - 1, 1));
             setSelectedDay(null);
           }}
-          className="rounded p-1 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-          aria-label="이전 달"
+          className="rounded p-1 text-[#030303]/60 hover:bg-[#fcfcfc] hover:text-[#030303]"
+          aria-label="Previous month"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-medium text-[#2e2719]">
-          {year}년 {month + 1}월
+        <span className="text-sm font-medium text-[#030303]">
+          {new Date(year, month, 1).toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          })}
         </span>
         <button
           type="button"
@@ -627,15 +631,15 @@ const CalendarView = ({
             setCursor(new Date(year, month + 1, 1));
             setSelectedDay(null);
           }}
-          className="rounded p-1 text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-          aria-label="다음 달"
+          className="rounded p-1 text-[#030303]/60 hover:bg-[#fcfcfc] hover:text-[#030303]"
+          aria-label="Next month"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="grid shrink-0 grid-cols-7 gap-1 text-center text-[10px] text-[#8c7e66] mb-1">
-        {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+      <div className="grid shrink-0 grid-cols-7 gap-1 text-center text-[10px] text-[#030303]/60 mb-1">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d}>{d}</div>
         ))}
       </div>
@@ -653,13 +657,13 @@ const CalendarView = ({
               type="button"
               onClick={() => setSelectedDay(day)}
               className={cn(
-                "h-12 rounded-md border bg-[#ebe0ca]/40 p-1 text-left transition-colors",
+                "h-12 rounded-md border bg-[#fcfcfc]/50 p-1 text-left transition-colors",
                 active
-                  ? "border-[#bfae8a]"
-                  : "border-[#ddd0b4] hover:border-[#bfae8a]",
+                  ? "border-[#030303]/25"
+                  : "border-[#030303]/10 hover:border-[#030303]/25",
               )}
             >
-              <div className="text-[11px] text-[#2e2719]">{day}</div>
+              <div className="text-[11px] text-[#030303]">{day}</div>
               <div className="mt-1 flex flex-wrap gap-0.5">
                 {dayItems.slice(0, 4).map((r) => {
                   const dom = primaryDomain(r);
@@ -668,13 +672,13 @@ const CalendarView = ({
                       key={r.id}
                       className={cn(
                         "h-1.5 w-1.5 rounded-full",
-                        dom ? DOMAIN_DOT[dom] : "bg-[#bfae8a]",
+                        dom ? DOMAIN_DOT[dom] : "bg-[#030303]/40",
                       )}
                     />
                   );
                 })}
                 {dayItems.length > 4 && (
-                  <span className="text-[9px] text-[#8c7e66]">
+                  <span className="text-[9px] text-[#030303]/60">
                     +{dayItems.length - 4}
                   </span>
                 )}
@@ -684,19 +688,23 @@ const CalendarView = ({
         })}
       </div>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-[#ddd0b4] pt-3">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-[#030303]/10 pt-3">
         {selectedDay === null ? (
-          <p className="flex h-full items-center justify-center text-center text-xs text-[#8c7e66]">
-            날짜를 선택하면 해당 일정이 표시됩니다.
+          <p className="flex h-full items-center justify-center text-center text-xs text-[#030303]/60">
+            Pick a date to see its schedules.
           </p>
         ) : selectedItems.length === 0 ? (
-          <p className="flex h-full items-center justify-center text-center text-xs text-[#8c7e66]">
-            {month + 1}월 {selectedDay}일 — 일정 없음
+          <p className="flex h-full items-center justify-center text-center text-xs text-[#030303]/60">
+            Nothing here yet
           </p>
         ) : (
           <>
-            <div className="mb-1 shrink-0 text-[11px] text-[#5a5040]">
-              {month + 1}월 {selectedDay}일 ({selectedItems.length}건)
+            <div className="mb-1 shrink-0 text-[11px] text-[#030303]/80">
+              {new Date(year, month, selectedDay).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              ({selectedItems.length})
             </div>
             <ScrollArea className="min-h-0 flex-1 pr-2">
               <ul className="space-y-1">
@@ -707,19 +715,19 @@ const CalendarView = ({
                       <button
                         type="button"
                         onClick={() => onNavigate(i.id)}
-                        title="노드로 이동"
-                        className="flex w-full items-center gap-2 rounded border border-[#ddd0b4] bg-[#ebe0ca]/40 px-2 py-1.5 text-left hover:border-[#bfae8a] hover:bg-[#ebe0ca]/70 transition-colors"
+                        title="Open node"
+                        className="flex w-full items-center gap-2 rounded border border-[#030303]/10 bg-[#fcfcfc]/50 px-2 py-1.5 text-left hover:border-[#030303]/25 hover:bg-[#fcfcfc]/80 transition-colors"
                       >
                         <span
                           className={cn(
                             "h-1.5 w-1.5 rounded-full",
-                            dom ? DOMAIN_DOT[dom] : "bg-[#bfae8a]",
+                            dom ? DOMAIN_DOT[dom] : "bg-[#030303]/40",
                           )}
                         />
-                        <span className="flex-1 truncate text-xs text-[#2e2719]">
+                        <span className="flex-1 truncate text-xs text-[#030303]">
                           {i.title}
                         </span>
-                        <span className="text-[10px] text-[#8c7e66]">
+                        <span className="text-[10px] text-[#030303]/60">
                           {itemDateLine(i).replace(/^.*?: /, "")}
                         </span>
                       </button>

@@ -50,7 +50,7 @@
 
 :root {
   /* Sand palette — warm off-white base */
-  --background: #f2e9d5;
+  --background: #757bc8;
   --foreground: #2e2719;
   --card: #fbf6eb;
   --card-foreground: #2e2719;
@@ -142,10 +142,9 @@ html[data-bg="dark"] .bento-shell {
   color: #fcfcfc;
 }
 .bento-shell header {
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff;
   border-color: rgba(3, 3, 3, 0.08);
   color: #030303;
-  backdrop-filter: blur(12px);
 }
 .bento-shell header a,
 .bento-shell header button {
@@ -154,4 +153,48 @@ html[data-bg="dark"] .bento-shell {
 .bento-shell header button:hover {
   background: rgba(3, 3, 3, 0.05);
   color: #030303;
+}
+
+/* ─── Kanban tokens (theme-aware, scoped to .bento-shell) ─── */
+.bento-shell {
+  --kb-fg: rgba(3, 3, 3, 0.95);
+  --kb-fg-strong: rgba(3, 3, 3, 0.9);
+  --kb-fg-muted: rgba(3, 3, 3, 0.6);
+  --kb-fg-subtle: rgba(3, 3, 3, 0.45);
+  --kb-fg-faint: rgba(3, 3, 3, 0.3);
+  --kb-fg-on-banner: #2e2719;
+  --kb-fg-on-banner-muted: rgba(46, 39, 25, 0.7);
+  --kb-border: rgba(3, 3, 3, 0.1);
+  --kb-border-strong: rgba(3, 3, 3, 0.25);
+  --kb-surface: rgba(255, 255, 255, 0.55);
+  --kb-surface-hover: rgba(255, 255, 255, 0.85);
+  --kb-card: #ffffff;
+  --kb-card-hover: rgba(3, 3, 3, 0.035);
+  --kb-icon-bg: rgba(3, 3, 3, 0.04);
+  --kb-status-archived: rgba(3, 3, 3, 0.25);
+  --kb-warn-border: rgba(180, 120, 20, 0.35);
+  --kb-warn-bg: rgba(220, 160, 40, 0.12);
+  --kb-warn-fg: #7a5210;
+  --kb-dday-urgent: #c7422f;
+  --kb-dday-soon: #a6730a;
+}
+html[data-bg="dark"] .bento-shell {
+  --kb-fg: rgba(255, 255, 255, 0.95);
+  --kb-fg-strong: rgba(255, 255, 255, 0.9);
+  --kb-fg-muted: rgba(255, 255, 255, 0.55);
+  --kb-fg-subtle: rgba(255, 255, 255, 0.4);
+  --kb-fg-faint: rgba(255, 255, 255, 0.3);
+  --kb-border: rgba(255, 255, 255, 0.08);
+  --kb-border-strong: rgba(255, 255, 255, 0.3);
+  --kb-surface: rgba(255, 255, 255, 0.02);
+  --kb-surface-hover: rgba(255, 255, 255, 0.06);
+  --kb-card: rgba(255, 255, 255, 0.035);
+  --kb-card-hover: rgba(255, 255, 255, 0.06);
+  --kb-icon-bg: rgba(255, 255, 255, 0.04);
+  --kb-status-archived: rgba(255, 255, 255, 0.2);
+  --kb-warn-border: rgba(252, 211, 77, 0.25);
+  --kb-warn-bg: rgba(252, 211, 77, 0.06);
+  --kb-warn-fg: rgba(253, 224, 120, 0.85);
+  --kb-dday-urgent: #ff8577;
+  --kb-dday-soon: #ffc86b;
 }
