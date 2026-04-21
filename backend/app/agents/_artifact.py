@@ -103,21 +103,33 @@ def pick_sub_hub_id(
     """해당 domain 의 서브허브 중 가장 적합한 것의 id 를 반환.
 
     prefer_keywords 가 주어지면 title 에 keyword 가 포함된 첫 서브허브를 우선.
-    매치 없으면 첫 서브허브. 서브허브가 하나도 없으면 None.
+    매치 없으면 첫 서브허브. 서브허브가 하나도 없으면 자동 복구 (ensure_standard_sub_hubs)
+    후 재조회. 그래도 없으면 None.
     """
-    rows = (
-        sb.table("artifacts")
-        .select("id,title,domains")
-        .eq("account_id", account_id)
-        .eq("kind", "domain")
-        .eq("type", "category")
-        .execute()
-        .data
-        or []
-    )
+    def _query() -> list[dict]:
+        return (
+            sb.table("artifacts")
+            .select("id,title,domains")
+            .eq("account_id", account_id)
+            .eq("kind", "domain")
+            .eq("type", "category")
+            .execute()
+            .data
+            or []
+        )
+
+    rows = _query()
     candidates = [r for r in rows if domain in (r.get("domains") or [])]
     if not candidates:
-        return None
+        # 자가 복구 — 014 마이그레이션 이전 가입자 등 서브허브가 누락된 계정 대비.
+        try:
+            sb.rpc("ensure_standard_sub_hubs", {"account_id": account_id}).execute()
+        except Exception:
+            pass
+        rows = _query()
+        candidates = [r for r in rows if domain in (r.get("domains") or [])]
+        if not candidates:
+            return None
     if prefer_keywords:
         low = [(c, (c.get("title") or "").casefold()) for c in candidates]
         for kw in prefer_keywords:
@@ -289,6 +301,12 @@ async def save_artifact_from_reply(
             from app.rag.embedder import index_artifact
 
             await index_artifact(account_id, domain, artifact_id, f"{title}\n{content}")
+        except Exception:
+            pass
+
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, domain, artifact_type, title)
         except Exception:
             pass
 

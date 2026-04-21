@@ -102,23 +102,30 @@ def run_schedule_artifact(self, artifact_id: str) -> dict:
         .execute()
     )
     art = art_res.data
-    if not art or art.get("kind") != "schedule":
-        return {"ok": False, "reason": "not_found_or_not_schedule"}
-    if art.get("status") != "active":
-        return {"ok": False, "reason": f"status={art.get('status')}"}
+    if not art:
+        return {"ok": False, "reason": "not_found"}
+    meta = art.get("metadata") or {}
+    if not meta.get("schedule_enabled"):
+        return {"ok": False, "reason": "schedule_disabled"}
+    if (meta.get("schedule_status") or "active") != "active":
+        return {"ok": False, "reason": f"schedule_status={meta.get('schedule_status')}"}
 
     account_id = art["account_id"]
-    metadata = art.get("metadata") or {}
+    metadata = meta
     cron_expr = metadata.get("cron")
 
-    sb.table("artifacts").update({"status": "running"}).eq("id", artifact_id).execute()
+    # 실행 중에는 metadata 토글로 판정 — artifact.status 는 건드리지 않음
+    # (사용자가 설정한 kind='artifact' 의 업무 상태를 보존)
     now = datetime.now(timezone.utc)
 
     try:
         reply = asyncio.run(orchestrator.run_scheduled(art, account_id))
     except Exception as e:
         log.exception("schedule execution failed: %s", e)
-        sb.table("artifacts").update({"status": "failed"}).eq("id", artifact_id).execute()
+        # 실행 실패는 metadata 에 기록 (artifact.status 는 사용자 업무 상태)
+        sb.table("artifacts").update(
+            {"metadata": {**metadata, "last_run_status": "failed", "last_error": str(e)[:500]}}
+        ).eq("id", artifact_id).execute()
         log_id = create_log_node(
             sb, art, status="failed", content=f"실행 실패: {str(e)[:200]}", executed_at=now
         )
@@ -143,12 +150,12 @@ def run_schedule_artifact(self, artifact_id: str) -> dict:
         return {"ok": False, "error": str(e)[:500]}
 
     next_run = _next_run_iso(cron_expr, now)
-    new_metadata = {**metadata, "executed_at": now.isoformat()}
+    new_metadata = {**metadata, "executed_at": now.isoformat(), "last_run_status": "success"}
     if next_run:
         new_metadata["next_run"] = next_run
 
     sb.table("artifacts").update(
-        {"status": "active", "metadata": new_metadata}
+        {"metadata": new_metadata}
     ).eq("id", artifact_id).execute()
 
     log_id = create_log_node(

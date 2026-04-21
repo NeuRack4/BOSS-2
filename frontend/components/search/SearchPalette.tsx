@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Search, StickyNote } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type Domain = "recruitment" | "marketing" | "sales" | "documents";
 type Kind = "domain" | "artifact" | "schedule" | "log";
@@ -46,6 +47,7 @@ export const SearchPalette = ({ open, onClose }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { openDetail } = useNodeDetail();
 
   useEffect(() => {
     setMounted(true);
@@ -96,12 +98,10 @@ export const SearchPalette = ({ open, onClose }: Props) => {
 
   const focusNode = useCallback(
     (id: string) => {
-      window.dispatchEvent(
-        new CustomEvent("boss:focus-node", { detail: { id } }),
-      );
+      openDetail(id);
       onClose();
     },
-    [onClose],
+    [onClose, openDetail],
   );
 
   useEffect(() => {

@@ -163,96 +163,29 @@ async def _process_single(
         metadata["suggested_category"] = auto.category
         metadata["suggested_doc_type"] = auto.doc_type
 
-    # 노드를 만들지 않는 카테고리 — Storage 에는 남기고 여기서 리턴.
-    # (conflict 인 경우는 사용자가 CHOICES 로 재분류할 수 있으므로 노드를 만든다.)
-    if not conflict and final_category not in _NODE_CATEGORIES:
-        log.info(
-            "upload skip-node: account=%s category=%s filename=%s",
-            account_id, final_category, disp_name,
-        )
-        return {
-            "artifact_id":        None,
-            "title":              title,
-            "size_bytes":         len(raw),
-            "parsed_len":         len(content_text),
-            "preview":            content_text[:500],
-            "storage_path":       storage_path,
-            "classification":     classification_meta,
-            "needs_confirmation": False,
-            "final_category":     final_category,
-            "node_created":       False,
-        }
-
-    payload = {
-        "account_id": account_id,
-        "domains":    ["documents"],
-        "kind":       "artifact",
-        "type":       "uploaded_doc",
-        "title":      title,
-        "content":    content_text,
-        "status":     "active",
-        "metadata":   metadata,
-    }
-    try:
-        result = sb.table("artifacts").insert(payload).execute()
-    except Exception as exc:
-        try:
-            sb.storage.from_(_BUCKET).remove([storage_path])
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"artifact 저장 실패: {str(exc)[:200]}")
-
-    if not result.data:
-        raise HTTPException(status_code=500, detail="artifact 저장 결과가 비었습니다.")
-    artifact_id = result.data[0]["id"]
-
-    # documents 서브허브 연결 (best-effort)
-    hub_id = pick_documents_parent(
-        sb,
-        account_id,
-        prefer_keywords=("업로드", "계약", "contract", "upload"),
+    # v0.10 — 업로드는 더 이상 artifact 를 만들지 않는다.
+    # 파싱 본문 + 스토리지 메타를 그대로 응답에 실어주고,
+    # 프론트가 다음 chat 요청의 `upload_payload` 필드에 동봉하면
+    # documents 에이전트가 contextvar 로 읽어 리뷰를 진행한다.
+    log.info(
+        "upload ephemeral: account=%s category=%s filename=%s parsed_len=%d",
+        account_id, final_category, disp_name, len(content_text),
     )
-    if hub_id:
-        try:
-            sb.table("artifact_edges").insert({
-                "account_id": account_id,
-                "parent_id":  hub_id,
-                "child_id":   artifact_id,
-                "relation":   "contains",
-            }).execute()
-        except Exception:
-            pass
-
-    # activity_logs
-    try:
-        sb.table("activity_logs").insert({
-            "account_id":  account_id,
-            "type":        "artifact_created",
-            "domain":      "documents",
-            "title":       title,
-            "description": f"문서 업로드: {disp_name} ({len(raw)//1024} KB, {CATEGORY_LABELS.get(final_category, final_category)})",
-            "metadata":    {"artifact_id": artifact_id, **metadata},
-        }).execute()
-    except Exception:
-        pass
-
-    # 임베딩
-    try:
-        from app.rag.embedder import index_artifact
-        await index_artifact(account_id, "documents", artifact_id, f"{title}\n{content_text[:4000]}")
-    except Exception:
-        pass
-
     return {
-        "artifact_id":        artifact_id,
+        "artifact_id":        None,
         "title":              title,
         "size_bytes":         len(raw),
         "parsed_len":         len(content_text),
         "preview":            content_text[:500],
+        "content":            content_text,       # ← 분석에 필요한 전문
         "storage_path":       storage_path,
+        "bucket":              _BUCKET,
+        "mime_type":           _mime_for(disp_name),
+        "original_name":       disp_name,
         "classification":     classification_meta,
         "needs_confirmation": conflict,
         "final_category":     final_category,
+        "node_created":       False,
     }
 
 
@@ -319,9 +252,9 @@ class ClassificationPatch(BaseModel):
 
 @router.patch("/document/{artifact_id}/classification", response_model=UploadDocumentResponse)
 async def patch_classification(artifact_id: str, body: ClassificationPatch, account_id: str):
-    """유저가 충돌을 해소하거나 분류를 재지정할 때 호출.
+    """[legacy] 업로드 artifact 가 아직 DB 에 남아있는 경우만 유효.
 
-    `metadata.classification.category` 를 갱신하고 `needs_confirmation` 을 해제한다.
+    v0.10 이후 업로드는 artifact 를 만들지 않으므로, 존재하지 않으면 no-op 로 성공 반환.
     """
     sb = get_supabase()
     rows = (
@@ -335,7 +268,13 @@ async def patch_classification(artifact_id: str, body: ClassificationPatch, acco
         or []
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="artifact 를 찾을 수 없습니다.")
+        return UploadDocumentResponse(data={
+            "artifact_id":        artifact_id,
+            "classification":     {"category": body.category, "doc_type": body.doc_type},
+            "needs_confirmation": False,
+            "final_category":     body.category,
+            "skipped":            True,
+        })
     meta = rows[0].get("metadata") or {}
     classification = meta.get("classification") or {}
     classification["category"] = body.category

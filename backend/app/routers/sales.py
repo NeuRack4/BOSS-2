@@ -69,97 +69,37 @@ class SalePatchRequest(BaseModel):
 
 @router.post("", status_code=201)
 async def create_sales(req: SalesBulkRequest):
-    """매출 항목 다건 저장 + 각 항목 임베딩 인덱싱."""
+    """[DEPRECATED] 외부 호환용 얇은 래퍼 — 실제 저장은 `_sales._revenue.dispatch_save_revenue`.
+
+    새 코드는 chat 경로 (sales_save_revenue capability) 를 쓰세요. 이 엔드포인트는
+    이전 프론트 호환 + 자동화 스크립트 용도로만 남아있음.
+    """
     if not req.items:
         raise HTTPException(status_code=400, detail="items가 비어있습니다.")
 
-    sb = get_supabase()
-    rows = [
-        {
-            "account_id": req.account_id,
-            "recorded_date": it.recorded_date,
-            "item_name": it.item_name,
-            "category": it.category,
-            "quantity": it.quantity,
-            "unit_price": it.unit_price,
-            "amount": it.amount,
-            "source": it.source,
-            "raw_input": it.raw_input,
-            "metadata": it.metadata,
-        }
-        for it in req.items
-    ]
+    from app.agents._sales._revenue import dispatch_save_revenue
+
+    items = [it.model_dump() for it in req.items]
+    recorded_date = req.items[0].recorded_date
 
     try:
-        result = sb.table("sales_records").insert(rows).execute()
+        result = await dispatch_save_revenue(
+            account_id=req.account_id,
+            items=items,
+            recorded_date=recorded_date,
+            source=req.items[0].source,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"저장 실패: {e}")
 
-    saved = result.data or []
-
-    # 임베딩 — 챗봇 RAG 검색을 위해 각 항목을 텍스트화해서 인덱싱
-    for record in saved:
-        content = _record_to_text(record)
-        try:
-            await index_artifact(
-                account_id=req.account_id,
-                source_type="sales",
-                source_id=str(record["id"]),
-                content=content,
-            )
-        except Exception:
-            pass  # 임베딩 실패해도 저장은 유지
-
-    # revenue_entry artifact 생성 — 캔버스 Reports 허브에 노드 추가
-    artifact_id: str | None = None
-    try:
-        recorded_date = req.items[0].recorded_date
-        total_amount = sum(it.amount for it in req.items)
-
-        # Reports 서브허브 찾기 (revenue_entry 는 Reports 에 저장)
-        hub_res = (
-            sb.table("artifacts")
-            .select("id")
-            .eq("account_id", req.account_id)
-            .eq("kind", "domain")
-            .eq("type", "category")
-            .ilike("title", "%Reports%")
-            .limit(1)
-            .execute()
-        )
-        revenue_hub_id = hub_res.data[0]["id"] if hub_res.data else None
-
-        art_res = sb.table("artifacts").insert({
-            "account_id": req.account_id,
-            "kind": "artifact",
-            "type": "revenue_entry",
-            "domains": ["sales"],
-            "title": f"{recorded_date} 매출 ({len(saved)}건)",
-            "content": f"총 {total_amount:,}원 · {len(saved)}개 항목",
-            "status": "active",
-            "metadata": {
-                "recorded_date": recorded_date,
-                "record_count": len(saved),
-                "total_amount": total_amount,
-            },
-        }).execute()
-
-        if art_res.data:
-            artifact_id = art_res.data[0]["id"]
-            if revenue_hub_id and artifact_id:
-                sb.table("artifact_edges").insert({
-                    "account_id": req.account_id,
-                    "parent_id": revenue_hub_id,
-                    "child_id": artifact_id,
-                    "relation": "contains",
-                }).execute()
-    except Exception:
-        pass  # artifact 생성 실패해도 records 저장은 유지
-
     return {
-        "data": {"saved": len(saved), "records": saved, "artifact_id": artifact_id},
+        "data": {
+            "saved":       result.get("saved", 0),
+            "artifact_id": result.get("artifact_id"),
+            "duplicate":   result.get("duplicate", False),
+        },
         "error": None,
-        "meta": {},
+        "meta":  {},
     }
 
 

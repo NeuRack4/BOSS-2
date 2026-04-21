@@ -63,92 +63,33 @@ class CostPatchRequest(BaseModel):
 
 @router.post("", status_code=201)
 async def create_costs(req: CostBulkRequest):
-    """비용 항목 다건 저장 + 임베딩 인덱싱."""
+    """[DEPRECATED] 외부 호환용 얇은 래퍼 — `_sales._costs.dispatch_save_costs` 로 위임."""
     if not req.items:
         raise HTTPException(status_code=400, detail="items가 비어있습니다.")
 
-    sb = get_supabase()
-    rows = [
-        {
-            "account_id": req.account_id,
-            "recorded_date": it.recorded_date,
-            "item_name": it.item_name,
-            "category": it.category,
-            "amount": it.amount,
-            "memo": it.memo,
-            "source": it.source,
-        }
-        for it in req.items
-    ]
+    from app.agents._sales._costs import dispatch_save_costs
+
+    items = [it.model_dump() for it in req.items]
+    recorded_date = req.items[0].recorded_date
 
     try:
-        result = sb.table("cost_records").insert(rows).execute()
+        result = await dispatch_save_costs(
+            account_id=req.account_id,
+            items=items,
+            recorded_date=recorded_date,
+            source=req.items[0].source,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"저장 실패: {e}")
 
-    saved = result.data or []
-
-    for record in saved:
-        content = _record_to_text(record)
-        try:
-            await index_artifact(
-                account_id=req.account_id,
-                source_type="sales",
-                source_id=f"cost_{record['id']}",
-                content=content,
-            )
-        except Exception:
-            pass
-
-    # cost_report artifact 생성 — Costs 서브허브에 연결
-    artifact_id: str | None = None
-    try:
-        recorded_date = req.items[0].recorded_date
-        total_amount = sum(it.amount for it in req.items)
-
-        hub_res = (
-            sb.table("artifacts")
-            .select("id")
-            .eq("account_id", req.account_id)
-            .eq("kind", "domain")
-            .eq("type", "category")
-            .ilike("title", "%Costs%")
-            .limit(1)
-            .execute()
-        )
-        costs_hub_id = hub_res.data[0]["id"] if hub_res.data else None
-
-        art_res = sb.table("artifacts").insert({
-            "account_id": req.account_id,
-            "kind": "artifact",
-            "type": "cost_report",
-            "domains": ["sales"],
-            "title": f"{recorded_date} 비용 ({len(saved)}건)",
-            "content": f"총 {total_amount:,}원 · {len(saved)}개 항목",
-            "status": "active",
-            "metadata": {
-                "recorded_date": recorded_date,
-                "record_count": len(saved),
-                "total_amount": total_amount,
-            },
-        }).execute()
-
-        if art_res.data:
-            artifact_id = art_res.data[0]["id"]
-            if costs_hub_id and artifact_id:
-                sb.table("artifact_edges").insert({
-                    "account_id": req.account_id,
-                    "parent_id": costs_hub_id,
-                    "child_id": artifact_id,
-                    "relation": "contains",
-                }).execute()
-    except Exception:
-        pass
-
     return {
-        "data": {"saved": len(saved), "records": saved, "artifact_id": artifact_id},
+        "data": {
+            "saved":       result.get("saved", 0),
+            "artifact_id": result.get("artifact_id"),
+            "duplicate":   result.get("duplicate", False),
+        },
         "error": None,
-        "meta": {},
+        "meta":  {},
     }
 
 

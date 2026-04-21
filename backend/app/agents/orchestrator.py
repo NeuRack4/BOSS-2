@@ -489,15 +489,21 @@ def _extract_and_save_profile(account_id: str, reply: str) -> str:
 
 
 def _profile_context(account_id: str) -> str:
-    """system prompt 주입용 프로필 요약. 완전히 비었으면 빈 문자열."""
+    """system prompt 주입용 프로필 요약. 빈 core 필드도 `(비어있음)` 으로 명시.
+
+    Planner 가 "업종이 채워졌는지" 를 정확히 판단하려면 빈 필드의 존재를 알 수 있어야 한다.
+    채워진 필드만 보여주면 planner 는 "업종이 비어있는지" 를 알 길이 없어 잘못된 choice 를 만들게 됨.
+    """
     p = get_profile(account_id)
     if not p:
-        return ""
+        p = {}
     lines: list[str] = []
     for k in CORE_PROFILE_KEYS:
         v = p.get(k)
         if isinstance(v, str) and v.strip():
             lines.append(f"- {PROFILE_LABELS[k]}: {v.strip()}")
+        else:
+            lines.append(f"- {PROFILE_LABELS[k]}: (비어있음)")
     meta = p.get("profile_meta") or {}
     if isinstance(meta, dict):
         for mk, mv in meta.items():
@@ -505,8 +511,6 @@ def _profile_context(account_id: str) -> str:
                 mv = ", ".join(str(x) for x in mv)
             if mv:
                 lines.append(f"- {mk}: {mv}")
-    if not lines:
-        return ""
     return "\n\n[사용자 프로필]\n" + "\n".join(lines)
 
 
@@ -575,8 +579,247 @@ def _agent_map():
     }
 
 
+def _memos_context(account_id: str, limit: int = 10) -> str:
+    """Planner 에 주입할 최근 메모 요약. 없으면 빈 문자열.
+
+    `memos` 테이블의 최신 N건 + artifact.title join. 본문은 120자까지 잘라 리스트로.
+    """
+    try:
+        sb = get_supabase()
+        rows = (
+            sb.table("memos")
+            .select("content,updated_at,artifact_id,artifacts(title)")
+            .eq("account_id", account_id)
+            .order("updated_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    lines: list[str] = ["[최근 메모]"]
+    for r in rows:
+        content = (r.get("content") or "").strip().replace("\n", " ")
+        if not content:
+            continue
+        art = r.get("artifacts") or {}
+        title = (art.get("title") if isinstance(art, dict) else None) or "(메모)"
+        snippet = content if len(content) <= 120 else content[:120] + "…"
+        lines.append(f"- {title}: {snippet}")
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines)
+
+
 # ──────────────────────────────────────────────────────────────────────────
-# Capability 기반 dispatcher (v0.10 — recruitment/documents 시범 경로)
+# Planner 기반 dispatcher (v1.1+ — "오케스트레이터가 읽고 지시한다")
+# ──────────────────────────────────────────────────────────────────────────
+async def _dispatch_via_planner(
+    account_id: str,
+    message: str,
+    history: list[dict],
+    rag_context: str,
+    long_term_context: str,
+    nick_ctx: str,
+) -> str | None:
+    """Planner 주 경로.
+
+    반환:
+      - str  : 최종 응답 (opening + tool reply 합성).
+      - None : planner 호출/파싱 실패 → 상위 run() 이 legacy 폴백 수행.
+    """
+    import asyncio
+    from app.agents import _planner
+    from app.agents._capability import describe_all
+    from app.agents._speaker_context import set_speaker
+
+    tools, dispatch = describe_all(account_id)
+    if not tools:
+        log.info("[planner] account=%s no_tools → fallback", account_id)
+        return None
+
+    memos_ctx = _memos_context(account_id)
+
+    result = await _planner.plan(
+        account_id=account_id,
+        message=message,
+        history=history,
+        rag_context=rag_context,
+        long_term_context=long_term_context,
+        nick_ctx=nick_ctx,
+        memos_context=memos_ctx,
+        tools_catalog=tools,
+    )
+    mode = result.get("mode")
+    if mode == "error":
+        log.info("[planner] account=%s error reason=%s → fallback", account_id, result.get("reason"))
+        return None
+
+    opening = (result.get("opening") or "").strip()
+    brief = (result.get("brief") or "").strip()
+
+    # profile_updates 즉시 저장 (ask/dispatch/chitchat 무관)
+    updates = result.get("profile_updates") or {}
+    if updates:
+        core: dict[str, str] = {}
+        meta: dict[str, str] = {}
+        for k, v in updates.items():
+            if not isinstance(v, str) or not v.strip():
+                continue
+            if k in CORE_PROFILE_KEYS:
+                if k == "business_stage" and v not in _PROFILE_STAGE_ALLOWED:
+                    continue
+                if k == "channels" and v.lower() not in _PROFILE_CHANNELS_ALLOWED:
+                    continue
+                core[k] = v[:200]
+            else:
+                meta[k] = v[:500]
+        if core or meta:
+            try:
+                _save_profile_updates(account_id, core, meta)
+                log.info(
+                    "[planner] account=%s profile_saved core=%s meta=%s",
+                    account_id, list(core.keys()), list(meta.keys()),
+                )
+            except Exception:
+                log.exception("[planner] profile save failed")
+
+    if mode == "refuse":
+        set_speaker(["orchestrator"])
+        return opening or _refusal_message(account_id)
+
+    if mode == "chitchat":
+        if not opening:
+            return None  # 비어있으면 폴백
+        set_speaker(["orchestrator"])
+        return _extract_and_save_nickname(account_id, opening)
+
+    if mode == "planning":
+        set_speaker(["orchestrator"])
+        return await _handle_planning(message, account_id, history, long_term_context, nick_ctx)
+
+    if mode == "ask":
+        q = (result.get("question") or "").strip()
+        choices = result.get("choices") or []
+        body_parts: list[str] = []
+        if opening:
+            body_parts.append(opening)
+        if q:
+            body_parts.append(q)
+        text = "\n\n".join(body_parts) if body_parts else "조금만 더 알려주실 수 있을까요?"
+        if choices:
+            text += "\n\n[CHOICES]\n" + "\n".join(choices) + "\n[/CHOICES]"
+        set_speaker(["orchestrator"])
+        return text
+
+    # mode == "dispatch"
+    steps = result.get("steps") or []
+    if not steps:
+        # dispatch 인데 step 이 없다 → 의미 없음. 폴백.
+        log.info("[planner] account=%s dispatch without steps → fallback", account_id)
+        return None
+
+    # capability 유효성 확인
+    for s in steps:
+        if s["capability"] not in dispatch:
+            log.info(
+                "[planner] account=%s unknown capability=%s → fallback",
+                account_id, s["capability"],
+            )
+            return None
+
+    # 순차/병렬 실행 — depends_on 있으면 순차, 모두 null 이면 asyncio.gather
+    all_independent = all(not s.get("depends_on") for s in steps)
+
+    import inspect
+
+    def _handler_accepts(fn, key: str) -> bool:
+        """handler 가 주어진 keyword argument 를 받아주는지 확인.
+
+        명시 파라미터에 `key` 가 있거나, **kwargs 를 받으면 True.
+        """
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return False
+        for p in sig.parameters.values():
+            if p.kind is inspect.Parameter.VAR_KEYWORD:
+                return True
+            if p.name == key:
+                return True
+        return False
+
+    async def _run_step(step: dict, preceding: dict[str, str] | None = None) -> tuple[str, str]:
+        name = step["capability"]
+        args = dict(step.get("args") or {})
+        entry = dispatch[name]
+        handler = entry["handler"]
+
+        # 관용 키는 handler 가 명시적으로 받을 때만 주입 (TypeError 낭비 방지)
+        if brief and _handler_accepts(handler, "_orchestrator_brief"):
+            args.setdefault("_orchestrator_brief", brief)
+        if preceding and step.get("depends_on") and step["depends_on"] in preceding:
+            if _handler_accepts(handler, "_preceding_reply"):
+                args.setdefault("_preceding_reply", preceding[step["depends_on"]])
+
+        try:
+            # nick_ctx(닉네임 + 프로필 + 넛지) 를 long_term_context 에 이어붙여
+            # 도메인 run() 의 system prompt 까지 전달. legacy _call_domain_with_shortcut 과 동일.
+            reply = await handler(
+                account_id=account_id,
+                message=message,
+                history=history,
+                long_term_context=long_term_context + nick_ctx,
+                rag_context=rag_context,
+                **args,
+            )
+        except Exception as exc:
+            log.exception("[planner] handler %s crashed", name)
+            reply = f"_(도구 '{name}' 실행 중 오류: {str(exc)[:160]})_"
+        return (name, reply)
+
+    results_map: dict[str, str] = {}
+    if all_independent and len(steps) > 1:
+        log.info("[planner] account=%s parallel steps=%s", account_id, [s["capability"] for s in steps])
+        pairs = await asyncio.gather(*[_run_step(s) for s in steps])
+    else:
+        log.info("[planner] account=%s sequential steps=%s", account_id, [s["capability"] for s in steps])
+        pairs = []
+        for s in steps:
+            name, reply = await _run_step(s, preceding=results_map)
+            results_map[name] = reply
+            pairs.append((name, reply))
+
+    # 합성
+    if len(pairs) == 1:
+        tool_reply = pairs[0][1]
+    else:
+        if any(_CHOICES_RE.search(r) for _, r in pairs):
+            tool_reply = "\n\n".join(f"### {name}\n{r}" for name, r in pairs)
+        else:
+            per = {name: r for name, r in pairs}
+            tool_reply = await _synthesize_cross_domain(message, per, nick_ctx, account_id)
+
+    tool_reply = _extract_and_save_nickname(account_id, tool_reply)
+
+    # speaker 계산 — 실행된 step 들의 도메인 중복 제거, 순서 유지
+    speakers: list[str] = []
+    for name, _r in pairs:
+        dom = dispatch[name]["domain"]
+        if dom not in speakers:
+            speakers.append(dom)
+    set_speaker(speakers or ["orchestrator"])
+
+    if opening and tool_reply:
+        return f"{opening}\n\n{tool_reply}"
+    return tool_reply or opening or None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Capability 기반 dispatcher (v0.10 — legacy safety net)
 # ──────────────────────────────────────────────────────────────────────────
 _TOOLS_SYSTEM_PROMPT = """당신은 소상공인 지원 AI 플랫폼 BOSS 의 오케스트레이터입니다.
 사용자 메시지를 읽고, 등록된 도구(tools) 중 **가장 적합한 것 한 개**(혹은 명확히 병렬로 필요한 것 여러 개) 를 선택해 호출하세요.
@@ -607,6 +850,8 @@ async def _dispatch_via_tools(
     """
     import json
     from app.agents._capability import describe_all
+    from app.agents._upload_context import get_pending_upload
+    from app.agents._sales_context import get_pending_receipt, get_pending_save
 
     tools, dispatch = describe_all(account_id)
     if not tools:
@@ -621,6 +866,40 @@ async def _dispatch_via_tools(
         system_parts.append(f"[사용자 장기 기억]\n{long_term_context}")
     if rag_context:
         system_parts.append(rag_context)
+
+    # 업로드된 문서가 있으면 LLM 이 doc_review tool 을 주저 없이 호출하도록
+    # system prompt 에 확정적 힌트를 박는다. (체감적으로 description 만으로는
+    # GPT-4o 가 "진짜 문서가 있는지" 의심해서 no_tool_call 로 빠지는 케이스가 있었음)
+    _upload = get_pending_upload()
+    if _upload and isinstance(_upload, dict):
+        _title = _upload.get("title") or _upload.get("original_name") or "업로드 문서"
+        system_parts.append(
+            "[현재 업로드된 문서]\n"
+            f"- 파일명: {_upload.get('original_name', _title)}\n"
+            f"- 파싱 길이: {_upload.get('parsed_len', 0)}자\n"
+            "→ 사용자가 '공정성 분석', '검토', '계약서 봐줘' 등을 요청하면 즉시 "
+            "`doc_review` tool 을 호출하세요. 문서가 없다고 답하거나 다시 업로드를 "
+            "요청하지 마세요 (파일은 이미 서버가 파싱 완료한 상태)."
+        )
+
+    _receipt = get_pending_receipt()
+    if _receipt and isinstance(_receipt, dict):
+        system_parts.append(
+            "[현재 업로드된 영수증]\n"
+            f"- 파일명: {_receipt.get('original_name', '영수증')}\n"
+            f"- 타입: {_receipt.get('mime_type', 'image/*')}\n"
+            "→ 사용자가 '저장', '매출 기록', '비용 입력' 등을 요청하면 즉시 "
+            "`sales_parse_receipt` tool 을 호출하세요. 추가 질문 없이 바로 실행."
+        )
+
+    _save = get_pending_save() or {}
+    if _save.get("kind") and _save.get("items"):
+        system_parts.append(
+            "[저장 확정 요청]\n"
+            f"- kind: {_save['kind']}\n"
+            f"- 항목 수: {len(_save['items'])}\n"
+            "→ 즉시 `sales_save_revenue` (revenue) 또는 `sales_save_costs` (cost) tool 을 호출."
+        )
     system = "\n\n".join(p for p in system_parts if p)
 
     try:
@@ -1035,83 +1314,69 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
-    intents = await classify_intent(message, history)
-    log.info(
-        "[route] account=%s msg=%r intents=%s",
-        account_id,
-        message[:80],
-        intents,
-    )
     nick_ctx = (
         _nickname_context(account_id)
         + _profile_context(account_id)
         + _profile_nudge_context(account_id)
     )
 
+    # 1차 — Planner 주 경로
+    try:
+        planner_reply = await _dispatch_via_planner(
+            account_id, message, history, rag_context, long_term_context, nick_ctx,
+        )
+    except Exception as exc:
+        log.exception("[planner] unexpected crash, falling back: %s", exc)
+        planner_reply = None
+
+    if planner_reply is not None:
+        return planner_reply
+
+    # 2차 — Legacy 세이프티넷 (classify → domain shortcut)
+    from app.agents._speaker_context import set_speaker
+    log.info("[route] account=%s branch=legacy_fallback", account_id)
+    intents = await classify_intent(message, history)
+    log.info(
+        "[route] account=%s legacy_intents=%s msg=%r",
+        account_id, intents, message[:80],
+    )
+
     if intents == ["refuse"]:
-        log.info("[route] account=%s branch=refuse", account_id)
+        set_speaker(["orchestrator"])
         return _refusal_message(account_id)
 
     if intents == ["planning"]:
-        log.info("[route] account=%s branch=planning", account_id)
+        set_speaker(["orchestrator"])
         return await _handle_planning(
             message, account_id, history, long_term_context, nick_ctx
         )
 
     domain_intents = [i for i in intents if i in DOMAINS]
 
-    # V2 capability 경로 — recruitment/documents 가 domain_intents 에 포함되고
-    # 다른 legacy 도메인(marketing/sales) 과 섞이지 않은 경우 우선 시도.
-    from app.agents._capability import V2_DOMAINS
-    v2_only = bool(domain_intents) and all(d in V2_DOMAINS for d in domain_intents)
-
     if len(domain_intents) == 1:
         dom = domain_intents[0]
-        log.info("[route] account=%s branch=single_domain domain=%s", account_id, dom)
-        if v2_only:
-            tool_reply = await _dispatch_via_tools(
-                account_id, message, history, rag_context, long_term_context, nick_ctx,
-            )
-            if tool_reply is not None:
-                log.info("[route] account=%s single_domain=tools_v2", account_id)
-                return tool_reply
-            log.info("[route] account=%s single_domain=tools_v2 fallback→legacy", account_id)
+        log.info("[route] account=%s legacy=single_domain domain=%s", account_id, dom)
+        set_speaker([dom])
         return await _call_domain_with_shortcut(
-            dom,
-            message,
-            account_id,
-            history,
-            rag_context,
-            long_term_context,
-            nick_ctx,
+            dom, message, account_id, history, rag_context, long_term_context, nick_ctx,
         )
 
     if len(domain_intents) >= 2:
-        log.info("[route] account=%s branch=multi_domain domains=%s", account_id, domain_intents)
-        if v2_only:
-            tool_reply = await _dispatch_via_tools(
-                account_id, message, history, rag_context, long_term_context, nick_ctx,
-            )
-            if tool_reply is not None:
-                log.info("[route] account=%s multi_domain=tools_v2 (parallel)", account_id)
-                return tool_reply
-            log.info("[route] account=%s multi_domain=tools_v2 fallback→legacy", account_id)
-
+        log.info("[route] account=%s legacy=multi_domain domains=%s", account_id, domain_intents)
         per_domain: dict[str, str] = {}
         for dom in domain_intents:
             per_domain[dom] = await _call_domain_with_shortcut(
                 dom, message, account_id, history, rag_context, long_term_context, nick_ctx
             )
-        # CHOICES 가 남아있으면 합성은 스킵하고 도메인별 섹션으로 pass-through
+        set_speaker(list(domain_intents))
         if any(_CHOICES_RE.search(r) for r in per_domain.values()):
-            log.info("[route] account=%s multi_domain=passthrough (CHOICES remains)", account_id)
             parts = [f"### {dom}\n{txt}" for dom, txt in per_domain.items()]
             return "\n\n".join(parts)
-        log.info("[route] account=%s multi_domain=synthesize", account_id)
         return await _synthesize_cross_domain(message, per_domain, nick_ctx, account_id)
 
-    # chitchat
-    log.info("[route] account=%s branch=chitchat", account_id)
+    # chitchat fallback
+    log.info("[route] account=%s legacy=chitchat", account_id)
+    set_speaker(["orchestrator"])
     system = SYSTEM_PROMPT + nick_ctx
     if long_term_context:
         system += f"\n\n[사용자 장기 기억]\n{long_term_context}"

@@ -851,7 +851,7 @@ async def run(
     wants_naver_upload = bool(_NAVER_UPLOAD_RE.search(reply))
     reply = _NAVER_UPLOAD_RE.sub("", reply).rstrip()
 
-    await save_artifact_from_reply(
+    artifact_id = await save_artifact_from_reply(
         account_id,
         "marketing",
         reply,
@@ -865,12 +865,50 @@ async def run(
         review_marker = _maybe_review_reply_card(reply)
         if review_marker:
             reply += review_marker
+            _patch_artifact_meta_from_marker(
+                artifact_id, review_marker, r"\[\[REVIEW_REPLY\]\]([\s\S]*?)\[\[/REVIEW_REPLY\]\]",
+            )
         else:
             instagram_marker = await _maybe_instagram_preview(reply)
             if instagram_marker:
                 reply += instagram_marker
+                _patch_artifact_meta_from_marker(
+                    artifact_id, instagram_marker, r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]",
+                )
 
     return reply
+
+
+def _patch_artifact_meta_from_marker(
+    artifact_id: str | None, marker: str, pattern: str,
+) -> None:
+    """Instagram/Review 카드 JSON payload 를 artifact.metadata 에 머지.
+
+    상세 모달에서 image_url · star_rating 등을 재렌더링하기 위해 필요.
+    """
+    if not artifact_id:
+        return
+    try:
+        m = _re.search(pattern, marker)
+        if not m:
+            return
+        payload = _json.loads(m.group(1))
+        if not isinstance(payload, dict):
+            return
+        from app.core.supabase import get_supabase
+        sb = get_supabase()
+        current = (
+            sb.table("artifacts").select("metadata").eq("id", artifact_id).execute().data
+            or []
+        )
+        meta = dict((current[0].get("metadata") if current else {}) or {})
+        for k, v in payload.items():
+            if v is None or v == "":
+                continue
+            meta[k] = v
+        sb.table("artifacts").update({"metadata": meta}).eq("id", artifact_id).execute()
+    except Exception:
+        pass
 
 
 def _extract_blog_content(reply: str) -> tuple[str, str]:

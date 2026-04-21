@@ -536,6 +536,12 @@ async def _save_legal_advice(
     except Exception:
         pass
 
+    try:
+        from app.memory.long_term import log_artifact_to_memory
+        await log_artifact_to_memory(account_id, "documents", "legal_advice", title)
+    except Exception:
+        pass
+
     return artifact_id
 
 

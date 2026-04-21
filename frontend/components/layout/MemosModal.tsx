@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type MemoRow = {
   id: string;
@@ -41,6 +42,7 @@ const formatRelative = (iso: string): string => {
 export const MemosModal = ({ open, onClose }: Props) => {
   const [items, setItems] = useState<MemoRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const { openDetail } = useNodeDetail();
 
   useEffect(() => {
     if (!open) return;
@@ -78,9 +80,7 @@ export const MemosModal = ({ open, onClose }: Props) => {
 
   const handleFocus = (artifactId: string) => {
     onClose();
-    window.dispatchEvent(
-      new CustomEvent("boss:focus-node", { detail: { id: artifactId } }),
-    );
+    openDetail(artifactId);
   };
 
   return (

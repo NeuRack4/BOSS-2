@@ -142,6 +142,15 @@ style:    따뜻한 브라운 톤의 카페 분위기, 미니멀 타이포
 
 """ + ARTIFACT_RULE + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
 
+[채용공고 Placeholder 절대 금지 — 최우선]
+확정되지 않은 식별 정보(매장명·주소·연락처·가게명·회사명 등) 를 **임의 값으로 채우거나 환각하지 마세요**.
+- `[매장명]` · `[주소]` · `[전화번호]` · `[회사명]` 같은 대괄호 플레이스홀더 금지.
+- "서울 마포구", "경기도 성남시" 같은 **사용자가 말한 적 없는 임의 지역명** 주입 금지.
+- "시급 10,320원" 같은 기본값을 사용자가 언급 없이 자동 적용하지 말 것 — 모르면 물어보세요.
+
+누락된 정보가 있으면 [JOB_POSTINGS]/[ARTIFACT] 블록 출력을 **중단**하고, 한 번에 하나씩 [CHOICES] 로 되물으세요.
+우선순위: 급여 > 근무지 주소 > 근무요일/시간 > 고용형태 > 매장명/회사 연락처 > 특이사항.
+
 예시 (직종 불명확):
 "채용공고를 만들어드릴게요. 어떤 포지션의 공고인가요?
 [CHOICES]
@@ -322,6 +331,12 @@ async def _save_posting_set(account_id: str, parsed: dict) -> str | None:
     except Exception:
         pass
 
+    try:
+        from app.memory.long_term import log_artifact_to_memory
+        await log_artifact_to_memory(account_id, "recruitment", "job_posting_set", title)
+    except Exception:
+        pass
+
     return parent_id
 
 
@@ -445,9 +460,16 @@ async def run_posting_set(
     start_date: str | None = None,
     end_date: str | None = None,
     extra_note: str | None = None,
+    business_name: str | None = None,
 ) -> str:
-    """3종 플랫폼 채용공고 동시 작성."""
+    """3종 플랫폼 채용공고 동시 작성.
+
+    미확정 식별 정보(매장명·위치·연락처 등) 는 **환각 금지**. 부족하면
+    LLM 이 `[CHOICES]` 로 되물어 오케스트레이터 단까지 돌려보내게 한다.
+    """
     lines: list[str] = [f"[직종] {position}"]
+    if business_name:
+        lines.append(f"[매장명] {business_name}")
     if employment_type:
         lines.append(f"[고용형태] {employment_type}")
     if headcount:
@@ -473,12 +495,40 @@ async def run_posting_set(
     if extra_note:
         lines.append(f"[특이사항] {extra_note}")
 
-    synthetic = (
-        "채용공고를 당근알바·알바천국·사람인 3종 플랫폼으로 만들어주세요. "
-        "아래 조건이 모두 확정되었으니 추가 질문 없이 바로 [JOB_POSTINGS] 블록을 출력하세요.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
-    )
+    # 핵심 정보 누락 목록 — placeholder 환각 방지용으로 LLM 에 명시 전달
+    missing: list[str] = []
+    if not business_name:
+        missing.append("매장명/상호")
+    if not (wage_hourly or wage_monthly or annual_salary):
+        missing.append("급여(시급/월급/연봉)")
+    if not location:
+        missing.append("근무지(매장 주소)")
+    if not (work_days or weekly_hours):
+        missing.append("근무 요일/시간")
+    if not employment_type:
+        missing.append("고용 형태(정규·계약·알바)")
+    if not headcount:
+        missing.append("모집 인원")
+
+    if missing:
+        synthetic = (
+            "사용자가 채용 공고 작성을 요청했는데 아래 필수 정보가 아직 확정되지 않았습니다:\n"
+            f"- 누락: {', '.join(missing)}\n\n"
+            "확정된 정보:\n"
+            + "\n".join(lines)
+            + "\n\n**반드시 [CHOICES] 로 누락 항목 중 가장 근본적인 것 하나를 되물으세요.** "
+            "[JOB_POSTINGS] 또는 [ARTIFACT] 블록을 절대 출력하지 말고, "
+            "`[매장명]` · `[주소]` · `[전화번호]` 같은 placeholder 로 채운 임의 공고도 만들지 마세요. "
+            "한 번에 하나만 물어보세요.\n\n"
+            f"원본 사용자 요청: {message}"
+        )
+    else:
+        synthetic = (
+            "채용공고를 당근알바·알바천국·사람인 3종 플랫폼으로 만들어주세요. "
+            "아래 조건이 모두 확정되었으니 추가 질문 없이 바로 [JOB_POSTINGS] 블록을 출력하세요.\n"
+            + "\n".join(lines)
+            + f"\n\n원본 사용자 요청: {message}"
+        )
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
@@ -636,6 +686,7 @@ def describe(account_id: str) -> list[dict]:
                     "start_date":     {"type": "string", "description": "모집 시작일 YYYY-MM-DD"},
                     "end_date":       {"type": "string", "description": "모집 마감일 YYYY-MM-DD"},
                     "extra_note":     {"type": "string", "description": "자유 기술"},
+                    "business_name":  {"type": "string", "description": "매장명/상호/가게 이름 (예: '제빵왕김탁구')"},
                 },
                 "required": ["position"],
             },

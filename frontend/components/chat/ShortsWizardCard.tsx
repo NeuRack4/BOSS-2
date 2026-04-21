@@ -417,7 +417,7 @@ export const ShortsWizardCard = ({
                       setSlides((prev) =>
                         prev.map((sl, idx) =>
                           idx === i ? { ...sl, subtitle: e.target.value } : sl,
-                        )
+                        ),
                       )
                     }
                     className="flex-1 rounded-lg border border-[#ddd0b4] px-2 py-1.5 text-[12px] outline-none focus:border-[#ff0000]"

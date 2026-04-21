@@ -40,7 +40,7 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 import { CostInputTable, type CostActionData } from "./CostInputTable";
-import { SalesDetailModal } from "@/components/sales/SalesDetailModal";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type UploadCategory =
   | "documents"
@@ -285,6 +285,7 @@ export const InlineChat = () => {
     pendingLoadSessionId,
     pendingBriefing,
     consumeBriefing,
+    setLastSpeaker,
   } = useChat();
 
   const [messages, setMessages] = useState<Message[]>(emptyMessages);
@@ -304,13 +305,56 @@ export const InlineChat = () => {
   const [costTableData, setCostTableData] = useState<CostActionData | null>(
     null,
   );
-  const [detailModal, setDetailModal] = useState<{
-    artifactId: string;
-    artifactType: string;
-    recordedDate: string;
-    artifactTitle: string;
-  } | null>(null);
+  const { openDetail } = useNodeDetail();
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  // v0.10 — 업로드된 문서는 이제 DB artifact 로 만들지 않고, 다음 chat POST 에
+  // upload_payload 로 실어 보낸다. 리뷰가 완료되면(응답에 [[REVIEW_JSON]] 등장) 클리어.
+  // sessionStorage 에 미러링해서 탭 새로고침에도 살아남게 한다.
+  const PENDING_UPLOAD_KEY = "boss2:pending-upload";
+  const PENDING_RECEIPT_KEY = "boss2:pending-receipt";
+  const pendingUploadRef = useRef<Record<string, unknown> | null>(null);
+  const pendingReceiptRef = useRef<Record<string, unknown> | null>(null);
+  // SalesInputTable / CostInputTable Save 경로. 한 번에 하나만 대기.
+  const pendingSaveRef = useRef<Record<string, unknown> | null>(null);
+  const setPendingUpload = useCallback(
+    (payload: Record<string, unknown> | null) => {
+      pendingUploadRef.current = payload;
+      try {
+        if (payload)
+          sessionStorage.setItem(PENDING_UPLOAD_KEY, JSON.stringify(payload));
+        else sessionStorage.removeItem(PENDING_UPLOAD_KEY);
+      } catch {
+        /* storage 사용 불가 환경은 ref 만 사용 */
+      }
+    },
+    [],
+  );
+  const setPendingReceipt = useCallback(
+    (payload: Record<string, unknown> | null) => {
+      pendingReceiptRef.current = payload;
+      try {
+        if (payload)
+          sessionStorage.setItem(PENDING_RECEIPT_KEY, JSON.stringify(payload));
+        else sessionStorage.removeItem(PENDING_RECEIPT_KEY);
+      } catch {
+        /* noop */
+      }
+    },
+    [],
+  );
+  // mount 시 sessionStorage 에서 복원
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(PENDING_UPLOAD_KEY);
+      if (raw)
+        pendingUploadRef.current = JSON.parse(raw) as Record<string, unknown>;
+      const rawR = sessionStorage.getItem(PENDING_RECEIPT_KEY);
+      if (rawR)
+        pendingReceiptRef.current = JSON.parse(rawR) as Record<string, unknown>;
+    } catch {
+      /* noop */
+    }
+  }, []);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -362,9 +406,10 @@ export const InlineChat = () => {
     setInitialSuggestions(pickSuggested());
     setInput("");
     setStagedFiles([]);
+    setLastSpeaker(null);
     adjustHeight(textareaRef.current);
     textareaRef.current?.focus();
-  }, [newSessionTick]);
+  }, [newSessionTick, setLastSpeaker]);
 
   useEffect(() => {
     if (loadSessionTick === 0 || !pendingLoadSessionId || !userId) return;
@@ -382,11 +427,43 @@ export const InlineChat = () => {
             role: string;
             content: string;
             choices?: string[] | null;
+            attachment?: {
+              filename?: string;
+              size_kb?: number | null;
+              status?: "uploading" | "done" | "error";
+            } | null;
           }) => ({
             role: m.role === "user" ? "user" : "assistant",
             content: m.content,
             choices: m.choices ?? undefined,
+            attachment: m.attachment?.filename
+              ? {
+                  status: m.attachment.status ?? "done",
+                  filename: m.attachment.filename,
+                  sizeKb: m.attachment.size_kb ?? undefined,
+                }
+              : undefined,
           }),
+        );
+        // 마지막 assistant 메시지의 speaker 로 배지 복원
+        const lastAssistant = [...msgs]
+          .reverse()
+          .find(
+            (m: { role: string; speaker?: string[] | null }) =>
+              m.role === "assistant",
+          );
+        const sp = (lastAssistant as { speaker?: string[] | null } | undefined)
+          ?.speaker;
+        setLastSpeaker(
+          sp && sp.length
+            ? (sp as (
+                | "orchestrator"
+                | "recruitment"
+                | "marketing"
+                | "sales"
+                | "documents"
+              )[])
+            : null,
         );
         setCurrentSessionId(id);
         setMessages(mapped.length ? mapped : emptyMessages());
@@ -394,6 +471,7 @@ export const InlineChat = () => {
       } catch {
         setMessages(emptyMessages());
         setInitialSuggestions(pickSuggested());
+        setLastSpeaker(null);
       } finally {
         setLoading(false);
       }
@@ -404,6 +482,7 @@ export const InlineChat = () => {
     userId,
     apiBase,
     setCurrentSessionId,
+    setLastSpeaker,
   ]);
 
   const analyzeReviewImage = useCallback(
@@ -534,7 +613,7 @@ export const InlineChat = () => {
         const json = await res.json();
         const data = json?.data ?? {};
         const items: Array<{
-          artifact_id: string;
+          artifact_id: string | null;
           title: string;
           classification?: {
             category: UploadCategory;
@@ -547,6 +626,14 @@ export const InlineChat = () => {
           };
           needs_confirmation?: boolean;
           final_category?: UploadCategory;
+          // v0.10 ephemeral 업로드 — 다음 chat POST 에 실어 보낼 payload 필드들
+          content?: string;
+          storage_path?: string;
+          bucket?: string;
+          mime_type?: string;
+          size_bytes?: number;
+          original_name?: string;
+          parsed_len?: number;
         }> = Array.isArray(data.items) ? data.items : [];
         const errors: Array<{ filename?: string; detail?: string }> =
           Array.isArray(data.errors) ? data.errors : [];
@@ -573,10 +660,33 @@ export const InlineChat = () => {
 
         window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
 
-        const confirms = items.filter((it) => it.needs_confirmation);
+        // v0.10 — artifact 가 생성된 legacy 케이스만 confirm 흐름 사용.
+        // 새 업로드 경로(artifact_id=null)에서는 classification 이 바로 final_category 로 확정된다.
+        const confirms = items.filter(
+          (it): it is typeof it & { artifact_id: string } =>
+            !!it.needs_confirmation && typeof it.artifact_id === "string",
+        );
         const docsOk = items.filter(
           (it) => !it.needs_confirmation && it.final_category === "documents",
         );
+
+        // v0.10 — 가장 최근에 업로드된 documents 파일을 pending upload 로 저장.
+        // (현재는 한 번에 하나만 리뷰하므로 마지막 것만 유지)
+        const latestDoc = docsOk[docsOk.length - 1];
+        if (latestDoc && latestDoc.content && latestDoc.storage_path) {
+          setPendingUpload({
+            title: latestDoc.title,
+            content: latestDoc.content,
+            storage_path: latestDoc.storage_path,
+            bucket: latestDoc.bucket,
+            mime_type: latestDoc.mime_type,
+            size_bytes: latestDoc.size_bytes,
+            original_name: latestDoc.original_name,
+            parsed_len: latestDoc.parsed_len,
+            classification: latestDoc.classification,
+            uploaded_at: new Date().toISOString(),
+          });
+        }
         const nonDocs = items.filter(
           (it) =>
             !it.needs_confirmation &&
@@ -635,72 +745,21 @@ export const InlineChat = () => {
         }
 
         if (receiptItems.length > 0 && userId) {
-          // 이미지 파일만 OCR 대상 (non-image는 uploads에서 이미 처리됨)
-          const ocrFiles = files.filter((f) =>
-            f.type.startsWith("image/") ||
-            /\.(jpg|jpeg|png|webp|bmp|tiff|gif|heic|heif)$/i.test(f.name),
-          );
-
-          if (ocrFiles.length === 0) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", content: "영수증 이미지를 찾을 수 없어요." },
-            ]);
-          } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: `영수증 ${ocrFiles.length}장을 분석하고 있어요...`,
-            },
-          ]);
-
-          try {
-            const ocrForm = new FormData();
-            for (const f of ocrFiles) ocrForm.append("files", f);
-            const ocrRes = await fetch(`${apiBase}/api/sales/ocr`, {
-              method: "POST",
-              body: ocrForm,
+          // v1.0.2 — OCR 은 이제 sales agent 의 `sales_parse_receipt` capability 가 수행.
+          // 프론트는 storage 메타만 pendingReceiptRef 에 담고 chat 으로 라우팅한다.
+          const latestReceipt = receiptItems[receiptItems.length - 1];
+          if (latestReceipt.storage_path) {
+            setPendingReceipt({
+              storage_path: latestReceipt.storage_path,
+              bucket: latestReceipt.bucket,
+              mime_type: latestReceipt.mime_type,
+              original_name: latestReceipt.original_name,
+              size_bytes: latestReceipt.size_bytes,
             });
-            const ocrJson = await ocrRes.json();
-            const parsed = ocrJson?.data;
-
-            setMessages((prev) => {
-              const next = [...prev];
-              if (ocrRes.ok && parsed?.items?.length > 0) {
-                next[next.length - 1] = {
-                  role: "assistant",
-                  content: `영수증에서 **${parsed.items.length}개 항목**을 인식했어요. 확인 후 저장하세요.`,
-                  salesAction:
-                    parsed.type !== "cost"
-                      ? { date: parsed.date, items: parsed.items }
-                      : undefined,
-                  costAction:
-                    parsed.type === "cost"
-                      ? { date: parsed.date, items: parsed.items }
-                      : undefined,
-                };
-              } else {
-                next[next.length - 1] = {
-                  role: "assistant",
-                  content:
-                    ocrJson?.error ??
-                    "영수증에서 항목을 인식하지 못했어요. 더 선명한 이미지를 사용해보세요.",
-                };
-              }
-              return next;
-            });
-          } catch {
-            setMessages((prev) => {
-              const next = [...prev];
-              next[next.length - 1] = {
-                role: "assistant",
-                content: "영수증 분석 중 오류가 발생했어요.",
-              };
-              return next;
-            });
+            await sendRef.current?.(
+              `방금 업로드한 영수증 "${latestReceipt.title}" 을 매출/비용으로 기록해줘.`,
+            );
           }
-          } // end ocrFiles.length > 0
         }
 
         if (docsOk.length === 1 && confirms.length === 0) {
@@ -797,16 +856,50 @@ export const InlineChat = () => {
       setLoading(true);
 
       try {
+        const chatBody: Record<string, unknown> = {
+          message: trimmed,
+          account_id: userId,
+          session_id: currentSessionId,
+        };
+        if (pendingUploadRef.current) {
+          chatBody.upload_payload = pendingUploadRef.current;
+        }
+        if (pendingReceiptRef.current) {
+          chatBody.receipt_payload = pendingReceiptRef.current;
+        }
+        if (pendingSaveRef.current) {
+          chatBody.save_payload = pendingSaveRef.current;
+        }
         const res = await fetch(`${apiBase}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: trimmed,
-            account_id: userId,
-            session_id: currentSessionId,
-          }),
+          body: JSON.stringify(chatBody),
         });
         const data = await res.json();
+        const _replyPeek: string = data?.data?.reply ?? "";
+        // 문서 리뷰 완료 → upload_payload 클리어
+        if (
+          pendingUploadRef.current &&
+          _replyPeek.includes("[[REVIEW_JSON]]")
+        ) {
+          setPendingUpload(null);
+        }
+        // 영수증 파싱 완료 (ACTION 마커 emit) → receipt_payload 클리어
+        if (
+          pendingReceiptRef.current &&
+          (_replyPeek.includes("[ACTION:OPEN_SALES_TABLE") ||
+            _replyPeek.includes("[ACTION:OPEN_COST_TABLE"))
+        ) {
+          setPendingReceipt(null);
+        }
+        // 저장 완료 → save_payload 클리어
+        if (
+          pendingSaveRef.current &&
+          (_replyPeek.includes("저장됐어요") ||
+            _replyPeek.includes("중복은 건너뛰"))
+        ) {
+          pendingSaveRef.current = null;
+        }
         const newSessionId: string | undefined = data?.data?.session_id;
         const sessionCreated: boolean = !!data?.data?.session_created;
         if (newSessionId && newSessionId !== currentSessionId) {
@@ -829,6 +922,18 @@ export const InlineChat = () => {
             costAction,
           },
         ]);
+        const sp = data?.data?.speaker;
+        if (Array.isArray(sp) && sp.length) {
+          setLastSpeaker(
+            sp as (
+              | "orchestrator"
+              | "recruitment"
+              | "marketing"
+              | "sales"
+              | "documents"
+            )[],
+          );
+        }
         window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
         if (sessionCreated) {
           setTimeout(fetchSessions, 1200);
@@ -855,6 +960,7 @@ export const InlineChat = () => {
       analyzeReviewImage,
       uploadFiles,
       userId,
+      setLastSpeaker,
     ],
   );
 
@@ -871,8 +977,12 @@ export const InlineChat = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
     if (!list || list.length === 0) return;
-    setStagedFiles((prev) => [...prev, ...Array.from(list)]);
+    // FileList 는 live 객체 — `e.target.value = ""` 로 input 을 리셋하면 비워진다.
+    // StrictMode 의 updater 이중 호출 시 두 번째 호출에서 [] 가 되지 않도록
+    // 여기서 바로 plain array 로 스냅샷한다.
+    const picked = Array.from(list);
     e.target.value = "";
+    setStagedFiles((prev) => [...prev, ...picked]);
     textareaRef.current?.focus();
   };
 
@@ -995,60 +1105,35 @@ export const InlineChat = () => {
 
   return (
     <>
-      {detailModal && userId && (
-        <SalesDetailModal
-          open={!!detailModal}
-          onClose={() => setDetailModal(null)}
-          accountId={userId}
-          artifactId={detailModal.artifactId}
-          artifactType={detailModal.artifactType}
-          recordedDate={detailModal.recordedDate}
-          artifactTitle={detailModal.artifactTitle}
-        />
-      )}
       {showSalesTable && salesTableData && (
         <SalesInputTable
           data={salesTableData}
-          apiBase={apiBase ?? ""}
           onClose={() => setShowSalesTable(false)}
-          onSaved={(message, artifactId) => {
-            const savedDate = salesTableData?.date ?? new Date().toISOString().slice(0, 10);
+          onConfirm={(items, date) => {
+            pendingSaveRef.current = {
+              kind: "revenue",
+              recorded_date: date,
+              items,
+              source: "chat",
+            };
             setShowSalesTable(false);
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: message,
-                savedArtifactId: artifactId,
-                savedDomain: "sales",
-                savedArtifactMeta: artifactId ? {
-                  type: "revenue_entry",
-                  recordedDate: savedDate,
-                  title: `${savedDate} 매출`,
-                } : undefined,
-              },
-            ]);
-            window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+            sendRef.current?.(`확인한 매출 ${items.length}건 저장해줘.`);
           }}
         />
       )}
       {showCostTable && costTableData && (
         <CostInputTable
           data={costTableData}
-          apiBase={apiBase ?? ""}
           onClose={() => setShowCostTable(false)}
-          onSaved={(message, artifactId) => {
+          onConfirm={(items, date) => {
+            pendingSaveRef.current = {
+              kind: "cost",
+              recorded_date: date,
+              items,
+              source: "chat",
+            };
             setShowCostTable(false);
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: message,
-                savedArtifactId: artifactId,
-                savedDomain: "sales",
-              },
-            ]);
-            window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+            sendRef.current?.(`확인한 비용 ${items.length}건 저장해줘.`);
           }}
         />
       )}
@@ -1220,208 +1305,252 @@ export const InlineChat = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          if (msg.savedArtifactMeta && msg.savedArtifactId) {
-                            setDetailModal({
-                              artifactId: msg.savedArtifactId,
-                              artifactType: msg.savedArtifactMeta.type,
-                              recordedDate: msg.savedArtifactMeta.recordedDate,
-                              artifactTitle: msg.savedArtifactMeta.title,
-                            });
+                          if (msg.savedArtifactId) {
+                            openDetail(msg.savedArtifactId);
                           } else if (msg.savedDomain) {
                             window.location.href = `/${msg.savedDomain}`;
                           }
                         }}
-                        className="rounded-[5px] border-[#d89a2b] bg-[#fdf8ec] text-[#9a6e1a] hover:bg-[#faefd0] text-xs font-medium"
+                        className="rounded-[5px] border-[#030303]/15 bg-white text-[#030303]/70 hover:bg-[#030303]/[0.05] hover:text-[#030303] text-xs font-medium"
                       >
-                        📋 상세 보기
+                        Open detail
                       </Button>
                     </div>
                   )}
                   {msg.role === "assistant" && msg.salesAction && (
-                    <div className="ml-8 flex flex-wrap gap-1.5">
-                      {msg.salesAction.items.length === 0 ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => send("오늘 매출 글로 입력하기")}
-                            className="rounded-[5px] border-[#6e6254] bg-[#f3f0ec] text-[#6e6254] hover:bg-[#e8e3db] text-xs font-medium"
-                          >
-                            ✏️ 글로 입력하기
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSalesTableData(msg.salesAction!);
-                              setShowSalesTable(true);
-                            }}
-                            className="rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium"
-                          >
-                            📋 표로 추가입력하기
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={async () => {
-                              if (!userId || !apiBase) return;
-                              const action = msg.salesAction!;
-                              try {
-                                const res = await fetch(
-                                  `${apiBase}/api/sales`,
-                                  {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({
-                                      account_id: userId,
-                                      items: action.items.map((it) => ({
-                                        ...it,
-                                        amount: it.quantity * it.unit_price,
-                                        recorded_date: action.date,
-                                        source: "chat",
-                                      })),
-                                    }),
-                                  },
-                                );
-                                if (res.ok) {
-                                  const json = await res
-                                    .json()
-                                    .catch(() => ({}));
-                                  const artifactId: string | undefined =
-                                    json?.data?.artifact_id;
-                                  window.dispatchEvent(
-                                    new CustomEvent("boss:artifacts-changed"),
-                                  );
-                                  setMessages((prev) => [
-                                    ...prev,
-                                    {
-                                      role: "assistant" as const,
-                                      content: `매출 ${action.items.length}건이 저장됐어요.`,
-                                      savedArtifactId: artifactId,
-                                      savedDomain: "sales",
-                                      savedArtifactMeta: artifactId ? {
-                                        type: "revenue_entry",
-                                        recordedDate: action.date,
-                                        title: `${action.date} 매출 (${action.items.length}건)`,
-                                      } : undefined,
-                                    },
-                                  ]);
-                                }
-                              } catch {
-                                /* silent */
-                              }
-                            }}
-                            className="rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium"
-                          >
-                            💾 저장
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSalesTableData(msg.salesAction!);
-                              setShowSalesTable(true);
-                            }}
-                            className="rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium"
-                          >
-                            📋 표로 수정입력하기
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setMessages((prev) => [
-                                ...prev,
-                                {
-                                  role: "assistant" as const,
-                                  content:
-                                    "새 매출을 입력해 주세요! 품목·수량·금액을 알려주세요.",
-                                },
-                              ]);
-                            }}
-                            className="rounded-[5px] border-[#6e6254] bg-[#f3f0ec] text-[#6e6254] hover:bg-[#e8e3db] text-xs font-medium"
-                          >
-                            ✏️ 글로 새로 입력
-                          </Button>
-                        </>
+                    <div className="ml-8 flex flex-col gap-1.5">
+                      {msg.salesAction.items.length > 0 && (
+                        <div className="overflow-hidden rounded-[5px] border border-[#030303]/10 bg-white">
+                          <div className="flex items-center justify-between border-b border-[#030303]/[0.08] px-3 py-1.5">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                              Revenue preview
+                            </span>
+                            <span className="font-mono text-[11px] text-[#030303]/60">
+                              {msg.salesAction.date}
+                            </span>
+                          </div>
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-[#030303]/10 text-left font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                <th className="px-3 py-1.5 font-medium">
+                                  Item
+                                </th>
+                                <th className="px-3 py-1.5 font-medium">
+                                  Category
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  Qty
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  Unit
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  Amount
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {msg.salesAction.items.map((it, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="border-b border-[#030303]/5 last:border-b-0"
+                                >
+                                  <td className="px-3 py-1.5 text-[#030303]">
+                                    {it.item_name}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[#030303]/70">
+                                    {it.category}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {it.quantity}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {it.unit_price.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {(
+                                      it.quantity * it.unit_price
+                                    ).toLocaleString()}
+                                    <span className="ml-1 text-[10px] uppercase tracking-wider text-[#030303]/50">
+                                      won
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#030303]/10 bg-[#f4f1ed]">
+                                <td
+                                  colSpan={4}
+                                  className="px-3 py-1.5 text-right font-mono text-[10px] uppercase tracking-wider text-[#030303]/60"
+                                >
+                                  Total
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[13px] font-semibold text-[#030303]">
+                                  {msg.salesAction.items
+                                    .reduce(
+                                      (s, it) =>
+                                        s + it.quantity * it.unit_price,
+                                      0,
+                                    )
+                                    .toLocaleString()}
+                                  <span className="ml-1 text-[10px] uppercase tracking-wider text-[#030303]/50">
+                                    won
+                                  </span>
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
                       )}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {msg.salesAction.items.length === 0 ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => {
+                                send("오늘 매출 글로 입력하기");
+                              }}
+                              className="w-full rounded-[5px] border-[#6e6254] bg-[#f3f0ec] text-[#6e6254] hover:bg-[#e8e3db] text-xs font-medium disabled:opacity-40"
+                            >
+                              Type it out
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSalesTableData(msg.salesAction!);
+                                setShowSalesTable(true);
+                              }}
+                              className="w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
+                            >
+                              Enter in table
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => {
+                                const action = msg.salesAction!;
+                                pendingSaveRef.current = {
+                                  kind: "revenue",
+                                  recorded_date: action.date,
+                                  items: action.items.map((it) => ({
+                                    item_name: it.item_name,
+                                    category: it.category,
+                                    quantity: it.quantity,
+                                    unit_price: it.unit_price,
+                                    amount: it.quantity * it.unit_price,
+                                    recorded_date: action.date,
+                                    source: "chat",
+                                  })),
+                                  source: "chat",
+                                };
+                                sendRef.current?.(
+                                  `확인한 매출 ${action.items.length}건 저장해줘.`,
+                                );
+                              }}
+                              className="w-full rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium disabled:opacity-40"
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSalesTableData(msg.salesAction!);
+                                setShowSalesTable(true);
+                              }}
+                              className="w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
+                            >
+                              Edit in table
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                   {msg.role === "assistant" && msg.costAction && (
-                    <div className="ml-8 flex flex-wrap gap-1.5">
-                      {msg.costAction.items.length === 0 ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setCostTableData(msg.costAction!);
-                            setShowCostTable(true);
-                          }}
-                          className="rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium"
-                        >
-                          📋 표로 입력하기
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={async () => {
-                              if (!userId || !apiBase) return;
-                              const action = msg.costAction!;
-                              try {
-                                const res = await fetch(
-                                  `${apiBase}/api/costs`,
-                                  {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({
-                                      account_id: userId,
-                                      items: action.items.map((it) => ({
-                                        ...it,
-                                        recorded_date: action.date,
-                                        source: "chat",
-                                      })),
-                                    }),
-                                  },
-                                );
-                                if (res.ok) {
-                                  const json = await res
-                                    .json()
-                                    .catch(() => ({}));
-                                  const artifactId: string | undefined =
-                                    json?.data?.artifact_id;
-                                  window.dispatchEvent(
-                                    new CustomEvent("boss:artifacts-changed"),
-                                  );
-                                  setMessages((prev) => [
-                                    ...prev,
-                                    {
-                                      role: "assistant" as const,
-                                      content: `비용 ${action.items.length}건이 저장됐어요.`,
-                                      savedArtifactId: artifactId,
-                                      savedDomain: "sales",
-                                    },
-                                  ]);
-                                }
-                              } catch {
-                                /* silent */
-                              }
-                            }}
-                            className="rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium"
-                          >
-                            💾 저장
-                          </Button>
+                    <div className="ml-8 flex flex-col gap-1.5">
+                      {msg.costAction.items.length > 0 && (
+                        <div className="overflow-hidden rounded-[5px] border border-[#030303]/10 bg-white">
+                          <div className="flex items-center justify-between border-b border-[#030303]/[0.08] px-3 py-1.5">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                              Cost preview
+                            </span>
+                            <span className="font-mono text-[11px] text-[#030303]/60">
+                              {msg.costAction.date}
+                            </span>
+                          </div>
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-[#030303]/10 text-left font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                <th className="px-3 py-1.5 font-medium">
+                                  Item
+                                </th>
+                                <th className="px-3 py-1.5 font-medium">
+                                  Category
+                                </th>
+                                <th className="px-3 py-1.5 font-medium">
+                                  Memo
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  Amount
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {msg.costAction.items.map((it, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="border-b border-[#030303]/5 last:border-b-0"
+                                >
+                                  <td className="px-3 py-1.5 text-[#030303]">
+                                    {it.item_name}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[#030303]/70">
+                                    {it.category}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[#030303]/60">
+                                    {it.memo}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {it.amount.toLocaleString()}
+                                    <span className="ml-1 text-[10px] uppercase tracking-wider text-[#030303]/50">
+                                      won
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#030303]/10 bg-[#f4f1ed]">
+                                <td
+                                  colSpan={3}
+                                  className="px-3 py-1.5 text-right font-mono text-[10px] uppercase tracking-wider text-[#030303]/60"
+                                >
+                                  Total
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[13px] font-semibold text-[#030303]">
+                                  {msg.costAction.items
+                                    .reduce((s, it) => s + it.amount, 0)
+                                    .toLocaleString()}
+                                  <span className="ml-1 text-[10px] uppercase tracking-wider text-[#030303]/50">
+                                    won
+                                  </span>
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {msg.costAction.items.length === 0 ? (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1429,29 +1558,53 @@ export const InlineChat = () => {
                               setCostTableData(msg.costAction!);
                               setShowCostTable(true);
                             }}
-                            className="rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium"
+                            className="col-span-2 w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
                           >
-                            📋 표로 수정입력하기
+                            Enter in table
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setMessages((prev) => [
-                                ...prev,
-                                {
-                                  role: "assistant" as const,
-                                  content:
-                                    "새 비용을 입력해 주세요! 항목명·분류·금액을 알려주세요.",
-                                },
-                              ]);
-                            }}
-                            className="rounded-[5px] border-[#6e6254] bg-[#f3f0ec] text-[#6e6254] hover:bg-[#e8e3db] text-xs font-medium"
-                          >
-                            ✏️ 새로 입력
-                          </Button>
-                        </>
-                      )}
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => {
+                                const action = msg.costAction!;
+                                pendingSaveRef.current = {
+                                  kind: "cost",
+                                  recorded_date: action.date,
+                                  items: action.items.map((it) => ({
+                                    item_name: it.item_name,
+                                    category: it.category,
+                                    amount: it.amount,
+                                    memo: it.memo,
+                                    recorded_date: action.date,
+                                    source: "chat",
+                                  })),
+                                  source: "chat",
+                                };
+                                sendRef.current?.(
+                                  `확인한 비용 ${action.items.length}건 저장해줘.`,
+                                );
+                              }}
+                              className="w-full rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium disabled:opacity-40"
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setCostTableData(msg.costAction!);
+                                setShowCostTable(true);
+                              }}
+                              className="w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
+                            >
+                              Edit in table
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

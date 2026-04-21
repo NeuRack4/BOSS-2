@@ -5,6 +5,12 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.agents import orchestrator
 from app.agents._artifact import get_focus_artifact_id, clear_focus_artifact_id
+from app.agents._upload_context import set_pending_upload, clear_pending_upload
+from app.agents._sales_context import (
+    set_pending_receipt, clear_pending_receipt,
+    set_pending_save,    clear_pending_save,
+)
+from app.agents._speaker_context import get_speaker, clear_speaker
 from app.memory import compressor, long_term, sessions, short_term
 from app.models.schemas import (
     ChatRequest,
@@ -74,17 +80,69 @@ async def chat(req: ChatRequest):
 
     # 5. Orchestrator 실행
     clear_focus_artifact_id()
-    reply = await orchestrator.run(
-        message=req.message,
-        account_id=account_id,
-        history=history,
-        rag_context=rag_context,
-        long_term_context=long_term_context,
-    )
+    if req.upload_payload:
+        import logging as _log
+        _log.getLogger("boss2.orchestrator").info(
+            "[upload_payload] account=%s present=True parsed_len=%s original_name=%s",
+            account_id,
+            req.upload_payload.get("parsed_len") if isinstance(req.upload_payload, dict) else "?",
+            req.upload_payload.get("original_name") if isinstance(req.upload_payload, dict) else "?",
+        )
+    set_pending_upload(req.upload_payload)
+    set_pending_receipt(req.receipt_payload)
+    set_pending_save(req.save_payload)
+    if req.receipt_payload:
+        import logging as _log
+        _log.getLogger("boss2.orchestrator").info(
+            "[receipt_payload] account=%s storage_path=%s mime=%s",
+            account_id,
+            (req.receipt_payload or {}).get("storage_path"),
+            (req.receipt_payload or {}).get("mime_type"),
+        )
+    if req.save_payload:
+        import logging as _log
+        _log.getLogger("boss2.orchestrator").info(
+            "[save_payload] account=%s kind=%s items=%d",
+            account_id,
+            (req.save_payload or {}).get("kind"),
+            len((req.save_payload or {}).get("items") or []),
+        )
+    clear_speaker()
+    try:
+        reply = await orchestrator.run(
+            message=req.message,
+            account_id=account_id,
+            history=history,
+            rag_context=rag_context,
+            long_term_context=long_term_context,
+        )
+        speaker = get_speaker()
+    finally:
+        clear_pending_upload()
+        clear_pending_receipt()
+        clear_pending_save()
+        clear_speaker()
 
-    # 6. 대화 저장
-    await short_term.append_message(account_id, session_id, "user", req.message)
-    await short_term.append_message(account_id, session_id, "assistant", reply)
+    # 6. 대화 저장 — upload_payload 가 있으면 user 메시지에 attachment 메타 동봉
+    user_attachment: dict | None = None
+    if req.upload_payload and isinstance(req.upload_payload, dict):
+        up = req.upload_payload
+        filename = up.get("original_name") or up.get("title") or "attachment"
+        size_bytes = up.get("size_bytes")
+        user_attachment = {
+            "filename":      filename,
+            "size_kb":       round(size_bytes / 1024) if isinstance(size_bytes, (int, float)) else None,
+            "status":        "done",
+            "storage_path":  up.get("storage_path"),
+            "bucket":        up.get("bucket"),
+            "mime_type":     up.get("mime_type"),
+        }
+    await short_term.append_message(
+        account_id, session_id, "user", req.message, attachment=user_attachment,
+    )
+    await short_term.append_message(
+        account_id, session_id, "assistant", reply, speaker=speaker,
+    )
 
     # 첫 user 메시지면 제목 생성 (백그라운드)
     if is_first_user_msg:
@@ -100,6 +158,7 @@ async def chat(req: ChatRequest):
         "choices": choices,
         "session_id": session_id,
         "session_created": session_created,
+        "speaker": speaker or ["orchestrator"],
     }
     focus_id = get_focus_artifact_id()
     if focus_id:
@@ -139,5 +198,10 @@ async def rename_session_endpoint(session_id: str, req: SessionRenameRequest):
 
 @router.delete("/sessions/{session_id}", response_model=ChatResponse)
 async def delete_session_endpoint(session_id: str, req: SessionDeleteRequest):
+    import logging as _log
+    _log.getLogger("boss2.orchestrator").info(
+        "[chat] DELETE session account=%s session_id=%s",
+        req.account_id, session_id,
+    )
     await sessions.delete_session(req.account_id, session_id)
     return ChatResponse(data={"session_id": session_id, "deleted": True})

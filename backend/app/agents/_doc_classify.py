@@ -114,19 +114,30 @@ _HEURISTICS: tuple[tuple[Category, str, tuple[str, ...]], ...] = (
 # 카테고리별 confidence 산출 임계. top - second 가 이 이상이면 "확신" 으로 간주.
 _HEURISTIC_MARGIN = 2    # 매칭 점수 차
 _LLM_FALLBACK_SCORE = 2  # top 점수 < 이 값이면 LLM 로 fallback
+_FILENAME_WEIGHT = 3     # 파일명 키워드 매칭은 본문 매칭보다 3배 가중
 
 
 def _score_heuristics(text_sample: str, filename: str) -> list[tuple[Category, str, int, list[str]]]:
-    """(category, doc_type, score, matched_keywords) 배열 점수 순 반환."""
-    haystack = (text_sample + "\n" + filename).lower()
+    """(category, doc_type, score, matched_keywords) 배열 점수 순 반환.
+
+    파일명 매칭은 _FILENAME_WEIGHT 배 가중 — 파일명이 명확하면 LLM fallback 없이 확정.
+    """
+    content_hay = text_sample.lower()
+    filename_hay = (filename or "").lower()
     rows: list[tuple[Category, str, int, list[str]]] = []
     for cat, dtype, patterns in _HEURISTICS:
         matched: list[str] = []
+        score = 0
         for p in patterns:
-            if p.lower() in haystack:
+            pl = p.lower()
+            if pl in filename_hay:
                 matched.append(p)
+                score += _FILENAME_WEIGHT   # 파일명 가중
+            elif pl in content_hay:
+                matched.append(p)
+                score += 1
         if matched:
-            rows.append((cat, dtype, len(matched), matched))
+            rows.append((cat, dtype, score, matched))
     rows.sort(key=lambda r: r[2], reverse=True)
     return rows
 
