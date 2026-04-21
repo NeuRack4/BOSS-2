@@ -325,32 +325,43 @@ async def analyze(
 async def dispatch_review(
     *,
     account_id: str,
-    doc_artifact_id: str,
+    doc_artifact_id: str | None = None,
+    ephemeral_doc: dict | None = None,
     user_role: UserRole = "미지정",
     doc_type: DocType = "계약서",
     contract_subtype: str | None = None,
 ) -> dict:
-    """분석 실행 + analysis artifact 저장 + analyzed_from 엣지 + activity + 임베딩.
+    """분석 실행 + analysis artifact 저장 + activity + 임베딩.
 
-    reviews 라우터 + documents 에이전트 공용. 실패 시 예외를 그대로 던진다.
+    경로:
+      (A) doc_artifact_id — 기존 uploaded_doc 노드가 DB 에 있는 경우. 분석
+          완료 후 원본 노드는 삭제하고 storage 메타는 analysis 로 이전.
+      (B) ephemeral_doc — v0.10 업로드 리팩터 경로. upload_payload 기반의
+          synthetic 문서 dict (id=None). 이 때는 원본 artifact 자체가 없어서
+          삭제할 것도 없고, attachment 메타만 analysis 에 심으면 된다.
     """
     sb = get_supabase()
 
-    doc = (
-        sb.table("artifacts")
-        .select("id,account_id,title,content,type,metadata")
-        .eq("id", doc_artifact_id)
-        .eq("account_id", account_id)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    if not doc:
-        raise ValueError("업로드된 문서를 찾을 수 없습니다.")
-    d = doc[0]
-    if d.get("type") != "uploaded_doc":
-        raise ValueError("분석 대상은 uploaded_doc 만 허용됩니다.")
+    if doc_artifact_id:
+        doc = (
+            sb.table("artifacts")
+            .select("id,account_id,title,content,type,metadata")
+            .eq("id", doc_artifact_id)
+            .eq("account_id", account_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not doc:
+            raise ValueError("업로드된 문서를 찾을 수 없습니다.")
+        d = doc[0]
+        if d.get("type") != "uploaded_doc":
+            raise ValueError("분석 대상은 uploaded_doc 만 허용됩니다.")
+    elif ephemeral_doc:
+        d = ephemeral_doc
+    else:
+        raise ValueError("doc_artifact_id 또는 ephemeral_doc 중 하나가 필요합니다.")
 
     content = (d.get("content") or "").strip()
     if not content:
@@ -363,16 +374,32 @@ async def dispatch_review(
         contract_subtype=contract_subtype,
     )
 
+    # 원본 uploaded_doc 메타에서 첨부파일 정보 추출
+    d_meta = d.get("metadata") or {}
+    attachment = {
+        k: d_meta[k]
+        for k in ("storage_path", "original_name", "mime_type", "size_bytes")
+        if d_meta.get(k)
+    }
+
     title = f"[검토] {d.get('title') or '문서'}"[:180]
     analysis_meta = {
-        "analyzed_doc_id": d["id"],
-        "user_role":       user_role,
-        "doc_type":        doc_type,
+        "user_role":        user_role,
+        "doc_type":         doc_type,
         "contract_subtype": contract_subtype,
-        "gap_ratio":       result.gap_ratio,
-        "eul_ratio":       result.eul_ratio,
-        "risk_clauses":    [c.to_dict() for c in result.risk_clauses],
+        "gap_ratio":        result.gap_ratio,
+        "eul_ratio":        result.eul_ratio,
+        "risk_clauses":     [c.to_dict() for c in result.risk_clauses],
     }
+    if attachment:
+        analysis_meta["attachment"] = attachment
+
+    # documents 서브허브(Contracts 우선) 연결용 hub_id
+    from app.agents._artifact import pick_sub_hub_id, pick_main_hub_id
+    hub_id = (
+        pick_sub_hub_id(sb, account_id, "documents", prefer_keywords=("Contracts", "contract"))
+        or pick_main_hub_id(sb, account_id, "documents")
+    )
 
     ins = sb.table("artifacts").insert({
         "account_id": account_id,
@@ -389,17 +416,25 @@ async def dispatch_review(
     analysis_id = ins.data[0]["id"]
     record_artifact_for_focus(analysis_id)
 
-    # analyzed_from 엣지: 원본 업로드 문서만 유일한 부모.
-    # (서브허브 contains 엣지는 의도적으로 생성하지 않음 — 분석 결과는 업로드 노드의 자식으로만 존재)
-    try:
-        sb.table("artifact_edges").insert({
-            "account_id": account_id,
-            "parent_id":  d["id"],
-            "child_id":   analysis_id,
-            "relation":   "analyzed_from",
-        }).execute()
-    except Exception:
-        pass
+    # 서브허브 contains 엣지 (uploaded_doc 부모 없이 직접 연결)
+    if hub_id:
+        try:
+            sb.table("artifact_edges").insert({
+                "account_id": account_id,
+                "parent_id":  hub_id,
+                "child_id":   analysis_id,
+                "relation":   "contains",
+            }).execute()
+        except Exception:
+            pass
+
+    # 원본 uploaded_doc 노드 삭제 (파일은 Storage에 유지, 노드만 제거)
+    # ephemeral 경로(upload_payload)에선 원본 artifact 자체가 없으므로 스킵.
+    if d.get("id"):
+        try:
+            sb.table("artifacts").delete().eq("id", d["id"]).eq("account_id", account_id).execute()
+        except Exception:
+            pass
 
     try:
         sb.table("activity_logs").insert({
@@ -408,7 +443,7 @@ async def dispatch_review(
             "domain":      "documents",
             "title":       title,
             "description": f"공정성 분석 완료 · 갑 {result.gap_ratio}% / 을 {result.eul_ratio}% · 위험 {len(result.risk_clauses)}건",
-            "metadata":    {"artifact_id": analysis_id, "analyzed_doc_id": d["id"]},
+            "metadata":    {"artifact_id": analysis_id},
         }).execute()
     except Exception:
         pass
@@ -418,6 +453,12 @@ async def dispatch_review(
         risk_summary = " / ".join(c.clause[:60] for c in result.risk_clauses[:5])
         index_text = f"{title}\n{result.summary}\n위험조항: {risk_summary}"
         await index_artifact(account_id, "documents", analysis_id, index_text)
+    except Exception:
+        pass
+
+    try:
+        from app.memory.long_term import log_artifact_to_memory
+        await log_artifact_to_memory(account_id, "documents", "analysis", title)
     except Exception:
         pass
 

@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o"
     openai_compress_model: str = "gpt-4o-mini"
 
+    # Anthropic (optional — planner 만 스위치 가능)
+    anthropic_api_key: str = ""
+    planner_provider: str = "openai"   # openai | anthropic
+    planner_claude_model: str = "claude-sonnet-4-6"
+    planner_openai_model: str = "gpt-4o"
+
     # Embedding
     embed_model: str = "BAAI/bge-m3"
     embed_dim: int = 1024

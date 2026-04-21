@@ -9,7 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Briefcase, Megaphone, TrendingUp, FileText, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import type { Domain } from "@/components/canvas/FilterContext";
+import type { DomainKey as Domain } from "@/components/bento/types";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type NotifyKind =
   | "start"
@@ -88,6 +89,7 @@ type Props = {
 export const ActivityModal = ({ open, onClose }: Props) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const { openDetail } = useNodeDetail();
 
   useEffect(() => {
     if (!open) return;
@@ -140,10 +142,8 @@ export const ActivityModal = ({ open, onClose }: Props) => {
       }
     }
     if (!artifactId) return;
-    onClose();
-    window.dispatchEvent(
-      new CustomEvent("boss:focus-node", { detail: { id: artifactId } }),
-    );
+    // Nested modal — ActivityModal 는 열어둔 채 상세 모달을 위에 띄운다.
+    openDetail(artifactId);
   };
 
   return (

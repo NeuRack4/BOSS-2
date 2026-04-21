@@ -29,11 +29,11 @@ from app.routers import (
     evaluations,
     kanban,
     marketing,
+    memory,
     memos,
     recruitment,
     reviews,
     sales,
-    sales_ocr,
     schedules,
     stats,
     search,
@@ -61,6 +61,7 @@ app.include_router(summary.router)
 app.include_router(dashboard.router)
 app.include_router(kanban.router)
 app.include_router(marketing.router)
+app.include_router(memory.router)
 app.include_router(memos.router)
 app.include_router(recruitment.router)
 app.include_router(search.router)
@@ -68,7 +69,6 @@ app.include_router(uploads.router)
 app.include_router(reviews.router)
 app.include_router(costs.router)
 app.include_router(sales.router)
-app.include_router(sales_ocr.router)
 app.include_router(stats.router)
 
 

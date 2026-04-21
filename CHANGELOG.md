@@ -5,38 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — feature/sales-analytics (Sales 상세 모달 + OCR + 통계 API)
+## [1.2.0] — feature-documents (Planner-driven orchestrator + Sales v2 + Node 통합 상세 + 캔버스 제거)
 
-### Added — Backend
+v1.0.0 이후 `feature/sales-analytics` / `feature/sales-ocr` / `feature-documents` 세 브랜치 작업을 하나의 릴리스로 묶음. 오케스트레이터를 **JSON-schema 플래너 주 경로**로 재설계하고, **캔버스(React Flow)를 완전 제거**했으며, Sales 도메인을 서브패키지로 재구성하고 매출/비용 실 데이터 테이블(`sales_records` / `cost_records`) 을 도입했다.
 
-- **`backend/app/routers/sales_ocr.py`** — `POST /api/sales/ocr` 신규. 이미지(GPT-4o Vision) / Excel(openpyxl) / CSV(표준 csv) 파일에서 매출·비용 항목 자동 파싱. 인코딩 자동 감지(utf-8-sig → euc-kr → cp949). Excel/CSV는 GPT-4o-mini로 sales/cost 타입 추론.
-- **`backend/app/routers/stats.py`** — 매출 통계 API 4종 신규.
-  - `GET /api/stats/overview` — 당월 매출·비용·순이익 + 전월 대비 증감률 + 일평균.
-  - `GET /api/stats/monthly-trend` — 최근 N개월 시계열 (매출·비용·순이익).
-  - `GET /api/stats/daily` — 특정 월 일별 매출·비용 시리즈 (누락 날짜 0 채움).
-  - `GET /api/stats/top-items` — 기간별 항목 랭킹 (금액 기준 내림차순).
-- **`backend/app/routers/costs.py`** — `PATCH /api/costs/{id}` 단건 수정 엔드포인트 추가. ownership 확인 + category 허용값 검증.
-- **`backend/app/routers/sales.py`** — `PATCH /api/sales/{id}` 단건 수정 엔드포인트 추가. revenue_entry artifact hub 연결 쿼리 `Revenue` → `Reports` 수정. `ORDER BY` `recorded_date` → `created_at DESC` 변경(같은 날짜 내 최신 데이터 우선).
-- **`backend/app/agents/sales.py`** — `run_cost_entry` capability 핸들러 + `sales_cost_entry` describe 추가. `_TYPE_TO_SUBHUB["revenue_entry"]` `Revenue` → `Reports` 수정.
+### Added — Orchestrator / Planner
 
-### Added — Frontend
+- **`backend/app/agents/_planner.py`** — 신규. `response_format=json_schema` 강제 플래너. 매 턴 `{mode: dispatch|ask|chitchat|refuse|planning, opening, brief, steps[], question, choices, profile_updates}` 구조화 JSON 생성. `PLANNER_PROVIDER=openai|anthropic` 으로 OpenAI(gpt-4o-mini 기본) 또는 Claude 스왑.
+- **`orchestrator.run()`** — 2단 구조로 재작성. 1차: `_dispatch_via_planner` — tools catalog + memos 컨텍스트와 함께 planner 호출 → `dispatch` 모드면 `depends_on` 기반 병렬(`asyncio.gather`) 또는 순차 step 실행 + `opening` + `tool_reply` 합성. 2차 (planner 실패·에러 시): legacy `classify_intent` + `_call_domain_with_shortcut` 세이프티넷.
+- **`_capability.V2_DOMAINS`** — sales 합류해 `("recruitment", "documents", "marketing", "sales")` **4개 도메인 전부 function-calling 로 통일**. `describe_all(account_id)` 가 도메인별 `describe(account_id) -> list[Capability]` 를 모아 OpenAI tools 스펙 + dispatch map 조립.
+- **`backend/app/agents/_speaker_context.py`** — 신규. per-request ContextVar `set/get/clear_speaker`. 오케스트레이터가 경로별로 화자 배열 기록 → chat router 가 `chat_messages.speaker` 저장 + `ChatResponse.data.speaker` 반환.
+- **`backend/app/agents/_upload_context.py`** — 신규. per-request ContextVar. chat router 의 `req.upload_payload` 를 documents agent 에 전달. v1.0 이후 업로드는 artifact 를 만들지 않고 payload 만 전달한다.
+- **`backend/app/agents/_sales_context.py`** — 신규. per-request ContextVar 2종 (`pending_receipt`, `pending_save`). sales agent 의 영수증 OCR / 인라인 테이블 저장 흐름에 사용.
+- **Profile updates 플래너 통합** — Planner 가 `profile_updates` 필드를 매 턴 생성하면 orchestrator 가 즉시 `_save_profile_updates` 로 저장. core(7) 와 meta 분리 + `business_stage`/`channels` enum 검증.
 
-- **`frontend/components/sales/SalesDetailModal.tsx`** — 신규. revenue_entry / cost_report 카드 클릭 시 해당 날짜 records 조회·표시·수정·삭제. 인라인 편집(Pencil 클릭 → 행 수정 → PATCH API) + 삭제(confirm → DELETE API). 카테고리 pill 헤더 요약.
-- **`InlineChat.tsx`** — Sales 저장 후 `savedArtifactMeta { type, recordedDate, title }` + `savedDomain` 메시지 필드 추가. "캔버스에서 보기" → **"📋 상세 보기"** 버튼으로 교체 → `SalesDetailModal` 대시보드 인라인 오픈. 영수증 이미지 업로드 시 `receipt` 분류 자동 감지 → `/api/sales/ocr` 호출 → 파싱 결과를 `salesAction`/`costAction` 마커로 표시 (저장 버튼까지 원스텝).
-- **`KanbanBoard.tsx`** — `boss:artifacts-changed` CustomEvent 리스너 추가 → 매출 저장 후 칸반 자동 새로고침.
+### Added — Sales 도메인 v2
+
+- **`backend/app/agents/_sales/` 서브패키지** — 신규.
+  - `_revenue.py` · `dispatch_save_revenue(account_id, items, recorded_date, source)` — 5분 윈도 items_hash idempotent dedup → `sales_records` insert → revenue_entry artifact + Reports 서브허브 `contains` 엣지 + 임베딩 인덱싱 + `activity_logs.artifact_created`.
+  - `_costs.py` · 동일 패턴. 카테고리 enum `재료비|인건비|임대료|공과금|마케팅|기타`.
+  - `_ocr.py` · `parse_receipt_from_bytes(file_bytes, mime_type) -> {type: "sales"|"cost", items}` — gpt-4o vision. 영수증/명세서를 자동으로 매출/비용 분류.
+- **`backend/app/agents/sales.py`** — `describe(account_id)` export. 8종 capability(`sales_revenue_entry`, `sales_cost_entry`, `sales_parse_receipt`, `sales_save_revenue`, `sales_save_costs`, `sales_report`, `sales_price_strategy`, `sales_customer_script`, `sales_promotion`, `sales_checklist`). `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 마커 프로토콜로 프론트 인라인 테이블 트리거.
+- **`supabase/migrations/021_sales_records.sql`** — 신규. `sales_records(id, account_id, recorded_date, item_name, category, quantity, unit_price, amount, source, raw_input, metadata)` + RLS + `idx_sales_records_account_date` + `ensure_standard_sub_hubs` 재정의(Sales 에 **Revenue** 서브허브 추가 → 총 18종) + 전 계정 backfill.
+- **`supabase/migrations/022_cost_records.sql`** — 신규. `cost_records(id, account_id, recorded_date, item_name, category, amount, memo, source, metadata)` + RLS + `idx_cost_records_account_date`.
+- **`backend/app/routers/sales.py` · `costs.py`** — `POST /` (bulk insert, `_sales._revenue/_costs.dispatch_save_*` 델리게이트) · `GET /` · `GET /summary` (day/week/month 집계 + by-item + by-category) · `PATCH /{id}` (ownership + 재임베딩) · `DELETE /{id}` (임베딩 제거). `/api/sales/summary` 쿼리 정렬 `recorded_date` → `created_at DESC` 로 수정.
+- **`backend/app/routers/stats.py`** — 통계 API 4종. `GET /api/stats/overview` (당월 + MoM + 일평균) · `/monthly-trend` (N개월 시계열) · `/daily` (월별 일자 시리즈, 누락 0 채움) · `/top-items` (기간 랭킹). `sales_records` + `cost_records` 기반.
+
+### Added — NodeDetailModal 통합 상세 (캔버스 대체)
+
+- **`frontend/components/detail/NodeDetailContext.tsx`** — 신규. `NodeDetailProvider` 가 앱 전역에 `<NodeDetailModal />` 을 한 번만 마운트. `useNodeDetail().openDetail(id)` / `closeDetail()` 훅 + 전역 CustomEvent `boss:open-node-detail {id}` 수신.
+- **`frontend/components/detail/NodeDetailModal.tsx`** — 신규. 4개 도메인 통합 상세 모달. `revenue_entry` / `cost_report` 는 해당 날짜 `sales_records`/`cost_records` 리스트 조회 + 인라인 편집(Pencil → PATCH) + 삭제(confirm → DELETE). 분석/SNS/공고 등 도메인별 커스텀 프리뷰 블록 포함.
+- **`frontend/app/providers.tsx`** — `NodeDetailProvider` 로 `children` 전체 래핑.
+- **`frontend/components/chat/SpeakerBadge.tsx`** — 신규. Props: `speakers: SpeakerKey[] | null`. ChatCenterCard 헤더에 도메인 색상 pill 렌더. 값 없으면 "Ready" placeholder.
+- **`frontend/components/chat/ChatContext.tsx`** — `lastSpeaker` / `setLastSpeaker` 추가. InlineChat 이 매 응답마다 `speaker` 배열 업데이트.
+
+### Added — Memory CRUD
+
+- **`backend/app/routers/memory.py`** — 신규. `PATCH /api/memory/long/{id}` (내용 수정 + 재임베딩) · `DELETE /api/memory/long/{id}` · `POST /api/memory/boost` (artifact 요약을 장기 기억에 pin, importance 0.2-1.0).
+- **`backend/app/main.py`** — `memory.router` 등록.
+
+### Added — Migrations
+
+- **`supabase/migrations/020_legal_annual_values.sql`** — 신규. `legal_annual_values(category, year, value jsonb, source_*, effective_from, unverified)` 테이블. 매년 갱신되는 법정 수치(최저임금/VAT 간이 기준/소득세 누진/보험료율 등) 을 LLM cutoff 너머까지 제공. `_legal.py` 가 system prompt 에 주입.
+- **`supabase/migrations/020_schedule_to_metadata.sql`** — 신규. **`kind='schedule'` 별도 노드 체계 폐기**. 각 `scheduled_by` 엣지에 대해 자식 schedule 의 `metadata(cron/next_run/executed_at/status)` 를 부모 artifact 의 metadata 로 병합 (`schedule_enabled=true` + `schedule_status`). `logged_from` 엣지를 부모로 재포인트(중복 제거 포함). `kind='schedule'` artifact + embeddings 삭제. `artifacts_kind_check` CHECK 에서 `schedule` 제거 — 이후 4개 kind(`anchor|domain|artifact|log`).
+- **`supabase/migrations/023_chat_messages_speaker.sql`** — 신규. `chat_messages.speaker text[]` 컬럼 추가. orchestrator/domain agent(들)이 생성한 assistant 메시지의 화자 기록. user/system 메시지는 null.
+
+### Added — Documents / Marketing
+
+- **`backend/app/agents/_legal.py`** — `legal_annual_values` 테이블 조회 통합. 질문의 카테고리+연도 감지 시 확정 수치를 system prompt 주입.
+- **`backend/app/agents/_doc_classify.py`** — 업로드 문서 자동 분류(`documents|receipt|invoice|tax|id|other`). 키워드 스코어링 + gpt-4o-mini JSON 폴백.
+- **`backend/app/routers/marketing.py`** — Instagram Meta Graph API 자동 게시(`POST /instagram/publish`), DALL·E 3 이미지 생성(`POST /image`), 리뷰 분석(`POST /review/analyze`), 사진 라이브러리(`GET,POST,DELETE /photos`), YouTube OAuth + Shorts 4-step(`/youtube/oauth/*`, `/youtube/shorts/preview-subtitles`, `/youtube/shorts/generate`), Subsidy 검색(`GET /subsidies`).
+- **`frontend/components/chat/ShortsWizardCard.tsx`** — 신규. 4-step 위저드 (사진 업로드 → 자막 편집 → 설정 → 생성). YouTube 연결 상태 + 이중 출력(YouTube URL + 클라우드 URL).
+- **`frontend/components/chat/PhotoLibraryModal.tsx`** — 신규. `/api/marketing/photos` 구독. 업로드/삭제/최근 자동 선택. InstagramPostCard 에서 사용.
+
+### Added — Scheduler
+
+- **`backend/app/scheduler/scanner.find_due_schedules`** — 쿼리 대상을 `kind='artifact' AND metadata->>schedule_enabled='true' AND metadata.schedule_status in (null,'active')` 로 전환. 더 이상 `kind='schedule'` 을 참조하지 않음.
+- **`backend/app/scheduler/log_nodes.create_log_node`** — 부모 artifact 기준으로 `logged_from` 엣지 생성 (구 schedule 노드 부모 경유 사라짐).
+- **스케쥴러 알림 문자열** — `metadata.due_label`(계약 만료/납품기한 등) + `metadata.start_date`/`due_date` D-7/D-3/D-1/D-0 오프셋 기반.
 
 ### Changed
 
-- **`KanbanCard.tsx`** — dev CSS variables(`var(--kb-border)` 등) 유지하면서 `onClick`/`cursor-pointer` 조건부 커서 로직 병합. `rounded-xl` → `rounded-[5px]`.
-- **`SalesDetailModal.tsx`** — fetch limit `200` → `500` (동일 날짜 레코드 다수 시 잘림 방지).
-- **`KanbanColumn.tsx`** — `onCardClick` prop 전달 추가.
-- **`FlowCanvas.tsx`** — `boss:focus-node` 재시도 `8×80ms` → `30×300ms` (총 9초) 로 확장.
+- **`backend/app/routers/chat.py`** — Planner 경로 통합. `req.upload_payload` / `req.receipt_payload` / `req.save_payload` 를 ContextVar 3종(`_upload_context` / `_sales_context.pending_receipt` / `pending_save`) 에 set → orchestrator.run() → finally 에서 clear. `get_speaker()` 로 화자 회수 → `short_term.append_message(speaker=...)` + 응답 `speaker` 필드. 첫 user 메시지면 `sessions.generate_title` 백그라운드 태스크.
+- **`backend/app/memory/short_term.append_message`** — `speaker: list[str] | None = None` 파라미터 추가. assistant 메시지일 때만 저장.
+- **`backend/app/memory/sessions.py`** — `get_session_messages` 가 `speaker` 필드를 함께 반환 → 세션 복구 시 프론트가 SpeakerBadge 하이드레이트.
+- **`backend/app/routers/uploads.py`** — **v1.0 이후 업로드 artifact 를 만들지 않는다**. `POST /api/uploads/document` 는 multi-file(20MB 각) 을 받아 파싱 + 분류 + ephemeral `upload_payload` 딕셔너리만 응답. 프론트가 그걸 다음 chat 요청 `upload_payload` 에 동봉해 보내면 documents agent 가 `_upload_context.get_pending_upload()` 로 직접 소비. `PATCH /document/{id}/classification` 은 legacy (artifact 없으면 no-op) 로 유지.
+- **`backend/app/agents/sales.py`** — `_TYPE_TO_SUBHUB["revenue_entry"]` `Revenue` → `Reports` (기존 Revenue 서브허브는 021 이후 입력 전용 전환, 리포트/카드 UI 는 Reports 아래 유지).
+- **`frontend/components/bento/KanbanBoard.tsx`** — `boss:artifacts-changed` CustomEvent 리스너 추가. 카드 클릭 시 `useNodeDetail().openDetail(artifactId)` 로 통합 모달 오픈.
+- **`frontend/components/bento/KanbanCard.tsx`** — CSS 변수 (`var(--kb-border)` 등) + 조건부 `cursor-pointer` + `rounded-xl` → `rounded-[5px]`.
+- **`frontend/components/chat/InlineChat.tsx`** — Sales 저장 후 `savedArtifactMeta { type, recordedDate, title }` + `savedDomain` 메시지 필드 추가. 구 "캔버스에서 보기" → "📋 상세 보기" → `useNodeDetail().openDetail()`. 영수증 이미지 업로드 시 receipt 분류 자동 감지 → `_sales._ocr.parse_receipt_from_bytes` (capability `sales_parse_receipt`) → 파싱 결과를 salesAction/costAction 마커로 표시.
+- **`frontend/components/chat/CostInputTable.tsx` · `SalesInputTable.tsx`** — 편집/삭제 액션 + API 호출 경로 정리.
+- **`frontend/components/layout/*Modal.tsx`** — `ActivityModal` / `LongTermMemoryModal` / `MemosModal` / `ScheduleManagerModal` — NodeDetailModal 전환 + 영어 UI 최종 정리.
+- **`frontend/components/search/SearchPalette.tsx`** — 결과 클릭 시 `boss:focus-node` → NodeDetailContext 수신해 openDetail 로 전환.
+
+### Removed
+
+- **`frontend/components/canvas/` 전체 삭제** — `FlowCanvas.tsx` · `AnchorNode.tsx` · `DomainNode.tsx` · `ArtifactChipNode.tsx` · `FilterContext.tsx` · `FloatingFilterPanel.tsx` · `HoverInfoPanel.tsx` · `NebulaBackground.tsx` · `NodeContextMenu.tsx` · `floatingPanels.ts` · `layout.ts` + 7개 모달(`NodeDetailModal` · `DateRangeModal` · `ConfirmModal` · `SummaryModal` · `ScheduleModal` · `LogDetailModal` · `HistoryModal`). 캔버스 UI 는 v1.2 에서 Bento + Kanban + 통합 NodeDetailModal 로 완전 대체.
+- **`frontend/components/sales/SalesDetailModal.tsx` 삭제** — `components/detail/NodeDetailModal.tsx` 에 흡수.
+- **`backend/app/routers/sales_ocr.py` 삭제** — `POST /api/sales/ocr` REST 엔드포인트 대신 `_sales._ocr.parse_receipt_from_bytes` 를 `sales_parse_receipt` capability 로 노출. 채팅 흐름 안에서 영수증 이미지를 그대로 보내면 planner 가 해당 capability 로 라우팅.
+- **`kind='schedule'` artifact + `scheduled_by` 관계** — 020 마이그레이션으로 모두 흡수. 이후 신규 insert 없음.
+- **DELETE all `[Unreleased]` entries** — v1.0 ~ v1.2 사이 누적된 feature 브랜치들이 전부 이 릴리스로 통합됨.
 
 ### Docs
 
 - `docs/OCR_면접준비.md` — OCR 파이프라인 개념 정리.
-- `docs/Sales_작업계획_학습가이드.md` — BOSS-1 대비 Sales 미구현 항목 A~H 분석 및 구현 계획.
-- `docs/개인학습_멘토질문대비.md` — 오늘 작업 개념 정리 + 멘토 예상 질문/답변.
+- `docs/Sales_작업계획_학습가이드.md` — Sales 미구현 항목 분석 및 v1.2 구현 계획.
+- `docs/개인학습_멘토질문대비.md` — 개념 정리 + 예상 질문/답변.
+- **`CLAUDE.md` 전면 재작성** — Planner 주 경로 / 4개 도메인 function-calling / 18종 서브허브 / schedule 노드 제거 / NodeDetailModal 통합 / speaker 추적 / 020-023 마이그레이션 반영.
+- **`README.md` 전면 재작성** — 버전 배지 1.2.0, 아키텍처 다이어그램·Key Features·Project Structure·Backend API 표·migration 목록 모두 현재 상태로 갱신.
 
 ---
 

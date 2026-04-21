@@ -4,6 +4,9 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Literal, TypedDict
+
+from langgraph.graph import StateGraph, END
 
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
@@ -40,7 +43,6 @@ VALID_TYPES: tuple[str, ...] = (
     "guide",
 )
 
-# 타입 → 서브허브 매핑 (LLM이 ARTIFACT 블록에 sub_domain 자동 주입)
 _TYPE_TO_SUBHUB: dict[str, str] = {
     "contract":  "Contracts",
     "estimate":  "Operations",
@@ -51,7 +53,7 @@ _TYPE_TO_SUBHUB: dict[str, str] = {
 }
 
 _REVIEW_REQUEST_RE = re.compile(r"\[REVIEW_REQUEST\](.*?)\[/REVIEW_REQUEST\]", re.DOTALL)
-_UPLOADED_DOC_WINDOW_MIN = 60  # 최근 60분 이내 업로드만 컨텍스트로 자동 노출
+_UPLOADED_DOC_WINDOW_MIN = 60
 
 
 def suggest_today(account_id: str) -> list[dict]:
@@ -129,12 +131,44 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 """
 
 
-def _find_recent_uploaded_doc(account_id: str) -> dict | None:
-    """최근 60분 이내 업로드된 uploaded_doc 중 **documents 카테고리 + 충돌 없음** 인 것만 1개 반환.
+# ──────────────────────────────────────────────────────────────────────────
+# DB helpers
+# ──────────────────────────────────────────────────────────────────────────
 
-    - 영수증/세금계산서/신분증/기타는 컨텍스트에 자동 노출하지 않음 → 공정성 분석 플로우 진입 방지.
-    - needs_confirmation=true (자동 vs 유저 선언 충돌 미해결) 인 건 건너뜀.
+def _find_recent_uploaded_doc(account_id: str) -> dict | None:
+    """요청 인스턴스에 실려 온 upload_payload 를 최우선으로 반환.
+
+    v0.10 부터 업로드는 더 이상 DB 에 `uploaded_doc` artifact 를 만들지 않는다.
+    프론트가 `POST /api/chat {upload_payload}` 로 파싱 본문 + 스토리지 메타를
+    직접 전달하고, `routers/chat.py` 가 contextvar 에 세팅한다. 여기서는
+    contextvar 우선, 없으면 과거 데이터 호환을 위해 DB 폴백한다.
     """
+    from app.agents._upload_context import get_pending_upload
+
+    payload = get_pending_upload()
+    if payload and (payload.get("content") or "").strip():
+        # documents 가 아닌 카테고리(예: receipt) 는 리뷰 대상이 아님
+        classification = payload.get("classification") or {}
+        category = classification.get("category")
+        if category in (None, "documents"):
+            return {
+                "id":         None,                                  # DB artifact 없음
+                "title":      payload.get("title") or payload.get("original_name") or "업로드 문서",
+                "content":    payload.get("content") or "",
+                "metadata":   {
+                    "storage_path":   payload.get("storage_path"),
+                    "bucket":         payload.get("bucket"),
+                    "mime_type":      payload.get("mime_type"),
+                    "size_bytes":     payload.get("size_bytes"),
+                    "original_name":  payload.get("original_name"),
+                    "parsed_len":     payload.get("parsed_len"),
+                    "classification": classification,
+                },
+                "created_at": payload.get("uploaded_at") or "",
+                "_ephemeral": True,
+            }
+
+    # Legacy DB 폴백 — 아직 DB 에 남아있는 uploaded_doc 이 있다면 살려준다.
     sb = get_supabase()
     since_iso = (datetime.now(timezone.utc) - timedelta(minutes=_UPLOADED_DOC_WINDOW_MIN)).isoformat()
     rows = (
@@ -156,13 +190,12 @@ def _find_recent_uploaded_doc(account_id: str) -> dict | None:
             continue
         classification = meta.get("classification") or {}
         category = classification.get("category")
-        # classification 메타가 없는 예전 업로드(v1.2 이전)는 관대하게 documents 로 간주
         if category is None or category == "documents":
             return row
     return None
 
 
-def _find_recent_analysis_for(account_id: str, doc_id: str) -> dict | None:
+def _find_recent_analysis(account_id: str) -> dict | None:
     sb = get_supabase()
     rows = (
         sb.table("artifacts")
@@ -171,36 +204,31 @@ def _find_recent_analysis_for(account_id: str, doc_id: str) -> dict | None:
         .eq("kind", "artifact")
         .eq("type", "analysis")
         .order("created_at", desc=True)
-        .limit(10)
+        .limit(5)
         .execute()
         .data
         or []
     )
-    for r in rows:
-        meta = r.get("metadata") or {}
-        if meta.get("analyzed_doc_id") == doc_id:
-            return r
-    return None
+    return rows[0] if rows else None
 
 
-def _build_upload_context(account_id: str) -> str:
-    doc = _find_recent_uploaded_doc(account_id)
-    if not doc:
+def _build_upload_context(uploaded_doc: dict | None, account_id: str, include_analysis: bool = False) -> str:
+    if not uploaded_doc:
         return ""
-    meta = doc.get("metadata") or {}
-    preview = (doc.get("content") or "")[:600]
+    meta = uploaded_doc.get("metadata") or {}
+    preview = (uploaded_doc.get("content") or "")[:600]
     chunks = [
         "[최근 업로드 문서]",
-        f"doc_id: {doc['id']}",
-        f"title: {doc.get('title','')}",
+        f"doc_id: {uploaded_doc.get('id') or 'ephemeral'}",
+        f"title: {uploaded_doc.get('title','')}",
         f"original_name: {meta.get('original_name','')}",
-        f"mime: {meta.get('mime_type','')}  ·  size: {meta.get('size_bytes',0)} bytes  ·  parsed_len: {meta.get('parsed_len',0)}",
-        f"uploaded_at: {doc.get('created_at','')}",
+        f"mime: {meta.get('mime_type','')}  ·  size: {meta.get('size_bytes',0)} bytes",
+        f"uploaded_at: {uploaded_doc.get('created_at','')}",
         "--- 본문 앞부분 ---",
         preview,
     ]
-    # 동일 문서에 대해 이미 분석이 있으면 같이 노출
-    analysis = _find_recent_analysis_for(account_id, doc["id"])
+    # 분석 대기 중인 문서가 있을 때는 이전 분석을 context에 넣지 않음 (LLM 혼동 방지)
+    analysis = _find_recent_analysis(account_id) if include_analysis else None
     if analysis:
         am = analysis.get("metadata") or {}
         chunks += [
@@ -225,9 +253,7 @@ def _parse_review_marker(reply: str) -> dict | None:
         if ":" in line:
             k, v = line.split(":", 1)
             parsed[k.strip().lower()] = v.strip()
-    if not parsed.get("doc_id"):
-        return None
-    return parsed
+    return parsed if parsed.get("doc_id") else None
 
 
 def _strip_review_marker(reply: str) -> str:
@@ -244,41 +270,177 @@ def _format_review_append(result: dict) -> str:
     ]
     risks = result.get("risk_clauses") or []
     if risks:
-        lines.append("")
-        lines.append(f"**주요 위험 조항 ({len(risks)}건)**")
+        lines += ["", f"**주요 위험 조항 ({len(risks)}건)**"]
         for i, c in enumerate(risks[:5], 1):
             sev = c.get("severity", "Mid")
             lines.append(f"{i}. [{sev}] {c.get('clause','')[:80]}")
-            r = c.get("reason") or ""
-            if r:
-                lines.append(f"   - 사유: {r[:150]}")
-            sf = c.get("suggestion_from") or ""
-            st = c.get("suggestion_to") or ""
-            if sf and st:
-                lines.append(f"   - 수정: `{sf[:60]}` → `{st[:80]}`")
+            if c.get("reason"):
+                lines.append(f"   - 사유: {c['reason'][:150]}")
+            if c.get("suggestion_from") and c.get("suggestion_to"):
+                lines.append(f"   - 수정: `{c['suggestion_from'][:60]}` → `{c['suggestion_to'][:80]}`")
         if len(risks) > 5:
             lines.append(f"... 외 {len(risks) - 5}건 (분석 노드에서 전체 확인)")
     lines.append("")
-    lines.append(f"_(분석 artifact: `{result['analysis_id']}` — 캔버스에서 원본 문서와 함께 확인할 수 있어요.)_")
-
-    # 프론트엔드 ReviewResultCard 렌더용 구조화 페이로드. 사용자에겐 노출되지 않고 파서가 잘라낸다.
+    lines.append(f"_(분석 artifact: `{result['analysis_id']}` — 캔버스에서 확인할 수 있어요.)_")
     payload = {
-        "analysis_id":     result["analysis_id"],
-        "analyzed_doc_id": result.get("analyzed_doc_id"),
-        "gap_ratio":       result["gap_ratio"],
-        "eul_ratio":       result["eul_ratio"],
-        "summary":         result.get("summary") or "",
-        "risk_clauses":    result.get("risk_clauses") or [],
+        "analysis_id": result["analysis_id"],
+        "gap_ratio":   result["gap_ratio"],
+        "eul_ratio":   result["eul_ratio"],
+        "summary":     result.get("summary") or "",
+        "risk_clauses": result.get("risk_clauses") or [],
     }
     lines.append(f"[[REVIEW_JSON]]{json.dumps(payload, ensure_ascii=False)}[[/REVIEW_JSON]]")
     return "\n".join(lines)
 
 
-async def _maybe_dispatch_review(account_id: str, reply: str) -> str:
-    """응답 본문의 [REVIEW_REQUEST] 블록을 감지해 분석을 실행하고 결과를 덧붙임."""
+# ──────────────────────────────────────────────────────────────────────────
+# LangGraph state
+# ──────────────────────────────────────────────────────────────────────────
+
+class DocState(TypedDict):
+    message: str
+    account_id: str
+    history: list[dict]
+    rag_context: str
+    long_term_context: str
+    # set by classify node
+    intent: Literal["legal", "review", "write"]
+    uploaded_doc: dict | None
+    # output
+    reply: str
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Graph nodes
+# ──────────────────────────────────────────────────────────────────────────
+
+async def _classify_node(state: DocState) -> DocState:
+    """intent 분류: legal | review | write."""
+    message = state["message"]
+    account_id = state["account_id"]
+    history = state["history"]
+
+    uploaded_doc = _find_recent_uploaded_doc(account_id)
+    type_guess, _ = detect_doc_intent(message)
+
+    # legal 분기: 서류 작성/검토 의도가 없고 업로드 문서도 없을 때만
+    if not type_guess and not uploaded_doc:
+        intent_obj = await classify_legal_intent(message, history)
+        if intent_obj.is_legal:
+            log.info("[documents/graph] classify → legal (account=%s)", account_id)
+            return {**state, "intent": "legal", "uploaded_doc": None}
+
+    # review 분기: 최근 업로드 문서 있음
+    if uploaded_doc:
+        log.info("[documents/graph] classify → review (account=%s doc=%s)", account_id, uploaded_doc.get("id") or "ephemeral")
+        return {**state, "intent": "review", "uploaded_doc": uploaded_doc}
+
+    log.info("[documents/graph] classify → write (account=%s)", account_id)
+    return {**state, "intent": "write", "uploaded_doc": None}
+
+
+async def _legal_node(state: DocState) -> DocState:
+    """법률 질의 처리."""
+    reply = await handle_legal_question(
+        state["message"],
+        state["account_id"],
+        state["history"],
+        rag_context=state["rag_context"],
+        long_term_context=state["long_term_context"],
+    )
+    return {**state, "reply": reply}
+
+
+_REVIEW_NODE_EXTRA = """
+[공정성 분석 노드 전용 규칙 — 반드시 준수]
+- 이 노드의 유일한 임무는 역할(갑/을/미지정)과 서브타입을 확정한 뒤 [REVIEW_REQUEST] 마커를 출력하는 것입니다.
+- **분석 결과(갑/을 비율, 위험 조항 목록, 요약 텍스트)를 직접 생성하는 것은 절대 금지**입니다.
+  실제 분석은 시스템이 [REVIEW_REQUEST] 마커를 처리한 후 자동으로 수행합니다.
+- 역할이 아직 불명확하면 [CHOICES] 로 한 번만 물어보고, 역할이 확정되면 즉시 [REVIEW_REQUEST] 블록을 출력하세요.
+- 분석 결과처럼 보이는 문장("갑의 비율은 N%", "위험 조항 X건" 등)을 생성하면 시스템이 무효 처리합니다.
+"""
+
+_ANALYSIS_HALLUCINATION_SIGNALS = (
+    "갑의 비율", "을의 비율", "갑 비율", "을 비율",
+    "위험 조항", "불리한 조건", "손해 비율", "갑에게 불리", "을에게 불리",
+    "공정성 분석 결과", "분석 완료", "분석 결과에 따르면",
+)
+
+
+def _looks_like_hallucinated_analysis(reply: str) -> bool:
+    """LLM이 마커 없이 분석 결과를 직접 생성했는지 휴리스틱 감지."""
+    low = reply.lower()
+    hits = sum(1 for sig in _ANALYSIS_HALLUCINATION_SIGNALS if sig in low)
+    return hits >= 2
+
+
+def _infer_user_role_from_context(message: str, history: list[dict]) -> str:
+    """메시지·히스토리에서 갑/을 역할 키워드를 추출. 불명확하면 '미지정'."""
+    combined = message + " " + " ".join(h.get("content") or "" for h in history[-6:])
+    low = combined.lower()
+    if any(k in low for k in ("고용인", "발주자", "임대인", "사용자", "갑")):
+        return "갑"
+    if any(k in low for k in ("피고용인", "수주자", "임차인", "근로자", "을")):
+        return "을"
+    return "미지정"
+
+
+async def _review_node(state: DocState) -> DocState:
+    """업로드된 문서 공정성 분석 처리.
+
+    LLM이 [REVIEW_REQUEST] 마커를 출력하면 dispatch_review 실행.
+    마커 없이 분석을 hallucination 하면 역할 추론 후 강제 dispatch.
+    역할이 미확정이면 CHOICES 응답 반환.
+    """
+    account_id = state["account_id"]
+    uploaded_doc = state["uploaded_doc"]
+    # 분석 대기 중 — 이전 분석 결과를 context에 주입하지 않음
+    upload_ctx = _build_upload_context(uploaded_doc, account_id, include_analysis=False)
+
+    hubs = list_sub_hub_titles(account_id, "documents")
+    system = SYSTEM_PROMPT + _REVIEW_NODE_EXTRA + "\n\n" + today_context()
+    if upload_ctx:
+        system += "\n\n" + upload_ctx
+    if hubs:
+        system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
+    if state["long_term_context"]:
+        system += f"\n\n[사용자 장기 기억]\n{state['long_term_context']}"
+    if state["rag_context"]:
+        system += f"\n\n{state['rag_context']}"
+    fb = feedback_context(account_id, "documents")
+    if fb:
+        system += f"\n\n{fb}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *state["history"],
+            {"role": "user", "content": state["message"]},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+
     marker = _parse_review_marker(reply)
+
+    # LLM이 마커 없이 분석을 직접 생성한 경우 → 강제 dispatch
+    if not marker and _looks_like_hallucinated_analysis(reply):
+        log.warning(
+            "[documents/graph] hallucinated analysis detected (account=%s doc=%s) — force dispatch",
+            account_id, uploaded_doc.get("id") or "ephemeral",
+        )
+        user_role = _infer_user_role_from_context(state["message"], state["history"])
+        marker = {
+            "doc_id": uploaded_doc.get("id") or "ephemeral",
+            "user_role": user_role,
+            "doc_type": "계약서",
+            "contract_subtype": None,
+        }
+        reply = ""  # hallucinated text 버림
+
     if not marker:
-        return reply
+        # 역할 미확정 — CHOICES 응답 그대로 반환
+        return {**state, "reply": reply}
+
     doc_id = marker["doc_id"]
     user_role = marker.get("user_role") or "미지정"
     if user_role not in ("갑", "을", "미지정"):
@@ -287,31 +449,153 @@ async def _maybe_dispatch_review(account_id: str, reply: str) -> str:
     if doc_type not in ("계약서", "제안서", "기타"):
         doc_type = "계약서"
     subtype = marker.get("contract_subtype") or None
-    if subtype == "" or subtype == "없음":
+    if subtype in ("", "없음"):
         subtype = None
 
     cleaned = _strip_review_marker(reply)
+    # ephemeral (upload_payload) 경로 vs legacy DB artifact 경로 분기
+    dispatch_kwargs: dict = {
+        "account_id":        account_id,
+        "user_role":         user_role,
+        "doc_type":          doc_type,
+        "contract_subtype":  subtype,
+    }
+    if uploaded_doc.get("_ephemeral") or not uploaded_doc.get("id"):
+        dispatch_kwargs["ephemeral_doc"] = uploaded_doc
+    else:
+        dispatch_kwargs["doc_artifact_id"] = doc_id
     try:
-        result = await dispatch_review(
-            account_id=account_id,
-            doc_artifact_id=doc_id,
-            user_role=user_role,        # type: ignore[arg-type]
-            doc_type=doc_type,           # type: ignore[arg-type]
-            contract_subtype=subtype,
-        )
+        result = await dispatch_review(**dispatch_kwargs)
+        final = cleaned + _format_review_append(result)
     except InvalidDocumentError as e:
-        return cleaned + f"\n\n---\n_(분석 실패: {e} — 비즈니스 문서가 맞는지 확인해주세요.)_"
+        final = cleaned + f"\n\n---\n_(분석 실패: {e} — 비즈니스 문서가 맞는지 확인해주세요.)_"
     except ValueError as e:
-        return cleaned + f"\n\n---\n_(분석 실패: {e})_"
-    except Exception as e:
-        log.exception("review dispatch failed")
-        return cleaned + f"\n\n---\n_(분석 중 예기치 못한 오류: {str(e)[:150]})_"
-    return cleaned + _format_review_append(result)
+        final = cleaned + f"\n\n---\n_(분석 실패: {e})_"
+    except Exception:
+        log.exception("[documents/graph] review dispatch failed")
+        final = cleaned + "\n\n---\n_(분석 중 예기치 못한 오류가 발생했어요. 잠시 후 다시 시도해주세요.)_"
+
+    return {**state, "reply": final}
+
+
+async def _write_node(state: DocState) -> DocState:
+    """서류 작성 처리 — CLARIFY 루프 또는 ARTIFACT 생성."""
+    account_id = state["account_id"]
+    message = state["message"]
+
+    type_guess, subtype_guess = detect_doc_intent(message)
+    if not type_guess:
+        for h in reversed(state["history"][-6:]):
+            if h.get("role") == "user":
+                t2, s2 = detect_doc_intent(h.get("content") or "")
+                if t2:
+                    type_guess, subtype_guess = t2, s2
+                    break
+
+    doc_ctx = build_doc_context(type_guess, subtype_guess)
+    hubs = list_sub_hub_titles(account_id, "documents")
+    system = SYSTEM_PROMPT + "\n\n" + today_context() + "\n\n" + doc_ctx
+    if hubs:
+        system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
+    # 분석 결과 후속 질문 대응 — 이전 분석 context를 write 노드에서만 주입
+    prev_analysis_ctx = _build_upload_context(None, account_id, include_analysis=False)
+    analysis = _find_recent_analysis(account_id)
+    if analysis:
+        am = analysis.get("metadata") or {}
+        prev_analysis_ctx = "\n".join([
+            "[최근 분석 결과]",
+            f"analysis_id: {analysis['id']}",
+            f"user_role: {am.get('user_role','미지정')}  ·  contract_subtype: {am.get('contract_subtype') or '—'}",
+            f"gap_ratio: {am.get('gap_ratio','?')}%  ·  eul_ratio: {am.get('eul_ratio','?')}%",
+            f"risk_clauses_count: {len(am.get('risk_clauses') or [])}",
+            "--- summary ---",
+            (analysis.get("content") or "")[:500],
+        ])
+        system += "\n\n" + prev_analysis_ctx
+    if state["long_term_context"]:
+        system += f"\n\n[사용자 장기 기억]\n{state['long_term_context']}"
+    if state["rag_context"]:
+        system += f"\n\n{state['rag_context']}"
+    fb = feedback_context(account_id, "documents")
+    if fb:
+        system += f"\n\n{fb}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *state["history"],
+            {"role": "user", "content": message},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title="서류",
+        valid_types=VALID_TYPES,
+        extra_meta_keys=("due_label", "contract_subtype"),
+        subtype_whitelist={"contract_subtype": VALID_CONTRACT_SUBTYPES},
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return {**state, "reply": reply}
+
+
+def _route_intent(state: DocState) -> Literal["legal", "review", "write"]:
+    return state["intent"]
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Capability 인터페이스 (function-calling 라우팅용)
+# Build graph
 # ──────────────────────────────────────────────────────────────────────────
+
+def _build_graph():
+    g = StateGraph(DocState)
+    g.add_node("classify", _classify_node)
+    g.add_node("legal", _legal_node)
+    g.add_node("review", _review_node)
+    g.add_node("write", _write_node)
+    g.set_entry_point("classify")
+    g.add_conditional_edges("classify", _route_intent, {
+        "legal":  "legal",
+        "review": "review",
+        "write":  "write",
+    })
+    g.add_edge("legal", END)
+    g.add_edge("review", END)
+    g.add_edge("write", END)
+    return g.compile()
+
+
+_graph = _build_graph()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Public entrypoints
+# ──────────────────────────────────────────────────────────────────────────
+
+async def run(
+    message: str,
+    account_id: str,
+    history: list[dict],
+    rag_context: str = "",
+    long_term_context: str = "",
+) -> str:
+    initial: DocState = {
+        "message": message,
+        "account_id": account_id,
+        "history": history,
+        "rag_context": rag_context,
+        "long_term_context": long_term_context,
+        "intent": "write",
+        "uploaded_doc": None,
+        "reply": "",
+    }
+    result = await _graph.ainvoke(initial)
+    return result["reply"]
+
+
 async def run_contract(
     *,
     account_id: str,
@@ -451,7 +735,6 @@ async def run_review(
     user_role: str = "미지정",
     contract_subtype: str | None = None,
 ) -> str:
-    """업로드된 최근 문서의 공정성 분석."""
     if user_role not in ("갑", "을", "미지정"):
         user_role = "미지정"
     sub = f", contract_subtype={contract_subtype}" if contract_subtype else ""
@@ -473,18 +756,12 @@ async def run_legal_advice(
     question: str,
     topic: str | None = None,
 ) -> str:
-    """한국 법률·법령에 대한 질의 응답 (RAG 기반)."""
-    from app.agents._legal import classify_legal_intent, handle_legal_question
-
+    from app.agents._legal import LegalIntent
     intent = await classify_legal_intent(question, history)
     if not intent.is_legal and topic:
-        # tool args 로 명시적 호출된 경우 신뢰
-        from app.agents._legal import LegalIntent
         intent = LegalIntent(is_legal=True, topic=topic, reason="tool-invoked")
     if not intent.is_legal:
-        # 폴백: 일반 run() 에 질문을 넘김
         return await run(question, account_id, history, rag_context, long_term_context)
-
     return await handle_legal_question(
         question,
         account_id,
@@ -593,13 +870,24 @@ def describe(account_id: str) -> list[dict]:
         },
     ]
 
-    # 최근 60분 이내 업로드 문서가 있을 때만 review capability 노출
-    if _find_recent_uploaded_doc(account_id):
+    _recent_doc = _find_recent_uploaded_doc(account_id)
+    log.info(
+        "[documents/describe] account=%s doc_review_available=%s source=%s",
+        account_id,
+        bool(_recent_doc),
+        "ephemeral" if (_recent_doc or {}).get("_ephemeral") else ("db" if _recent_doc else "none"),
+    )
+    if _recent_doc:
+        _doc_title = (_recent_doc.get("title") or "").strip() or "최근 업로드 문서"
         caps.append({
             "name": "doc_review",
             "description": (
-                "최근 업로드한 계약서/제안서의 공정성(갑·을 비율·위험 조항)을 분석한다. "
-                "업로드 문서가 있을 때만 유효."
+                f"[즉시 호출 가능] 현재 업로드된 계약서 '{_doc_title}' 의 공정성"
+                "(갑·을 비율, 위험 조항)을 분석한다. 사용자가 '공정성 분석', '검토', "
+                "'계약서 봐줘' 등을 요청하면 바로 이 tool 을 호출하세요. "
+                "문서는 이미 서버가 파싱 완료한 상태이므로 '업로드 안 됐다'고 답하거나 "
+                "다시 업로드를 요청하면 안 됩니다. user_role 이 '갑/을/미지정' 중 불확실하면 "
+                "미지정으로 호출하세요."
             ),
             "handler": run_review,
             "parameters": {
@@ -612,88 +900,3 @@ def describe(account_id: str) -> list[dict]:
         })
 
     return caps
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# 메인 run (legacy fallback 겸 capability wrapper 타겟)
-# ──────────────────────────────────────────────────────────────────────────
-async def run(
-    message: str,
-    account_id: str,
-    history: list[dict],
-    rag_context: str = "",
-    long_term_context: str = "",
-) -> str:
-    # 0. Legal 분기 — 서류 작성/검토가 아닌 "일반 법률 자문" 질문은 _legal 로 위임.
-    #    조건: 휴리스틱상 현재 턴이 명시적 서류 작성(type_guess) 도 아니고,
-    #          최근 업로드 문서 컨텍스트도 없을 때만 classify_legal_intent 호출.
-    type_guess, subtype_guess = detect_doc_intent(message)
-    upload_ctx_early = _build_upload_context(account_id)
-    if not type_guess and not upload_ctx_early:
-        intent = await classify_legal_intent(message, history)
-        if intent.is_legal:
-            log.info(
-                "[documents] legal branch: account=%s topic=%s reason=%r",
-                account_id, intent.topic, intent.reason[:80],
-            )
-            return await handle_legal_question(
-                message,
-                account_id,
-                history,
-                rag_context=rag_context,
-                long_term_context=long_term_context,
-                intent=intent,
-            )
-
-    # 1. 휴리스틱 intent 감지 → 템플릿/법령 컨텍스트 주입
-    if not type_guess:
-        for h in reversed(history[-6:]):
-            if h.get("role") == "user":
-                t2, s2 = detect_doc_intent(h.get("content") or "")
-                if t2:
-                    type_guess, subtype_guess = t2, s2
-                    break
-
-    doc_ctx = build_doc_context(type_guess, subtype_guess)
-
-    system = SYSTEM_PROMPT + "\n\n" + today_context() + "\n\n" + doc_ctx
-
-    upload_ctx = upload_ctx_early
-    if upload_ctx:
-        system += "\n\n" + upload_ctx
-
-    hubs = list_sub_hub_titles(account_id, "documents")
-    if hubs:
-        system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
-    if long_term_context:
-        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-    if rag_context:
-        system += f"\n\n{rag_context}"
-    fb = feedback_context(account_id, "documents")
-    if fb:
-        system += f"\n\n{fb}"
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *history,
-            {"role": "user", "content": message},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-
-    # 2. REVIEW 마커가 있으면 분석 실행 + 결과 본문에 덧붙임
-    reply = await _maybe_dispatch_review(account_id, reply)
-
-    # 3. 일반 artifact 저장 (계약서 초안 등)
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title="서류",
-        valid_types=VALID_TYPES,
-        extra_meta_keys=("due_label", "contract_subtype"),
-        subtype_whitelist={"contract_subtype": VALID_CONTRACT_SUBTYPES},
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return reply

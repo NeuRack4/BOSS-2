@@ -22,13 +22,14 @@ import {
 import {
   ALL_DOMAINS,
   DOMAIN_LABEL,
-  type Domain,
-} from "@/components/canvas/FilterContext";
+  type DomainKey as Domain,
+} from "@/components/bento/types";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type RawRow = {
   id: string;
   title: string;
-  kind: "schedule" | "artifact";
+  kind: "artifact" | "domain" | "anchor" | "log";
   status: string;
   domains: Domain[] | null;
   metadata: {
@@ -37,6 +38,9 @@ type RawRow = {
     start_date?: string;
     end_date?: string;
     due_date?: string;
+    schedule_enabled?: boolean;
+    schedule_status?: "active" | "paused";
+    period_enabled?: boolean;
   } | null;
   created_at: string;
 };
@@ -123,7 +127,7 @@ const cronHuman = (expr?: string) => {
 };
 
 const classifyItem = (r: RawRow): ScheduleItem => {
-  if (r.kind === "schedule") {
+  if (r.metadata?.schedule_enabled) {
     return {
       ...r,
       itemKind: "cron",
@@ -158,8 +162,13 @@ const isTimeExpired = (i: ScheduleItem): boolean => {
   return !!e && e.getTime() < today.getTime();
 };
 
+const isPaused = (i: ScheduleItem): boolean => {
+  if (i.itemKind === "cron") return i.metadata?.schedule_status === "paused";
+  return i.status === "paused" || i.status === "archived";
+};
+
 const isEnded = (i: ScheduleItem): boolean => {
-  if (i.status === "paused" || i.status === "archived") return true;
+  if (isPaused(i)) return true;
   return isTimeExpired(i);
 };
 
@@ -198,8 +207,9 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
       const { data } = await supabase
         .from("artifacts")
         .select("id,title,kind,status,domains,metadata,created_at")
+        .eq("kind", "artifact")
         .or(
-          "kind.eq.schedule,metadata->>start_date.not.is.null,metadata->>end_date.not.is.null,metadata->>due_date.not.is.null",
+          "metadata->>schedule_enabled.eq.true,metadata->>start_date.not.is.null,metadata->>end_date.not.is.null,metadata->>due_date.not.is.null",
         )
         .order("created_at", { ascending: false });
       if (cancelled) return;
@@ -213,29 +223,59 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
   }, [open]);
 
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
+  const { openDetail } = useNodeDetail();
 
-  const handleToggleStatus = async (id: string, current: string) => {
-    if (pendingIds.has(id)) return;
-    const next = current === "paused" ? "active" : "paused";
-    setPendingIds((prev) => new Set(prev).add(id));
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: next } : r)),
-    );
+  const handleToggleStatus = async (item: ScheduleItem) => {
+    if (pendingIds.has(item.id)) return;
+    setPendingIds((prev) => new Set(prev).add(item.id));
+
+    const supabase = createClient();
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("artifacts")
-        .update({ status: next })
-        .eq("id", id);
-      if (error) {
+      if (item.itemKind === "cron") {
+        const current: "active" | "paused" =
+          item.metadata?.schedule_status ?? "active";
+        const next: "active" | "paused" =
+          current === "paused" ? "active" : "paused";
+        const nextMeta: RawRow["metadata"] = {
+          ...(item.metadata ?? {}),
+          schedule_status: next,
+        };
         setRows((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: current } : r)),
+          prev.map((r) =>
+            r.id === item.id ? { ...r, metadata: nextMeta } : r,
+          ),
         );
+        const { error } = await supabase
+          .from("artifacts")
+          .update({ metadata: nextMeta })
+          .eq("id", item.id);
+        if (error) {
+          setRows((prev) =>
+            prev.map((r) =>
+              r.id === item.id ? { ...r, metadata: item.metadata } : r,
+            ),
+          );
+        }
+      } else {
+        const current = item.status;
+        const next = current === "paused" ? "active" : "paused";
+        setRows((prev) =>
+          prev.map((r) => (r.id === item.id ? { ...r, status: next } : r)),
+        );
+        const { error } = await supabase
+          .from("artifacts")
+          .update({ status: next })
+          .eq("id", item.id);
+        if (error) {
+          setRows((prev) =>
+            prev.map((r) => (r.id === item.id ? { ...r, status: current } : r)),
+          );
+        }
       }
     } finally {
       setPendingIds((prev) => {
         const n = new Set(prev);
-        n.delete(id);
+        n.delete(item.id);
         return n;
       });
     }
@@ -394,24 +434,14 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
             items={sorted}
             pendingIds={pendingIds}
             onToggle={handleToggleStatus}
-            onNavigate={(id) => {
-              onClose();
-              window.dispatchEvent(
-                new CustomEvent("boss:focus-node", { detail: { id } }),
-              );
-            }}
+            onNavigate={(id) => openDetail(id)}
           />
         ) : (
           <CalendarView
             items={domainFiltered}
             cursor={cursor}
             setCursor={setCursor}
-            onNavigate={(id) => {
-              onClose();
-              window.dispatchEvent(
-                new CustomEvent("boss:focus-node", { detail: { id } }),
-              );
-            }}
+            onNavigate={(id) => openDetail(id)}
           />
         )}
       </div>
@@ -451,7 +481,7 @@ const ListView = ({
 }: {
   items: ScheduleItem[];
   pendingIds: Set<string>;
-  onToggle: (id: string, current: string) => void;
+  onToggle: (item: ScheduleItem) => void;
   onNavigate: (id: string) => void;
 }) => {
   if (items.length === 0) {
@@ -507,7 +537,7 @@ const ListView = ({
               <StatusToggle
                 item={i}
                 pending={pendingIds.has(i.id)}
-                onClick={() => onToggle(i.id, i.status)}
+                onClick={() => onToggle(i)}
               />
             </li>
           );
@@ -526,7 +556,7 @@ const StatusToggle = ({
   pending: boolean;
   onClick: () => void;
 }) => {
-  const paused = item.status === "paused";
+  const paused = isPaused(item);
   const expired = !paused && isTimeExpired(item);
 
   const label = paused ? "Paused" : expired ? "Ended" : "Active";

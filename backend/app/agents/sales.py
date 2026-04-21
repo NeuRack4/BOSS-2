@@ -647,9 +647,133 @@ async def run_cost_entry(
         )
 
 
+async def run_parse_receipt(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """pending_receipt (업로드된 영수증) → OCR → SalesInputTable / CostInputTable 오픈 마커.
+
+    contextvar `pending_receipt` 가 있을 때만 호출됨 (`describe` 가 advertise 함).
+    OCR 결과의 type 이 'cost' 면 CostInputTable, 아니면 SalesInputTable 을 연다.
+    """
+    from app.agents._sales_context import get_pending_receipt
+    from app.agents._sales._ocr import parse_receipt_from_storage
+
+    pending = get_pending_receipt()
+    if not pending or not pending.get("storage_path"):
+        return "영수증 이미지가 아직 도착하지 않았어요. 다시 업로드해 주시겠어요?"
+
+    parsed = await parse_receipt_from_storage(
+        storage_path=pending["storage_path"],
+        bucket=pending.get("bucket") or "documents-uploads",
+        mime_type=pending.get("mime_type") or "image/jpeg",
+    )
+    items = parsed.get("items") or []
+    kind = parsed.get("type") or "sales"
+    today = date.today().isoformat()
+
+    if not items:
+        return "영수증에서 항목을 인식하지 못했어요. 더 선명한 사진으로 다시 올려주시겠어요?"
+
+    summary_lines = [f"영수증에서 **{len(items)}건** 을 인식했어요. 확인 후 저장하세요.\n"]
+    if kind == "cost":
+        action_payload = {"date": today, "items": items}
+        action = f"[ACTION:OPEN_COST_TABLE:{json.dumps(action_payload, ensure_ascii=False)}]"
+    else:
+        action_payload = {"date": today, "items": items}
+        action = f"[ACTION:OPEN_SALES_TABLE:{json.dumps(action_payload, ensure_ascii=False)}]"
+    summary_lines.append(action)
+    return "\n".join(summary_lines)
+
+
+async def run_save_revenue(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """SalesInputTable 의 Save 버튼이 chat 으로 보낸 `pending_save` 를 실제 저장.
+
+    contextvar `pending_save.kind == 'revenue'` 일 때 describe() 가 노출.
+    """
+    from app.agents._sales_context import get_pending_save
+    from app.agents._sales._revenue import dispatch_save_revenue
+
+    pending = get_pending_save() or {}
+    items = pending.get("items") or []
+    recorded_date = pending.get("recorded_date") or date.today().isoformat()
+    source = pending.get("source") or "chat"
+
+    if not items:
+        return "저장할 항목이 없어요."
+
+    try:
+        result = await dispatch_save_revenue(
+            account_id=account_id,
+            items=items,
+            recorded_date=recorded_date,
+            source=source,
+        )
+    except Exception as e:
+        log.exception("run_save_revenue failed")
+        return f"저장 중 오류가 발생했어요: {str(e)[:160]}"
+
+    if result.get("duplicate"):
+        return "방금 같은 내용이 이미 저장돼 있어서 중복은 건너뛰었어요."
+    saved = result.get("saved", 0)
+    total = result.get("total_amount", 0)
+    return f"매출 **{saved}건** 저장됐어요. 총 **{total:,}원**."
+
+
+async def run_save_costs(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """CostInputTable 의 Save 버튼 경로. pending_save.kind == 'cost'."""
+    from app.agents._sales_context import get_pending_save
+    from app.agents._sales._costs import dispatch_save_costs
+
+    pending = get_pending_save() or {}
+    items = pending.get("items") or []
+    recorded_date = pending.get("recorded_date") or date.today().isoformat()
+    source = pending.get("source") or "chat"
+
+    if not items:
+        return "저장할 항목이 없어요."
+
+    try:
+        result = await dispatch_save_costs(
+            account_id=account_id,
+            items=items,
+            recorded_date=recorded_date,
+            source=source,
+        )
+    except Exception as e:
+        log.exception("run_save_costs failed")
+        return f"저장 중 오류가 발생했어요: {str(e)[:160]}"
+
+    if result.get("duplicate"):
+        return "방금 같은 내용이 이미 저장돼 있어서 중복은 건너뛰었어요."
+    saved = result.get("saved", 0)
+    total = result.get("total_amount", 0)
+    return f"비용 **{saved}건** 저장됐어요. 총 **{total:,}원**."
+
+
 def describe(account_id: str) -> list[dict]:
-    """Sales 도메인 capability 매니페스트 (7종)."""
-    return [
+    """Sales 도메인 capability 매니페스트."""
+    from app.agents._sales_context import get_pending_receipt, get_pending_save
+
+    caps: list[dict] = [
         {
             "name": "sales_cost_entry",
             "description": (
@@ -752,6 +876,50 @@ def describe(account_id: str) -> list[dict]:
             },
         },
     ]
+
+    # 조건부 capability — 요청 범위 contextvar 에 따라 advertise.
+
+    # 영수증 파싱 (업로드된 이미지가 이번 턴에 있을 때만)
+    pending_receipt = get_pending_receipt()
+    if pending_receipt:
+        fname = pending_receipt.get("original_name") or "업로드 영수증"
+        caps.append({
+            "name": "sales_parse_receipt",
+            "description": (
+                f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
+                "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
+                "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
+                "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
+            ),
+            "handler": run_parse_receipt,
+            "parameters": {"type": "object", "properties": {}},
+        })
+
+    # 사용자 확정 항목 저장 (SalesInputTable/CostInputTable Save 버튼)
+    pending_save = get_pending_save() or {}
+    save_kind = pending_save.get("kind")
+    if save_kind == "revenue" and pending_save.get("items"):
+        caps.append({
+            "name": "sales_save_revenue",
+            "description": (
+                "[즉시 호출 가능] 사용자가 SalesInputTable 에서 확정한 매출 항목을 "
+                "sales_records + revenue_entry artifact 로 저장한다. 추가 질문 없이 즉시 호출."
+            ),
+            "handler": run_save_revenue,
+            "parameters": {"type": "object", "properties": {}},
+        })
+    if save_kind == "cost" and pending_save.get("items"):
+        caps.append({
+            "name": "sales_save_costs",
+            "description": (
+                "[즉시 호출 가능] 사용자가 CostInputTable 에서 확정한 비용 항목을 "
+                "cost_records + cost_report artifact 로 저장한다. 추가 질문 없이 즉시 호출."
+            ),
+            "handler": run_save_costs,
+            "parameters": {"type": "object", "properties": {}},
+        })
+
+    return caps
 
 
 def _last_message_was_cost_prompt(history: list[dict]) -> bool:

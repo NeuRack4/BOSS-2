@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { DOMAIN_META, type DomainKey, type DomainStats } from "./types";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export const DomainCard = ({ domain, stats }: Props) => {
   const meta = DOMAIN_META[domain];
+  const { openDetail } = useNodeDetail();
 
   const textClass = meta.isDark ? "text-white" : "text-[#030303]";
   const glowBg = meta.isDark ? "bg-white/10" : "bg-black/10";
@@ -81,14 +83,23 @@ export const DomainCard = ({ domain, stats }: Props) => {
           </li>
         ) : (
           stats.recent_titles.slice(0, 4).map((t) => (
-            <li
-              key={t.id}
-              className={cn(
-                "truncate rounded-[5px] px-2.5 py-1.5",
-                meta.isDark ? "bg-white/10" : "bg-black/[0.06]",
-              )}
-            >
-              {t.title}
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openDetail(t.id);
+                }}
+                className={cn(
+                  "w-full truncate rounded-[5px] px-2.5 py-1.5 text-left transition-colors",
+                  meta.isDark
+                    ? "bg-white/10 hover:bg-white/20"
+                    : "bg-black/[0.06] hover:bg-black/[0.12]",
+                )}
+              >
+                {t.title}
+              </button>
             </li>
           ))
         )}

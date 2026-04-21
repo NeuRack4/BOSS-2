@@ -32,14 +32,35 @@ async def dashboard_summary(account_id: str = Query(...)):
     domains_stats: dict[str, dict] = {}
     for d in DOMAINS:
         in_domain = [a for a in arts if d in (a.get("domains") or [])]
-        active = [a for a in in_domain if a.get("status") == "active"]
-        recent = [a for a in in_domain if (a.get("created_at") or "") >= seven_days_ago]
+
+        # Active — schedule 이 켜진 아이템만. artifact.status 가 아니라
+        # metadata.schedule_enabled 기준 (schedule_status 가 paused 면 제외).
+        active = []
+        for a in in_domain:
+            md = a.get("metadata") or {}
+            if not md.get("schedule_enabled"):
+                continue
+            if (md.get("schedule_status") or "active") == "active":
+                active.append(a)
+
+        # Due — 기간 필드(start_date / end_date / due_date) 가 하나라도 있으면서
+        # 아직 지나지 않은 (미래 포함) 아이템.
         upcoming = []
         for a in in_domain:
             md = a.get("metadata") or {}
-            due = md.get("due_date") or md.get("end_date")
-            if due and today <= str(due) <= today_plus_7:
+            due_like = md.get("due_date") or md.get("end_date") or md.get("start_date")
+            if not due_like:
+                continue
+            if str(due_like) >= today:
                 upcoming.append(a)
+
+        # Recent — 최근 7일 이내 생성된 일반 artifact.
+        recent = [
+            a for a in in_domain
+            if a.get("kind") == "artifact"
+            and a.get("type") != "archive"
+            and (a.get("created_at") or "") >= seven_days_ago
+        ]
         recent_titles = [
             {"id": a["id"], "title": a.get("title") or "(제목 없음)"}
             for a in in_domain

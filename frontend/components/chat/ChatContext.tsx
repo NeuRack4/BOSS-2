@@ -19,6 +19,13 @@ export type ChatSession = {
 
 type ChatSendFn = (text: string) => void;
 
+export type SpeakerKey =
+  | "orchestrator"
+  | "recruitment"
+  | "marketing"
+  | "sales"
+  | "documents";
+
 type ChatContextValue = {
   registerSender: (fn: ChatSendFn) => () => void;
   send: (text: string) => void;
@@ -34,6 +41,8 @@ type ChatContextValue = {
   pendingBriefing: string | null;
   openChatWithBriefing: (content: string) => void;
   consumeBriefing: () => void;
+  lastSpeaker: SpeakerKey[] | null;
+  setLastSpeaker: (next: SpeakerKey[] | null) => void;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -48,6 +57,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     string | null
   >(null);
   const [pendingBriefing, setPendingBriefing] = useState<string | null>(null);
+  const [lastSpeaker, setLastSpeakerState] = useState<SpeakerKey[] | null>(
+    null,
+  );
+
+  const setLastSpeaker = useCallback((next: SpeakerKey[] | null) => {
+    setLastSpeakerState(next && next.length ? next : null);
+  }, []);
 
   const registerSender = useCallback((fn: ChatSendFn) => {
     senderRef.current = fn;
@@ -94,6 +110,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       pendingBriefing,
       openChatWithBriefing,
       consumeBriefing,
+      lastSpeaker,
+      setLastSpeaker,
     }),
     [
       registerSender,
@@ -108,6 +126,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       pendingBriefing,
       openChatWithBriefing,
       consumeBriefing,
+      lastSpeaker,
+      setLastSpeaker,
     ],
   );
 

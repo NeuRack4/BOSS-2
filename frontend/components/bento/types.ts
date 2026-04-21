@@ -1,5 +1,19 @@
 export type DomainKey = "recruitment" | "marketing" | "sales" | "documents";
 
+export const ALL_DOMAINS: DomainKey[] = [
+  "recruitment",
+  "marketing",
+  "sales",
+  "documents",
+];
+
+export const DOMAIN_LABEL: Record<DomainKey, string> = {
+  recruitment: "Recruitment",
+  marketing: "Marketing",
+  sales: "Sales",
+  documents: "Documents",
+};
+
 export type DomainStats = {
   active_count: number;
   upcoming_count: number;

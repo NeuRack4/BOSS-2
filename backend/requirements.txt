@@ -9,6 +9,9 @@ supabase>=2.11.0
 # OpenAI
 openai==1.57.2
 
+# Anthropic (optional — planner 만 claude 로 스위치 가능)
+anthropic>=0.40.0
+
 # Embedding (BAAI/bge-m3)
 sentence-transformers>=3.0.0
 
@@ -19,6 +22,9 @@ upstash-redis==1.1.0
 celery==5.4.0
 redis==5.2.1
 croniter==3.0.3
+
+# LangGraph (agent graph)
+langgraph>=0.2
 
 # Utilities
 python-dotenv==1.0.1

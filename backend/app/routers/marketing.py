@@ -448,9 +448,114 @@ async def generate_shorts(
         os.unlink(tmp_path)
     except Exception as e:
         log.exception("youtube upload failed")
+        _persist_shorts_artifact(
+            account_id=account_id,
+            title=title,
+            description=description,
+            tags=tag_list,
+            subtitles=subtitle_list[:n],
+            youtube_url="",
+            storage_url=storage_url,
+            duration_per_slide=duration_per_slide,
+            privacy_status=privacy_status,
+            slide_count=n,
+        )
         return ShortsGenerateResponse(success=True, storage_url=storage_url, error=f"YouTube 업로드 실패: {str(e)[:200]}")
 
+    _persist_shorts_artifact(
+        account_id=account_id,
+        title=title,
+        description=description,
+        tags=tag_list,
+        subtitles=subtitle_list[:n],
+        youtube_url=youtube_url,
+        storage_url=storage_url,
+        duration_per_slide=duration_per_slide,
+        privacy_status=privacy_status,
+        slide_count=n,
+    )
+
     return ShortsGenerateResponse(success=True, youtube_url=youtube_url, storage_url=storage_url)
+
+
+def _persist_shorts_artifact(
+    *,
+    account_id: str,
+    title: str,
+    description: str,
+    tags: list[str],
+    subtitles: list[str],
+    youtube_url: str,
+    storage_url: str,
+    duration_per_slide: float,
+    privacy_status: str,
+    slide_count: int,
+) -> None:
+    """Shorts 생성 결과를 kind='artifact' type='shorts_video' 로 저장.
+
+    metadata 에 youtube_url·storage_url·subtitles·tags 전부 담아 상세 모달에서 바로 재생/링크.
+    Marketing > Social 서브허브 아래 contains 엣지로 연결.
+    """
+    from app.agents._artifact import pick_sub_hub_id
+
+    try:
+        sb = get_supabase()
+        content = (description or "").strip()
+        if subtitles:
+            lines = [f"{i + 1}. {s}" for i, s in enumerate(subtitles) if s.strip()]
+            if lines:
+                content = (content + "\n\n") if content else ""
+                content += "**자막**\n" + "\n".join(lines)
+        metadata = {
+            "youtube_url": youtube_url,
+            "storage_url": storage_url,
+            "tags": tags,
+            "subtitles": subtitles,
+            "duration_per_slide": duration_per_slide,
+            "privacy_status": privacy_status,
+            "slide_count": slide_count,
+        }
+        payload = {
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "shorts_video",
+            "title": title[:180] or "YouTube Shorts",
+            "content": content,
+            "status": "active" if youtube_url else "draft",
+            "metadata": metadata,
+        }
+        res = sb.table("artifacts").insert(payload).execute()
+        if not res.data:
+            return
+        artifact_id = res.data[0]["id"]
+        hub_id = pick_sub_hub_id(
+            sb, account_id, "marketing",
+            prefer_keywords=("Social", "social", "shorts", "video"),
+        )
+        if hub_id:
+            try:
+                sb.table("artifact_edges").insert({
+                    "account_id": account_id,
+                    "parent_id":  hub_id,
+                    "child_id":   artifact_id,
+                    "relation":   "contains",
+                }).execute()
+            except Exception:
+                pass
+        try:
+            sb.table("activity_logs").insert({
+                "account_id":  account_id,
+                "type":        "artifact_created",
+                "domain":      "marketing",
+                "title":       title[:180] or "YouTube Shorts",
+                "description": "YouTube Shorts 생성됨",
+                "metadata":    {"artifact_id": artifact_id},
+            }).execute()
+        except Exception:
+            pass
+    except Exception:
+        log.exception("shorts artifact insert failed")
 
 
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────

@@ -6,6 +6,12 @@ class ChatRequest(BaseModel):
     message: str
     account_id: str
     session_id: str | None = None
+    # 문서 업로드 (documents 리뷰용) — contextvar 로 전달.
+    upload_payload: dict[str, Any] | None = None
+    # 영수증 이미지 업로드 (sales OCR 용) — storage_path/bucket/mime_type 등.
+    receipt_payload: dict[str, Any] | None = None
+    # SalesInputTable / CostInputTable 의 Save 버튼 — 사용자 확정 items.
+    save_payload: dict[str, Any] | None = None
 
 
 class ChatResponse(BaseModel):
@@ -127,6 +133,41 @@ class ReviewRequest(BaseModel):
 
 
 class ReviewResponse(BaseModel):
+    data: dict[str, Any]
+    error: str | None = None
+    meta: dict[str, Any] = {}
+
+
+class ArtifactDetailResponse(BaseModel):
+    data: dict[str, Any]
+    error: str | None = None
+    meta: dict[str, Any] = {}
+
+
+class ArtifactPatchRequest(BaseModel):
+    account_id: str
+    # content
+    content: str | None = None
+    # period
+    period_enabled: bool | None = None
+    start_date: str | None = None   # YYYY-MM-DD
+    end_date: str | None = None
+    due_date: str | None = None
+    due_label: str | None = None
+    # schedule
+    schedule_enabled: bool | None = None
+    cron: str | None = None
+    schedule_status: str | None = None  # 'active' | 'paused'
+
+
+class MemoryBoostRequest(BaseModel):
+    account_id: str
+    artifact_id: str
+    importance: float   # 0.2 / 0.4 / 0.6 / 0.8 / 1.0 (1~5 stars mapped)
+    note: str | None = None
+
+
+class MemoryBoostResponse(BaseModel):
     data: dict[str, Any]
     error: str | None = None
     meta: dict[str, Any] = {}
