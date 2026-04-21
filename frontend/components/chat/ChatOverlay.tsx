@@ -35,6 +35,11 @@ import {
   type InstagramPayload,
 } from "./InstagramPostCard";
 import {
+  ShortsWizardCard,
+  extractShortsWizardPayload,
+  type ShortsWizardPayload,
+} from "./ShortsWizardCard";
+import {
   ReviewReplyCard,
   extractReviewReplyPayload,
   type ReviewReplyPayload,
@@ -65,6 +70,7 @@ type Message = {
   choices?: string[];
   review?: ReviewPayload;
   instagram?: InstagramPayload;
+  shortsWizard?: ShortsWizardPayload;
   reviewReply?: ReviewReplyPayload;
   attachment?: {
     status: "uploading" | "done" | "error";
@@ -1151,6 +1157,11 @@ export const ChatOverlay = () => {
                     if (igExtracted.payload)
                       instagramPayload = igExtracted.payload;
 
+                    const swExtracted = extractShortsWizardPayload(displayText || "");
+                    displayText = swExtracted.cleaned;
+                    if (swExtracted.payload)
+                      (msg as Message & { shortsWizard?: ShortsWizardPayload }).shortsWizard = swExtracted.payload;
+
                     const rvExtracted = extractReviewPayload(displayText || "");
                     displayText = rvExtracted.cleaned;
                     if (rvExtracted.payload)
@@ -1226,6 +1237,11 @@ export const ChatOverlay = () => {
                       {instagramPayload && msg.role === "assistant" && (
                         <div className="ml-8">
                           <InstagramPostCard payload={instagramPayload} />
+                        </div>
+                      )}
+                      {(msg as Message & { shortsWizard?: ShortsWizardPayload }).shortsWizard && msg.role === "assistant" && (
+                        <div className="ml-8">
+                          <ShortsWizardCard payload={(msg as Message & { shortsWizard: ShortsWizardPayload }).shortsWizard} />
                         </div>
                       )}
                       {reviewReplyPayload && msg.role === "assistant" && (

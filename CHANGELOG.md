@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature-marketing (사진 라이브러리 + YouTube Shorts 제작)
+
+### Added
+
+**`supabase/migrations/022_business_photos.sql`**
+- `business_photos` 테이블 — `account_id, storage_path, public_url, name, size_bytes`. RLS `auth.uid()` 기반.
+- Supabase Storage `business-photos` 버킷 (public, 10MB 제한).
+
+**`supabase/migrations/023_youtube_oauth_tokens.sql`**
+- `youtube_oauth_tokens` 테이블 — `account_id, access_token, refresh_token, token_expiry, scope`. 계정당 1행 `UNIQUE(account_id)`. RLS + `set_updated_at` 트리거.
+- Supabase Storage `youtube-shorts` 버킷 (public, 500MB 제한).
+
+**`backend/app/services/youtube.py`** (신규)
+- Google OAuth 2.0 인가 URL 생성 / 코드 → 토큰 교환 / 만료 5분 전 자동 갱신 / YouTube Data API v3 멀티파트 업로드.
+
+**`backend/app/services/shorts_gen.py`** (신규)
+- GPT-4o Vision으로 이미지당 자막 1줄 병렬 생성 (`asyncio.gather`).
+- FFmpeg subprocess로 이미지 슬라이드 → 9:16 MP4 합성 (xfade 전환 + drawtext 자막 오버레이 + Malgun Gothic 한글 폰트).
+- 완성 영상을 Supabase Storage `youtube-shorts` 버킷에 업로드 후 공개 URL 반환.
+
+**`backend/app/routers/marketing.py`** — 엔드포인트 추가
+- `GET  /api/marketing/photos` — 사진 라이브러리 목록.
+- `POST /api/marketing/photos/upload` — 사진 업로드.
+- `DELETE /api/marketing/photos/{id}` — 사진 삭제.
+- `GET  /api/marketing/youtube/oauth/start` — YouTube OAuth 인가 URL 반환.
+- `GET  /api/marketing/youtube/oauth/callback` — OAuth 콜백 (팝업 → postMessage).
+- `GET  /api/marketing/youtube/oauth/status` — 연결 상태 조회.
+- `DELETE /api/marketing/youtube/oauth/disconnect` — 연결 해제.
+- `POST /api/marketing/youtube/shorts/preview-subtitles` — AI 자막 미리보기 (FFmpeg 없이).
+- `POST /api/marketing/youtube/shorts/generate` — 영상 생성 + YouTube Shorts 업로드.
+
+**`backend/app/core/config.py`**
+- `youtube_client_id`, `youtube_client_secret`, `youtube_redirect_uri` 환경변수 추가.
+
+**`backend/app/agents/marketing.py`**
+- `VALID_TYPES`에 `shorts_video` 추가.
+- `run_shorts_wizard` capability handler — `[[SHORTS_WIZARD]]` 마커 반환.
+- `describe()`에 `mkt_shorts_video` capability 등록.
+
+**`frontend/components/chat/PhotoLibraryModal.tsx`** (신규)
+- 사진 라이브러리 모달 — 2열 그리드, AI 생성 이미지 + 업로드 사진 통합 표시.
+- 선택 시 파란색 ring + 체크 뱃지, "+" 버튼으로 추가 업로드, 삭제 기능.
+
+**`frontend/components/chat/ShortsWizardCard.tsx`** (신규)
+- 4단계 마법사 UI: ① 사진 업로드 → ② 자막 편집 → ③ 영상 설정 → ④ YouTube 게시.
+- YouTube OAuth 팝업 연결 (`window.open` + `postMessage`), 공개 범위·슬라이드 시간 설정.
+
+### Changed
+
+**`frontend/components/chat/InstagramPostCard.tsx`**
+- "인스타그램에 게시" 버튼 클릭 시 `PhotoLibraryModal` 오픈 → AI 이미지 또는 라이브러리 사진 선택 후 게시.
+- 문장 종결 부호·이모지 뒤 자동 줄바꿈 처리 (`_extract_sns_content` 정규식 개선).
+
+**`frontend/components/chat/ChatOverlay.tsx`**
+- `[[SHORTS_WIZARD]]` 마커 파싱 + `ShortsWizardCard` 렌더 연결.
+
+---
+
 ## [Unreleased] — feature/sales-analytics (비용 입력 + 매출 UX 개선)
 
 ### Added

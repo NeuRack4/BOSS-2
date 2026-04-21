@@ -12,7 +12,12 @@ import base64
 import json
 import logging
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+import uuid as _uuid
+
+from typing import List
+
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.core.llm import client as openai_client
@@ -247,6 +252,205 @@ async def publish_instagram(req: InstagramPublishRequest):
     except Exception as e:
         log.exception("instagram publish failed")
         return InstagramPublishResponse(success=False, error=str(e)[:300])
+
+
+# ── 사진 라이브러리 ───────────────────────────────────────────────────────────
+
+@router.post("/photos/upload")
+async def upload_business_photo(
+    account_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """사업자 사진 라이브러리에 사진 업로드."""
+    sb = get_supabase()
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    path = f"{account_id}/{_uuid.uuid4().hex}.{ext}"
+    content = await file.read()
+
+    sb.storage.from_("business-photos").upload(
+        path=path,
+        file=content,
+        file_options={"content-type": file.content_type or "image/jpeg", "upsert": "true"},
+    )
+    public_url = sb.storage.from_("business-photos").get_public_url(path)
+
+    res = sb.table("business_photos").insert({
+        "account_id": account_id,
+        "storage_path": path,
+        "public_url": public_url,
+        "name": file.filename or path.split("/")[-1],
+        "size_bytes": len(content),
+    }).execute()
+
+    row = res.data[0]
+    return {"data": row, "error": None}
+
+
+@router.get("/photos")
+async def list_business_photos(account_id: str = Query(...)):
+    """계정의 사진 라이브러리 목록 조회."""
+    sb = get_supabase()
+    res = (
+        sb.table("business_photos")
+        .select("*")
+        .eq("account_id", account_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return {"data": res.data, "error": None}
+
+
+@router.delete("/photos/{photo_id}")
+async def delete_business_photo(photo_id: str, account_id: str = Query(...)):
+    """사진 라이브러리에서 사진 삭제."""
+    sb = get_supabase()
+    res = (
+        sb.table("business_photos")
+        .select("storage_path")
+        .eq("id", photo_id)
+        .eq("account_id", account_id)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="사진을 찾을 수 없습니다.")
+
+    sb.storage.from_("business-photos").remove([res.data[0]["storage_path"]])
+    sb.table("business_photos").delete().eq("id", photo_id).execute()
+    return {"data": {"deleted": True}, "error": None}
+
+
+# ── YouTube OAuth + Shorts ────────────────────────────────────────────────────
+
+@router.get("/youtube/oauth/start")
+async def youtube_oauth_start(account_id: str = Query(...)):
+    """YouTube OAuth 2.0 인가 URL 반환."""
+    from app.services.youtube import get_oauth_url
+    from app.core.config import settings
+    if not settings.youtube_client_id:
+        raise HTTPException(status_code=503, detail="YOUTUBE_CLIENT_ID 환경변수가 설정되지 않았습니다.")
+    return {"url": get_oauth_url(account_id)}
+
+
+@router.get("/youtube/oauth/callback", response_class=HTMLResponse)
+async def youtube_oauth_callback(code: str = Query(...), state: str = Query(...)):
+    """Google OAuth 콜백 — 토큰 저장 후 팝업 닫기."""
+    from app.services.youtube import exchange_code_for_tokens
+    try:
+        await exchange_code_for_tokens(code, account_id=state)
+        html = """<html><body><script>
+            window.opener && window.opener.postMessage({type:'youtube_connected',success:true},'*');
+            window.close();
+        </script><p>YouTube 연결 완료! 이 창을 닫아주세요.</p></body></html>"""
+    except Exception as e:
+        log.exception("youtube oauth callback failed")
+        html = f"""<html><body><script>
+            window.opener && window.opener.postMessage({{type:'youtube_connected',success:false,error:'{str(e)[:100]}'}},'*');
+            window.close();
+        </script><p>오류: {str(e)[:200]}</p></body></html>"""
+    return HTMLResponse(html)
+
+
+@router.get("/youtube/oauth/status")
+async def youtube_oauth_status(account_id: str = Query(...)):
+    """YouTube 연결 상태 조회."""
+    from app.services.youtube import get_connection_status
+    return await get_connection_status(account_id)
+
+
+@router.delete("/youtube/oauth/disconnect")
+async def youtube_oauth_disconnect(account_id: str = Query(...)):
+    """YouTube 연결 해제."""
+    sb = get_supabase()
+    sb.table("youtube_oauth_tokens").delete().eq("account_id", account_id).execute()
+    return {"data": {"disconnected": True}, "error": None}
+
+
+@router.post("/youtube/shorts/preview-subtitles")
+async def preview_subtitles(
+    account_id: str = Form(...),
+    context: str = Form(""),
+    images: List[UploadFile] = File(...),
+):
+    """이미지들에 대한 AI 자막 미리보기 (FFmpeg 없이 빠른 응답)."""
+    from app.services.shorts_gen import generate_subtitles_for_images
+    if not (2 <= len(images) <= 10):
+        raise HTTPException(status_code=400, detail="이미지는 2~10장이어야 합니다.")
+    image_bytes_list = [await img.read() for img in images]
+    subtitles = await generate_subtitles_for_images(image_bytes_list, context)
+    return {"data": {"subtitles": subtitles}, "error": None}
+
+
+class ShortsGenerateResponse(BaseModel):
+    success: bool
+    youtube_url: str = ""
+    storage_url: str = ""
+    error: str = ""
+
+
+@router.post("/youtube/shorts/generate", response_model=ShortsGenerateResponse)
+async def generate_shorts(
+    account_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    tags: str = Form("[]"),
+    subtitles: str = Form("[]"),          # JSON list — 사용자가 편집한 자막
+    duration_per_slide: float = Form(3.0),
+    privacy_status: str = Form("private"),
+    images: List[UploadFile] = File(...),
+):
+    """이미지 슬라이드 → MP4 → YouTube Shorts 업로드."""
+    from app.services.shorts_gen import build_shorts_video
+    from app.services.youtube import upload_to_youtube
+
+    if not (2 <= len(images) <= 10):
+        raise HTTPException(status_code=400, detail="이미지는 2~10장이어야 합니다.")
+
+    try:
+        tag_list: list[str] = json.loads(tags)
+    except Exception:
+        tag_list = []
+
+    try:
+        subtitle_list: list[str] = json.loads(subtitles)
+    except Exception:
+        subtitle_list = []
+
+    # 자막 수가 이미지 수와 맞지 않으면 빈 문자열로 패딩
+    image_bytes_list = [await img.read() for img in images]
+    n = len(image_bytes_list)
+    while len(subtitle_list) < n:
+        subtitle_list.append("")
+
+    try:
+        storage_url, _storage_path, video_bytes = await build_shorts_video(
+            account_id=account_id,
+            image_bytes_list=image_bytes_list,
+            subtitles=subtitle_list[:n],
+            duration_per_slide=max(2.0, min(5.0, duration_per_slide)),
+        )
+    except Exception as e:
+        log.exception("shorts video generation failed")
+        return ShortsGenerateResponse(success=False, error=str(e)[:300])
+
+    try:
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+        youtube_url = await upload_to_youtube(
+            account_id=account_id,
+            video_path=tmp_path,
+            title=title,
+            description=description,
+            tags=tag_list,
+            privacy_status=privacy_status,
+        )
+        os.unlink(tmp_path)
+    except Exception as e:
+        log.exception("youtube upload failed")
+        return ShortsGenerateResponse(success=True, storage_url=storage_url, error=f"YouTube 업로드 실패: {str(e)[:200]}")
+
+    return ShortsGenerateResponse(success=True, youtube_url=youtube_url, storage_url=storage_url)
 
 
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────
