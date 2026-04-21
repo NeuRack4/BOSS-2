@@ -17,6 +17,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { createClient } from "@/lib/supabase/client";
+import { PhotoLibraryModal } from "./PhotoLibraryModal";
 
 export type InstagramPayload = {
   title: string;
@@ -73,10 +74,12 @@ export const InstagramPostCard = ({
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishUrl, setPublishUrl] = useState("");
   const [publishError, setPublishError] = useState("");
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
-  const handlePublish = async () => {
+  const handlePublishWithImage = async (imageUrl: string) => {
+    setShowLibrary(false);
     if (publishState === "uploading") return;
     setPublishState("uploading");
     setPublishError("");
@@ -91,7 +94,7 @@ export const InstagramPostCard = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account_id: accountId,
-          image_url: payload.image_url,
+          image_url: imageUrl,
           caption: payload.caption,
           hashtags: payload.hashtags,
         }),
@@ -113,6 +116,14 @@ export const InstagramPostCard = ({
     captionExpanded || !isLongCaption ? caption : caption.slice(0, 90) + "…";
 
   return (
+    <>
+    {showLibrary && (
+      <PhotoLibraryModal
+        aiImageUrl={payload.image_url}
+        onSelect={handlePublishWithImage}
+        onClose={() => setShowLibrary(false)}
+      />
+    )}
     <div className="w-[320px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
       {/* Header */}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -260,7 +271,7 @@ export const InstagramPostCard = ({
         ) : (
           <button
             type="button"
-            onClick={handlePublish}
+            onClick={() => setShowLibrary(true)}
             disabled={publishState === "uploading"}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#bc1888] py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
@@ -279,5 +290,6 @@ export const InstagramPostCard = ({
         )}
       </div>
     </div>
+    </>
   );
 };

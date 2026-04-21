@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     meta_access_token: str = ""   # 장기 액세스 토큰 (60일)
     instagram_user_id: str = ""   # Instagram 비즈니스 계정 숫자 ID
 
+    # YouTube (optional)
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    youtube_redirect_uri: str = "http://localhost:8000/api/marketing/youtube/oauth/callback"
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축
