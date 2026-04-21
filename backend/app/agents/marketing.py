@@ -45,6 +45,7 @@ VALID_TYPES: tuple[str, ...] = (
     "review_reply",
     "notice",
     "product_post",
+    "shorts_video",
 )
 
 
@@ -369,7 +370,18 @@ def _extract_sns_content(reply: str) -> tuple[str, list[str], str]:
     seen: set[str] = set()
     hashtags = [t for t in hashtags if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
-    return "\n".join(caption_lines), hashtags, best_time
+    # 문장 경계에서 줄바꿈 삽입
+    # 종결부호([!?.~]) + 뒤따르는 이모지를 하나의 단위로 묶고, 그 뒤 공백에서만 줄바꿈
+    # 예) "맛있어요! 🔥 다음문장" → "맛있어요! 🔥\n다음문장"
+    _EMOJI = r"[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\U00002600-\U000027BF\U00002702-\U000027B0]"
+    caption_text = "\n".join(caption_lines)
+    caption_text = _re.sub(
+        rf"([!?.~]+(?:\s*{_EMOJI}+)*|{_EMOJI}+)\s{{1,3}}(?=\S)",
+        r"\1\n",
+        caption_text,
+    )
+
+    return caption_text, hashtags, best_time
 
 
 async def _generate_sns_image(caption: str, hashtags: list[str]) -> str:
@@ -487,6 +499,30 @@ async def _maybe_instagram_preview(reply: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────
 # Capability 인터페이스 (function-calling 라우팅용)
 # ──────────────────────────────────────────────────────────────────────────
+
+async def run_shorts_wizard(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    topic: str,
+    slide_count: int = 5,
+    duration: float = 3.0,
+    **_: object,
+) -> str:
+    """YouTube Shorts 제작 마법사 UI를 채팅창에 표시."""
+    import json as _json
+    payload = {"topic": topic, "slide_count": slide_count, "duration": duration}
+    marker = f"[[SHORTS_WIZARD]]{_json.dumps(payload, ensure_ascii=False)}[[/SHORTS_WIZARD]]"
+    return (
+        f"YouTube Shorts 제작 마법사를 시작할게요! 🎬\n"
+        f"사진을 업로드하면 AI가 자막을 생성하고 영상을 만들어 드릴게요.\n\n"
+        f"{marker}"
+    )
+
+
 async def run_sns_post(
     *,
     account_id: str,
@@ -717,6 +753,23 @@ def describe(account_id: str) -> list[dict]:
                     "key_benefit": {"type": "string"},
                 },
                 "required": ["product"],
+            },
+        },
+        {
+            "name": "mkt_shorts_video",
+            "description": (
+                "사용자가 업로드한 이미지 슬라이드로 YouTube Shorts 세로형 영상을 제작하고 자동 업로드한다. "
+                "쇼츠 / 유튜브 영상 / 슬라이드 영상 / 사진으로 영상 만들기 요청 시 사용."
+            ),
+            "handler": run_shorts_wizard,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic":       {"type": "string", "description": "영상 주제 또는 제목"},
+                    "slide_count": {"type": "integer", "description": "슬라이드 수 (2~10)", "default": 5},
+                    "duration":    {"type": "number", "description": "슬라이드당 초 (2~5)", "default": 3},
+                },
+                "required": ["topic"],
             },
         },
         {
