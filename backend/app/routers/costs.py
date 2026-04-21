@@ -4,6 +4,7 @@
   POST   /api/costs         — 비용 다건 저장 + 자동 임베딩
   GET    /api/costs         — 기간별 비용 조회
   GET    /api/costs/summary — 일/주/월 집계
+  PATCH  /api/costs/{id}   — 단건 수정
   DELETE /api/costs/{id}   — 단건 삭제
 """
 from __future__ import annotations
@@ -49,8 +50,13 @@ class CostBulkRequest(BaseModel):
     items: list[CostItemIn]
 
 
-class CostDeleteRequest(BaseModel):
+class CostPatchRequest(BaseModel):
     account_id: str
+    item_name: str | None = None
+    category: str | None = None
+    amount: int | None = None
+    memo: str | None = None
+    recorded_date: str | None = None
 
 
 # ── POST /api/costs ───────────────────────────────────────────────────────────
@@ -250,6 +256,63 @@ async def costs_summary(
         "error": None,
         "meta": {},
     }
+
+
+# ── PATCH /api/costs/{id} ────────────────────────────────────────────────────
+
+@router.patch("/{record_id}")
+async def update_cost(record_id: str, req: CostPatchRequest):
+    """비용 단건 수정. 전달된 필드만 업데이트."""
+    sb = get_supabase()
+
+    check = (
+        sb.table("cost_records")
+        .select("id")
+        .eq("id", record_id)
+        .eq("account_id", req.account_id)
+        .execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")
+
+    updates = {
+        k: v for k, v in {
+            "item_name":     req.item_name,
+            "category":      req.category,
+            "amount":        req.amount,
+            "memo":          req.memo,
+            "recorded_date": req.recorded_date,
+        }.items() if v is not None
+    }
+    if not updates:
+        raise HTTPException(status_code=400, detail="수정할 필드가 없습니다.")
+
+    if "category" in updates and updates["category"] not in VALID_CATEGORIES:
+        updates["category"] = "기타"
+
+    try:
+        result = (
+            sb.table("cost_records")
+            .update(updates)
+            .eq("id", record_id)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"수정 실패: {e}")
+
+    updated = result.data[0] if result.data else {}
+
+    try:
+        await index_artifact(
+            account_id=req.account_id,
+            source_type="sales",
+            source_id=f"cost_{record_id}",
+            content=_record_to_text(updated),
+        )
+    except Exception:
+        pass
+
+    return {"data": {"updated": updated}, "error": None, "meta": {}}
 
 
 # ── DELETE /api/costs/{id} ────────────────────────────────────────────────────

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature/sales-analytics (Sales 상세 모달 + OCR + 통계 API)
+
+### Added — Backend
+
+- **`backend/app/routers/sales_ocr.py`** — `POST /api/sales/ocr` 신규. 이미지(GPT-4o Vision) / Excel(openpyxl) / CSV(표준 csv) 파일에서 매출·비용 항목 자동 파싱. 인코딩 자동 감지(utf-8-sig → euc-kr → cp949). Excel/CSV는 GPT-4o-mini로 sales/cost 타입 추론.
+- **`backend/app/routers/stats.py`** — 매출 통계 API 4종 신규.
+  - `GET /api/stats/overview` — 당월 매출·비용·순이익 + 전월 대비 증감률 + 일평균.
+  - `GET /api/stats/monthly-trend` — 최근 N개월 시계열 (매출·비용·순이익).
+  - `GET /api/stats/daily` — 특정 월 일별 매출·비용 시리즈 (누락 날짜 0 채움).
+  - `GET /api/stats/top-items` — 기간별 항목 랭킹 (금액 기준 내림차순).
+- **`backend/app/routers/costs.py`** — `PATCH /api/costs/{id}` 단건 수정 엔드포인트 추가. ownership 확인 + category 허용값 검증.
+- **`backend/app/routers/sales.py`** — `PATCH /api/sales/{id}` 단건 수정 엔드포인트 추가. revenue_entry artifact hub 연결 쿼리 `Revenue` → `Reports` 수정. `ORDER BY` `recorded_date` → `created_at DESC` 변경(같은 날짜 내 최신 데이터 우선).
+- **`backend/app/agents/sales.py`** — `run_cost_entry` capability 핸들러 + `sales_cost_entry` describe 추가. `_TYPE_TO_SUBHUB["revenue_entry"]` `Revenue` → `Reports` 수정.
+
+### Added — Frontend
+
+- **`frontend/components/sales/SalesDetailModal.tsx`** — 신규. revenue_entry / cost_report 카드 클릭 시 해당 날짜 records 조회·표시·수정·삭제. 인라인 편집(Pencil 클릭 → 행 수정 → PATCH API) + 삭제(confirm → DELETE API). 카테고리 pill 헤더 요약.
+- **`InlineChat.tsx`** — Sales 저장 후 `savedArtifactMeta { type, recordedDate, title }` + `savedDomain` 메시지 필드 추가. "캔버스에서 보기" → **"📋 상세 보기"** 버튼으로 교체 → `SalesDetailModal` 대시보드 인라인 오픈. 영수증 이미지 업로드 시 `receipt` 분류 자동 감지 → `/api/sales/ocr` 호출 → 파싱 결과를 `salesAction`/`costAction` 마커로 표시 (저장 버튼까지 원스텝).
+- **`KanbanBoard.tsx`** — `boss:artifacts-changed` CustomEvent 리스너 추가 → 매출 저장 후 칸반 자동 새로고침.
+
+### Changed
+
+- **`KanbanCard.tsx`** — dev CSS variables(`var(--kb-border)` 등) 유지하면서 `onClick`/`cursor-pointer` 조건부 커서 로직 병합. `rounded-xl` → `rounded-[5px]`.
+- **`SalesDetailModal.tsx`** — fetch limit `200` → `500` (동일 날짜 레코드 다수 시 잘림 방지).
+- **`KanbanColumn.tsx`** — `onCardClick` prop 전달 추가.
+- **`FlowCanvas.tsx`** — `boss:focus-node` 재시도 `8×80ms` → `30×300ms` (총 9초) 로 확장.
+
+### Docs
+
+- `docs/OCR_면접준비.md` — OCR 파이프라인 개념 정리.
+- `docs/Sales_작업계획_학습가이드.md` — BOSS-1 대비 Sales 미구현 항목 A~H 분석 및 구현 계획.
+- `docs/개인학습_멘토질문대비.md` — 오늘 작업 개념 정리 + 멘토 예상 질문/답변.
+
+---
+
 ## [1.0.0] — feature-documents (Bento 대시보드 + Inline Chat + UI 영어화)
 
 ### Added — Bento Dashboard (`/dashboard`)

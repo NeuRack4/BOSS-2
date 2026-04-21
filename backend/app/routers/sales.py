@@ -4,6 +4,7 @@
   POST   /api/sales          — 매출 다건 저장 + 자동 임베딩
   GET    /api/sales          — 기간별 매출 조회
   GET    /api/sales/summary  — 일/주/월 집계
+  PATCH  /api/sales/{id}     — 단건 수정
   DELETE /api/sales/{id}     — 단건 삭제
 """
 from __future__ import annotations
@@ -53,8 +54,15 @@ class SalesBulkRequest(BaseModel):
     items: list[SaleItemIn]
 
 
-class SalesDeleteRequest(BaseModel):
+class SalePatchRequest(BaseModel):
     account_id: str
+    item_name: str | None = None
+    category: str | None = None
+    quantity: int | None = None
+    unit_price: int | None = None
+    amount: int | None = None
+    recorded_date: str | None = None
+    memo: str | None = None
 
 
 # ── POST /api/sales ───────────────────────────────────────────────────────────
@@ -102,20 +110,20 @@ async def create_sales(req: SalesBulkRequest):
         except Exception:
             pass  # 임베딩 실패해도 저장은 유지
 
-    # revenue_entry artifact 생성 — 캔버스 Revenue 허브에 노드 추가
+    # revenue_entry artifact 생성 — 캔버스 Reports 허브에 노드 추가
     artifact_id: str | None = None
     try:
         recorded_date = req.items[0].recorded_date
         total_amount = sum(it.amount for it in req.items)
 
-        # Revenue 서브허브 찾기
+        # Reports 서브허브 찾기 (revenue_entry 는 Reports 에 저장)
         hub_res = (
             sb.table("artifacts")
             .select("id")
             .eq("account_id", req.account_id)
             .eq("kind", "domain")
             .eq("type", "category")
-            .ilike("title", "%Revenue%")
+            .ilike("title", "%Reports%")
             .limit(1)
             .execute()
         )
@@ -178,7 +186,7 @@ async def list_sales(
             .eq("account_id", account_id)
             .gte("recorded_date", start_date)
             .lte("recorded_date", end_date)
-            .order("recorded_date", desc=True)
+            .order("created_at", desc=True)
             .limit(limit)
             .execute()
         )
@@ -266,6 +274,63 @@ async def sales_summary(
         "error": None,
         "meta": {},
     }
+
+
+# ── PATCH /api/sales/{id} ────────────────────────────────────────────────────
+
+@router.patch("/{record_id}")
+async def update_sale(record_id: str, req: SalePatchRequest):
+    """매출 단건 수정. 전달된 필드만 업데이트."""
+    sb = get_supabase()
+
+    check = (
+        sb.table("sales_records")
+        .select("id")
+        .eq("id", record_id)
+        .eq("account_id", req.account_id)
+        .execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")
+
+    updates = {
+        k: v for k, v in {
+            "item_name":     req.item_name,
+            "category":      req.category,
+            "quantity":      req.quantity,
+            "unit_price":    req.unit_price,
+            "amount":        req.amount,
+            "recorded_date": req.recorded_date,
+            "memo":          req.memo,
+        }.items() if v is not None
+    }
+    if not updates:
+        raise HTTPException(status_code=400, detail="수정할 필드가 없습니다.")
+
+    try:
+        result = (
+            sb.table("sales_records")
+            .update(updates)
+            .eq("id", record_id)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"수정 실패: {e}")
+
+    updated = result.data[0] if result.data else {}
+
+    # 임베딩 재인덱싱
+    try:
+        await index_artifact(
+            account_id=req.account_id,
+            source_type="sales",
+            source_id=record_id,
+            content=_record_to_text(updated),
+        )
+    except Exception:
+        pass
+
+    return {"data": {"updated": updated}, "error": None, "meta": {}}
 
 
 # ── DELETE /api/sales/{id} ────────────────────────────────────────────────────

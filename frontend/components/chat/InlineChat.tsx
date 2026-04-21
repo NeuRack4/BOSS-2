@@ -40,6 +40,7 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 import { CostInputTable, type CostActionData } from "./CostInputTable";
+import { SalesDetailModal } from "@/components/sales/SalesDetailModal";
 
 type UploadCategory =
   | "documents"
@@ -74,6 +75,8 @@ type Message = {
   salesAction?: SalesActionData;
   costAction?: CostActionData;
   savedArtifactId?: string;
+  savedDomain?: string;
+  savedArtifactMeta?: { type: string; recordedDate: string; title: string };
   suggested?: boolean;
 };
 
@@ -301,6 +304,12 @@ export const InlineChat = () => {
   const [costTableData, setCostTableData] = useState<CostActionData | null>(
     null,
   );
+  const [detailModal, setDetailModal] = useState<{
+    artifactId: string;
+    artifactType: string;
+    recordedDate: string;
+    artifactTitle: string;
+  } | null>(null);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -607,8 +616,15 @@ export const InlineChat = () => {
           ]);
         }
 
-        if (nonDocs.length > 0) {
-          const lines = nonDocs.map((it) => {
+        const receiptItems = nonDocs.filter(
+          (it) => it.final_category === "receipt",
+        );
+        const otherNonDocs = nonDocs.filter(
+          (it) => it.final_category !== "receipt",
+        );
+
+        if (otherNonDocs.length > 0) {
+          const lines = otherNonDocs.map((it) => {
             const cat = (it.final_category ?? "other") as UploadCategory;
             return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
           });
@@ -616,6 +632,75 @@ export const InlineChat = () => {
             ...prev,
             { role: "assistant", content: lines.join("\n") },
           ]);
+        }
+
+        if (receiptItems.length > 0 && userId) {
+          // 이미지 파일만 OCR 대상 (non-image는 uploads에서 이미 처리됨)
+          const ocrFiles = files.filter((f) =>
+            f.type.startsWith("image/") ||
+            /\.(jpg|jpeg|png|webp|bmp|tiff|gif|heic|heif)$/i.test(f.name),
+          );
+
+          if (ocrFiles.length === 0) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: "영수증 이미지를 찾을 수 없어요." },
+            ]);
+          } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `영수증 ${ocrFiles.length}장을 분석하고 있어요...`,
+            },
+          ]);
+
+          try {
+            const ocrForm = new FormData();
+            for (const f of ocrFiles) ocrForm.append("files", f);
+            const ocrRes = await fetch(`${apiBase}/api/sales/ocr`, {
+              method: "POST",
+              body: ocrForm,
+            });
+            const ocrJson = await ocrRes.json();
+            const parsed = ocrJson?.data;
+
+            setMessages((prev) => {
+              const next = [...prev];
+              if (ocrRes.ok && parsed?.items?.length > 0) {
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: `영수증에서 **${parsed.items.length}개 항목**을 인식했어요. 확인 후 저장하세요.`,
+                  salesAction:
+                    parsed.type !== "cost"
+                      ? { date: parsed.date, items: parsed.items }
+                      : undefined,
+                  costAction:
+                    parsed.type === "cost"
+                      ? { date: parsed.date, items: parsed.items }
+                      : undefined,
+                };
+              } else {
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content:
+                    ocrJson?.error ??
+                    "영수증에서 항목을 인식하지 못했어요. 더 선명한 이미지를 사용해보세요.",
+                };
+              }
+              return next;
+            });
+          } catch {
+            setMessages((prev) => {
+              const next = [...prev];
+              next[next.length - 1] = {
+                role: "assistant",
+                content: "영수증 분석 중 오류가 발생했어요.",
+              };
+              return next;
+            });
+          }
+          } // end ocrFiles.length > 0
         }
 
         if (docsOk.length === 1 && confirms.length === 0) {
@@ -910,12 +995,24 @@ export const InlineChat = () => {
 
   return (
     <>
+      {detailModal && userId && (
+        <SalesDetailModal
+          open={!!detailModal}
+          onClose={() => setDetailModal(null)}
+          accountId={userId}
+          artifactId={detailModal.artifactId}
+          artifactType={detailModal.artifactType}
+          recordedDate={detailModal.recordedDate}
+          artifactTitle={detailModal.artifactTitle}
+        />
+      )}
       {showSalesTable && salesTableData && (
         <SalesInputTable
           data={salesTableData}
           apiBase={apiBase ?? ""}
           onClose={() => setShowSalesTable(false)}
           onSaved={(message, artifactId) => {
+            const savedDate = salesTableData?.date ?? new Date().toISOString().slice(0, 10);
             setShowSalesTable(false);
             setMessages((prev) => [
               ...prev,
@@ -923,6 +1020,12 @@ export const InlineChat = () => {
                 role: "assistant",
                 content: message,
                 savedArtifactId: artifactId,
+                savedDomain: "sales",
+                savedArtifactMeta: artifactId ? {
+                  type: "revenue_entry",
+                  recordedDate: savedDate,
+                  title: `${savedDate} 매출`,
+                } : undefined,
               },
             ]);
             window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
@@ -942,6 +1045,7 @@ export const InlineChat = () => {
                 role: "assistant",
                 content: message,
                 savedArtifactId: artifactId,
+                savedDomain: "sales",
               },
             ]);
             window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
@@ -1116,15 +1220,20 @@ export const InlineChat = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          window.dispatchEvent(
-                            new CustomEvent("boss:focus-node", {
-                              detail: { id: msg.savedArtifactId },
-                            }),
-                          );
+                          if (msg.savedArtifactMeta && msg.savedArtifactId) {
+                            setDetailModal({
+                              artifactId: msg.savedArtifactId,
+                              artifactType: msg.savedArtifactMeta.type,
+                              recordedDate: msg.savedArtifactMeta.recordedDate,
+                              artifactTitle: msg.savedArtifactMeta.title,
+                            });
+                          } else if (msg.savedDomain) {
+                            window.location.href = `/${msg.savedDomain}`;
+                          }
                         }}
                         className="rounded-[5px] border-[#d89a2b] bg-[#fdf8ec] text-[#9a6e1a] hover:bg-[#faefd0] text-xs font-medium"
                       >
-                        📍 캔버스에서 보기
+                        📋 상세 보기
                       </Button>
                     </div>
                   )}
@@ -1196,6 +1305,12 @@ export const InlineChat = () => {
                                       role: "assistant" as const,
                                       content: `매출 ${action.items.length}건이 저장됐어요.`,
                                       savedArtifactId: artifactId,
+                                      savedDomain: "sales",
+                                      savedArtifactMeta: artifactId ? {
+                                        type: "revenue_entry",
+                                        recordedDate: action.date,
+                                        title: `${action.date} 매출 (${action.items.length}건)`,
+                                      } : undefined,
                                     },
                                   ]);
                                 }
@@ -1295,6 +1410,7 @@ export const InlineChat = () => {
                                       role: "assistant" as const,
                                       content: `비용 ${action.items.length}건이 저장됐어요.`,
                                       savedArtifactId: artifactId,
+                                      savedDomain: "sales",
                                     },
                                   ]);
                                 }

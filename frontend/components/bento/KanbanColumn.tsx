@@ -15,6 +15,7 @@ type Props = {
   onCardDragStart: (id: string, fromSubHubId: string) => void;
   onCardDragEnd: () => void;
   onCardDrop: (toSubHubId: string) => void;
+  onCardClick?: (card: KanbanCardData) => void;
 };
 
 export const KanbanColumn = ({
@@ -26,6 +27,7 @@ export const KanbanColumn = ({
   onCardDragStart,
   onCardDragEnd,
   onCardDrop,
+  onCardClick,
 }: Props) => {
   const meta = DOMAIN_META[domain];
   const [isOver, setIsOver] = useState(false);
@@ -89,6 +91,7 @@ export const KanbanColumn = ({
                 onCardDragStart(c.id, subHubId);
               }}
               onDragEnd={onCardDragEnd}
+              onClick={onCardClick ? () => onCardClick(c) : undefined}
             />
           ))
         )}

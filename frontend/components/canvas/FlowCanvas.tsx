@@ -486,16 +486,17 @@ export const FlowCanvas = () => {
       const id = (e as CustomEvent<{ id?: string }>).detail?.id;
       if (!id) return;
       if (focusNodeById(id)) return;
-      // Target is not in the current render — likely an archive child while
-      // showArchive is off. Enable archive and retry until it appears.
+      // Target is not in the current render — either archive child or canvas
+      // is still re-fetching after boss:artifacts-changed. Enable archive and
+      // retry for up to ~9 s to cover slow Supabase round-trips.
       setShowArchive(true);
       let attempts = 0;
       const tryFocus = () => {
         if (focusNodeById(id)) return;
-        if (++attempts >= 8) return;
-        window.setTimeout(tryFocus, 80);
+        if (++attempts >= 30) return;
+        window.setTimeout(tryFocus, 300);
       };
-      window.setTimeout(tryFocus, 80);
+      window.setTimeout(tryFocus, 300);
     };
     window.addEventListener("boss:focus-node", onFocus);
     return () => window.removeEventListener("boss:focus-node", onFocus);

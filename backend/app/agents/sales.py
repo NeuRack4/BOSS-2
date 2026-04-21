@@ -47,13 +47,13 @@ VALID_TYPES: tuple[str, ...] = (
 
 # 타입 → 서브허브 매핑 (sub_domain 필드에 자동 주입)
 _TYPE_TO_SUBHUB: dict[str, str] = {
-    "revenue_entry":     "Revenue",
+    "revenue_entry":     "Reports",
     "cost_report":       "Costs",
     "price_strategy":    "Pricing",
     "customer_script":   "Customers",
     "customer_analysis": "Customers",
     "sales_report":      "Reports",
-    "promotion":         "Revenue",
+    "promotion":         "Reports",
     "checklist":         "Reports",
 }
 
@@ -283,11 +283,10 @@ SYSTEM_PROMPT = (
 
 [서브허브 매핑 규칙]
 artifact 저장 시 sub_domain 필드를 반드시 포함:
-- revenue_entry, promotion → sub_domain: Revenue
+- revenue_entry, promotion, sales_report, checklist → sub_domain: Reports
 - cost_report             → sub_domain: Costs
 - price_strategy          → sub_domain: Pricing
 - customer_script, customer_analysis → sub_domain: Customers
-- sales_report, checklist → sub_domain: Reports
 """
     + _REQUIRED_FIELDS
     + _REVENUE_ENTRY_FORMAT
