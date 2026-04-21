@@ -6,7 +6,7 @@ import { ChatCenterCard } from "./ChatCenterCard";
 import { ScheduleCard } from "./ScheduleCard";
 import { ActivityCard } from "./ActivityCard";
 import { PreviousChatCard } from "./PreviousChatCard";
-import { AdBanner } from "./AdBanner";
+import { ProfileMemorySidebar } from "./ProfileMemorySidebar";
 import type { DashboardSummary, DomainStats, DomainKey } from "./types";
 
 const EMPTY_STATS: DomainStats = {
@@ -55,7 +55,7 @@ export const BentoGrid = ({ accountId }: Props) => {
 
   return (
     <div className="flex w-full justify-center gap-4 p-4 md:p-6">
-      <AdBanner side="left" />
+      <ProfileMemorySidebar />
       <div className="w-full max-w-[1400px]">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:auto-rows-[140px] md:gap-4">
           {/* Top-left: Chat (half width, 4 rows tall) */}

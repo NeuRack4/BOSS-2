@@ -178,70 +178,86 @@ memos                 — account_id, artifact_id(FK→artifacts), content, crea
 
 모든 RLS 정책은 `auth.uid()` 기반. Supabase Auth 이메일+비밀번호 사용.
 
-## Canvas Layout (frontend)
+## Dashboard Layout (frontend, v1.0.0~)
 
-### 4-Quadrant 구조
+> v1.0.0 에서 `/dashboard` 는 React Flow 캔버스가 아닌 **Bento Grid** 로 전환됐고 `/canvas-legacy` route 는 삭제. 아래 섹션은 새 대시보드 구조 + 도메인별 Kanban 페이지 (`/[domain]`) 구조를 다룬다. 캔버스 컴포넌트(`FlowCanvas`, `AnchorNode` 등)는 아직 소스에 남아있지만 현재 라우트에서 렌더되지 않는다.
 
-- Anchor `(0,0)` 중앙 고정 (BOSS, 120×40). 4 메인 허브는 `(±215, ±215)`에 **등거리 배치**, `kind='domain'`은 전부 **드래그 불가**.
-- 사분면 매핑: **TL=Recruitment, TR=Marketing, BL=Documents, BR=Sales**.
-- 각 허브의 subtree는 **해당 사분면 바깥 방향으로만 전개** (TL은 좌상, TR은 우상, BL은 좌하, BR은 우하):
-  - `frontend/components/canvas/FlowCanvas.tsx`의 `layoutSubtree`: dagre로 subtree 배치 후, hub는 target 고정, 자식들만 `OUTWARD_GAP` 이상 바깥으로 Y-shift (상단 허브면 위로, 하단이면 아래로).
-  - dagre rankdir: 좌측 사분면 `'RL'`, 우측 사분면 `'LR'` — 가로 방향 자연스러운 바깥 전개.
-- Anchor → 메인 허브 `contains` 엣지는 구조상 존재하지만 **렌더하지 않음** (긴 중심선 방지).
-- 중앙 얇은 회색 십자선(`CrosshairOverlay`) + anchor 작게 중앙 유지.
+### Bento Grid (`/dashboard`, `BentoGrid.tsx`)
 
-### 노드 모양
+- **Root**: `flex w-full justify-center gap-4 p-4` — 왼쪽에 `ProfileMemorySidebar` (조건부, `min-[1500px]:flex`), 가운데에 12-컬럼 그리드 (`max-w-[1400px]`), `md:auto-rows-[140px]`.
+- **Layout map** (12-col × 6-row):
+  - Row 1-4: `ChatCenterCard` (col 1-6) · `DomainCard(recruitment)` + `DomainCard(sales)` (col 7-9, flex 4:6) · `DomainCard(marketing)` + `DomainCard(documents)` (col 10-12, flex 6:4).
+  - Row 5-6: `PreviousChatCard` (col 1-3) · `ScheduleCard` (col 4-6) · `ActivityCard` (col 7-12).
+- **데이터 소스**: `GET /api/dashboard/summary?account_id=` (`backend/app/routers/dashboard.py`) — 도메인별 `active_count` / `upcoming_count` / `recent_count` + `recent_titles[5]` + `upcoming[8]` + `recent_activity[10]`. `boss:artifacts-changed` CustomEvent 로 재조회.
 
-- 모든 artifact chip: 180×36 수평 pill (`rounded-[11px]`).
-- **Schedule**: 180×58, 칩 내부에 2행 — 1행 메타, 2행 **상태 배지**(대기/실행 중/일시정지/지연 color-coded). 2행 클릭 시 pause↔active 토글 / 지연 상태에서 run-now 컨펌.
-- **Archive** (`type='archive'`): 동일 pill + `border-dashed`.
-- Anchor/Domain hub/Sub-hub: 별도 컴포넌트 (`AnchorNode`, `DomainNode`).
+### Dashboard Cards (공통 디자인 규약)
 
-### 엣지 라우팅
+- 모든 카드는 **`rounded-[5px]`** + `shadow-lg` + `hover:scale-[1.015] hover:shadow-xl` + `role="button" tabIndex={0}` (전체 카드 클릭 시 모달 열기). 우상단 `ArrowUpRight` 는 헬퍼 아이콘 (시각적 표시).
+- **세션/Activity/Schedule 아이템** 은 내부 `<button>` 으로 렌더되며 `stopPropagation()` 로 아이템 전용 액션(세션 로드 / 모달 포커스)과 카드 전체 클릭을 분리.
+- **빈 상태 문구** 전역 `Nothing here yet` 하나로 통일 (카드/모달/팔레트/칸반/캔버스 모달 전부).
+- **글자 규칙** — 제목 `text-base font-semibold`, 본문 `text-[13px]`, 모노스페이스 메타 라벨 `text-[11px] uppercase tracking-wider`.
+- **`ChatCenterCard`** — "I'm BOSS" 타이틀 + 우상단 `New Session` 버튼 → `useChat().requestNewSession()`. 본문은 `InlineChat` (설명은 아래).
+- **`DomainCard`** — 제목 + 통계(3열 그리드 `Active / Due / Recent` 숫자 pill) + 하단에 최근 artifact 4개 (`flex-col justify-end` 로 바닥에서 위로 쌓임, 최신이 맨 위). 통계 박스와 최근 pill 모두 `rounded-[5px]`.
+- **`ScheduleCard`** (`bg-[#ffdd00]` or 유사) — 상위 5개 일정. 아이템 클릭 → `boss:open-schedule-modal`.
+- **`ActivityCard`** (`bg-[#e8ffbd]`) — 상위 6개 활동. 아이템 클릭 → `boss:open-activity-modal`. 시간 포맷 영어 (`just now` / `Nm ago` …).
+- **`PreviousChatCard`** — `useChat().sessions` 구독. 상위 4개 세션. 아이템 클릭 → `requestLoadSession(id)` → InlineChat 이 로드.
+- **`ProfileMemorySidebar`** (`min-[1500px]:flex`) — 세로 3:3:3 스택.
+  - `ProfileCard` — `profiles` 쿼리 (display_name/business_name/business_type/business_stage/employees_count/location/channels/primary_goal/profile_meta). 우상단 → `boss:open-profile-modal`.
+  - `LongMemoryCard` — `memory_long` importance desc · 상위 3개 preview. 우상단 → `boss:open-longmem-modal`.
+  - `MemosCard` — `memos` + artifact title join · 상위 3개. 우상단 → `boss:open-memos-modal`. 아이템 클릭 → `boss:open-memos-modal` (대시보드에 캔버스 없음 → `boss:focus-node` 사용 안 함).
 
-- 핸들 4개/노드: `l`(target), `l-s`(source), `r`(source), `r-t`(target). `ConnectionMode.Loose`.
-- 좌측 사분면(Recruitment, Documents) source → `sourceHandle='l-s'`, `targetHandle='r-t'` (왼쪽으로 뻗음).
-- 우측 사분면 → `sourceHandle='r'`, `targetHandle='l'`.
-- Hover 인터랙션: 기본 가시, 노드 호버 시 비관련 엣지 opacity 0.08로 어두워짐.
+### Domain Page (`/[domain]` — `DomainPage.tsx`)
 
-### 필터 시스템
+- 대시보드에서 DomainCard 클릭 시 `/recruitment` / `/marketing` / `/sales` / `/documents` 로 이동. Hero banner (`rounded-[5px]`) + `KanbanBoard` (`bento/KanbanBoard.tsx`).
+- KanbanBoard 는 해당 도메인의 서브허브 = 컬럼으로 펼침. 미분류 artifact 는 "미분류" 컬럼에 모임. 드래그 → `PATCH /api/kanban/move` 로 `artifact_edges.relation='contains'` 부모 교체.
+- **Kanban 테마 토큰** — `globals.css` 의 `.bento-shell` 스코프 CSS 변수 (`--kb-fg`, `--kb-border`, `--kb-surface`, `--kb-card`, `--kb-dday-urgent`, `--kb-dday-soon`, `--kb-warn-*`, `--kb-fg-on-banner` 등). `html[data-bg="dark"] .bento-shell` 에서 오버라이드 → light/dark 두 테마에서 모두 가독 보장.
 
-`frontend/components/canvas/FilterContext.tsx` + `frontend/components/chat/CanvasFilterBar.tsx`(채팅창 아래 3행 패널):
+### Inline Chat (`components/chat/InlineChat.tsx`)
 
-| 필터              | 상태          | 기본값    | 동작                                                                                               |
-| ----------------- | ------------- | --------- | -------------------------------------------------------------------------------------------------- |
-| `timeRangeDays`   | `null\|1..7`  | `7`       | 범위 밖 노드 opacity 0.15. 도메인 허브/아카이브 노드 **면제**.                                     |
-| `selectedDomains` | `Set<Domain>` | 전체 선택 | 노드의 `domains` 중 하나라도 선택 시 visible. 모두 해제 → Anchor만 선명.                           |
-| `showArchive`     | `boolean`     | `false`   | OFF면 아카이브 노드 자식들을 **렌더에서 제외** (dagre 재레이아웃). 아카이브 폴더 자체는 항상 표시. |
+- `ChatCenterCard` 안에 항상 마운트되는 풀 기능 채팅. v0.9.x 의 풀스크린 `ChatOverlay` 를 대체.
+- 파일 업로드(PDF/DOCX/XLSX/이미지), 이미지 OCR, `[CHOICES]` 버튼, 분류 confirm, `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 인라인 테이블 모달, Markdown 렌더, `ReviewResultCard` / `InstagramPostCard` / `ReviewReplyCard` 전부 이식.
+- **Empty state** — 메시지 0개일 때 카드 중앙에 `ASK THE CHATBOT.` + 4개 제안 프롬프트 (세로 스택, `w-1/2`). 매 mount / 새 세션 / 빈 세션 로드마다 `pickSuggested()` 가 도메인별 10문항 풀(`SUGGESTED_POOL`, 총 40개) 에서 **도메인당 1개씩 랜덤 샘플링**.
+- **로그인 브리핑** 진입 — `BriefingLoader` 가 `sessionStorage.boss2:pending-briefing` 을 꺼내 `useChat.openChatWithBriefing(content)` 호출 → ChatContext 의 `pendingBriefing` 이 세팅 → InlineChat 의 useEffect 가 감지해서 첫 메시지를 브리핑으로 교체.
+- **세션 로드** — `useChat.requestLoadSession(id)` 가 `loadSessionTick` 증가 → InlineChat 이 `GET /api/chat/sessions/:id/messages` 로 메시지 하이드레이트.
 
-### 위치 저장
+### Modal System
 
-- `frontend/components/canvas/layout.ts` — localStorage 키 `boss2:node_positions:quadrant-v1`.
-- 사용자가 드래그 가능한 노드(artifact/schedule/log)를 드래그하면 즉시 저장. 새로고침/재진입 시 복원.
-- Anchor, 메인 허브, 서브 허브는 드래그 불가 → 항상 dagre 결과 유지.
-- Header의 `정렬` 버튼은 `boss:reset-layout` CustomEvent를 발행 → `FlowCanvas`가 수신하여 localStorage 비우고 dagre 기준으로 재배치.
+- **`components/ui/modal.tsx`** — `createPortal(..., document.body)` 로 렌더 (헤더의 `backdrop-filter` containing block 이슈 해결). `variant: "sand" | "dashboard"` prop:
+  - `sand` (기본) — `rounded-xl` + sand palette. 캔버스 7개 모달(`NodeDetailModal` 등) 에서 사용.
+  - `dashboard` — `rounded-[5px]` + `bg-[#f4f1ed]` + `border-[#030303]/10`. 대시보드 모달 6종에서 사용.
+- **대시보드 모달 6종 (720×560 통일, variant=`dashboard`)**:
+  - `ChatHistoryModal` — 세션 리스트 + row hover 휴지통 버튼 → confirm → `DELETE /api/chat/sessions/:id` → 현재 세션 삭제 시 `requestNewSession()`.
+  - `ScheduleManagerModal` — 리스트/캘린더 뷰 토글. `kind='schedule'` ∪ (metadata 에 `start_date`/`end_date`/`due_date` 하나 이상) 통합 조회. 라벨 영어(`Active/Paused/Ended`, `Upcoming` 등).
+  - `ActivityModal` — `activity_logs` 최근 200개. 타입 라벨 영어(`Created/Run/Auto-run/Notify`), notify 배지 `D-N start/due`.
+  - `ProfileModal` — `profiles` 전체 필드 + `profile_meta` 추가 섹션.
+  - `LongTermMemoryModal` — `memory_long` importance desc 200개.
+  - `MemosModal` — 2열 카드 그리드 (artifact 제목 + 본문 + 상대시간).
+- **캔버스 모달 7종 (variant=`sand` 기본)** — `NodeDetailModal`, `DateRangeModal`, `ConfirmModal`, `SummaryModal`, `ScheduleModal`, `LogDetailModal`, `HistoryModal`. 소스만 남아있고 현재 `/dashboard` · `/[domain]` 에선 사용되지 않음 (추후 캔버스 복구 시를 대비).
 
-### 테마 / 배경
+### Header (`components/layout/Header.tsx`)
 
-- **Sand/Paper 팔레트** (v0.4.0~): `--background:#f2e9d5` / `--card:#fbf6eb` / `--foreground:#2e2719`. domain chart 컬러 5종도 sand 계열(#c47865 / #d89a2b / #7f8f54 / #8e5572 / #8c7e66).
-- 폰트: `Pretendard Variable` (본문) + `JetBrains Mono` (코드).
-- `NebulaBackground` (`components/canvas/NebulaBackground.tsx`) — radial gradient + paper-grain overlay 레이어. 캔버스 하단 고정 배경.
-
-### UI Layer (캔버스 바깥)
-
-- **`HoverInfoPanel`** (`components/canvas/`) — 노드 호버/선택 시 상단-좌측 패널에 부모/자식(`artifact_edges` 기반), metadata, 도메인·상태 표시. 최소화 토글 상태는 `localStorage` 키 `boss2:hover-panel:minimized` 에 저장.
-- **`NodeDetailModal`** (`components/canvas/modals/`) — 노드 클릭 시 오픈 (anchor 제외). 좌측: content / sub-domain / metadata / parents·children / ID. 우측: **타임라인 메모** (작성·편집·삭제, 작성 즉시 `source_type='memo'` 로 임베딩 → 검색/대화 컨텍스트 합류).
-- **`SearchPalette`** (`components/search/`) — `⌘K` / `Ctrl+K` 로 오픈. Header 중앙 검색바 클릭으로도 호출. 200ms debounce 후 `GET /api/search` 호출, RRF 점수 순 결과. ↑↓/Enter 키보드 탐색, 선택 시 `boss:focus-node` CustomEvent 발행 → `FlowCanvas` 가 `fitView` 로 포커스.
-- **`ScheduleManagerModal`** (`components/layout/`) — Header `일정 관리` 버튼에서 오픈. 달력 뷰 ↔ 리스트 뷰 토글. `kind='schedule'` ∪ (`metadata.start_date`/`end_date`/`due_date` 중 하나 이상 있는 `kind='artifact'`) 통합 조회. 항목 클릭 시 `boss:focus-node` 발행.
-- **`DateRangeModal`** (`components/canvas/modals/`) — artifact의 `start_date`+`end_date`(기간) ↔ `due_date`(마감) metadata 설정. 컨텍스트 메뉴에서 호출.
-- **`ActivityModal`** (`components/layout/`) — `/activity` 페이지 대체. Header `활동이력` 버튼에서 오픈. 항목 클릭 시 `metadata.artifact_id`(없으면 title+domain fallback)로 노드 포커스.
+- 배경: 솔리드 `#ffffff` (v1.0.0 에서 `rgba(.85)+blur(12px)` → 솔리드로, light/dark 고정).
+- 좌측: BOSS 로고. 중앙: 검색 버튼 (`⌘K` / `Ctrl+K` 단축키). 우측: 버튼 3개 + 로그아웃.
+  - `Schedule` → `boss:open-schedule-modal`
+  - `Activity` → `boss:open-activity-modal`
+  - `Light/Dark` 토글 → `localStorage.boss2:bg-dark` + `html[data-bg="dark"]` attr.
+  - `Logout` → Supabase signOut + `/login` redirect.
+- **영어 UI** — 모든 라벨/aria-label/tooltip 영어 (v1.0.0 기준).
+- v0.9.x 까지 있던 `정렬 (Layout)` 버튼은 v1.0.0 에서 제거 (FlowCanvas 리스너만 남고 발행자 없음).
 
 ### Custom Events (frontend 전역)
 
-| 이벤트              | 발행 위치                                                  | 구독 위치    | 페이로드         |
-| ------------------- | ---------------------------------------------------------- | ------------ | ---------------- |
-| `boss:reset-layout` | Header `정렬` 버튼                                         | `FlowCanvas` | —                |
-| `boss:focus-node`   | `SearchPalette` / `ActivityModal` / `ScheduleManagerModal` | `FlowCanvas` | `{ id: string }` |
+| 이벤트                         | 발행 위치                                                                      | 구독 위치      | 페이로드         |
+| ------------------------------ | ------------------------------------------------------------------------------ | -------------- | ---------------- |
+| `boss:artifacts-changed`       | `InlineChat` (매 응답 후) · `KanbanBoard` (drop 후) · 기타                     | `BentoGrid` 외 | —                |
+| `boss:open-schedule-modal`     | `ScheduleCard` / `ScheduleCard` 아이템                                         | `Header`       | —                |
+| `boss:open-activity-modal`     | `ActivityCard` / `ActivityCard` 아이템                                         | `Header`       | —                |
+| `boss:open-chat-history-modal` | `PreviousChatCard`                                                             | `Header`       | —                |
+| `boss:open-profile-modal`      | `ProfileMemorySidebar.ProfileCard`                                             | `Header`       | —                |
+| `boss:open-longmem-modal`      | `ProfileMemorySidebar.LongMemoryCard`                                          | `Header`       | —                |
+| `boss:open-memos-modal`        | `ProfileMemorySidebar.MemosCard` + MemosCard 아이템                            | `Header`       | —                |
+| `boss:focus-node`              | `MemosModal` / `SearchPalette` / (구) `ActivityModal` 등                       | (캔버스 없음)  | `{ id: string }` |
+| `boss:reset-layout`            | 더 이상 발행되지 않음 (Header `Layout` 버튼 삭제됨) — FlowCanvas 수신자만 잔존 | `FlowCanvas`   | —                |
 
 ## Mock Data
 

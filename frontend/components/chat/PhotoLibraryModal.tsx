@@ -14,7 +14,7 @@ type Photo = {
 };
 
 type Props = {
-  aiImageUrl: string;          // DALL-E 생성 이미지 (기본 선택)
+  aiImageUrl: string; // DALL-E 생성 이미지 (기본 선택)
   onSelect: (url: string) => void;
   onClose: () => void;
 };
@@ -36,7 +36,9 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
 
   const fetchPhotos = useCallback(async () => {
     const accountId = await getAccountId();
-    const res = await fetch(`${apiBase}/api/marketing/photos?account_id=${accountId}`);
+    const res = await fetch(
+      `${apiBase}/api/marketing/photos?account_id=${accountId}`,
+    );
     const json = await res.json();
     setPhotos(json.data ?? []);
     setLoading(false);
@@ -93,7 +95,9 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
       <div className="flex w-full max-w-xl flex-col rounded-2xl bg-[#fbf6eb] shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#ddd0b4] px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-[#2e2719]">사진 라이브러리</h2>
+          <h2 className="text-[15px] font-semibold text-[#2e2719]">
+            사진 라이브러리
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -104,7 +108,10 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
         </div>
 
         {/* 스크롤 영역 */}
-        <div className="flex-1 overflow-y-auto p-5" style={{ maxHeight: "65vh" }}>
+        <div
+          className="flex-1 overflow-y-auto p-5"
+          style={{ maxHeight: "65vh" }}
+        >
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-[#8c7e66]" />
@@ -134,7 +141,10 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                     </div>
                     {selectedUrl === aiImageUrl && (
                       <div className="absolute right-2 top-2 rounded-full bg-[#3b7aba] p-1 shadow-md">
-                        <CheckCircle2 className="h-5 w-5 text-white" strokeWidth={2.5} />
+                        <CheckCircle2
+                          className="h-5 w-5 text-white"
+                          strokeWidth={2.5}
+                        />
                       </div>
                     )}
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 py-1 text-center text-[11px] font-medium text-white">
@@ -167,7 +177,10 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                     </div>
                     {selectedUrl === photo.public_url && (
                       <div className="absolute right-2 top-2 rounded-full bg-[#3b7aba] p-1 shadow-md">
-                        <CheckCircle2 className="h-5 w-5 text-white" strokeWidth={2.5} />
+                        <CheckCircle2
+                          className="h-5 w-5 text-white"
+                          strokeWidth={2.5}
+                        />
                       </div>
                     )}
                   </button>

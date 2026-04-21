@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FileText, Search, StickyNote } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -44,6 +45,11 @@ export const SearchPalette = ({ open, onClose }: Props) => {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const sb = createClient();
@@ -126,43 +132,44 @@ export const SearchPalette = ({ open, onClose }: Props) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, results, active, focusNode, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[110] flex items-start justify-center bg-[#2e2719]/40 backdrop-blur-sm pt-24"
       onClick={onClose}
     >
       <div
-        className="w-[640px] rounded-xl border border-[#ddd0b4] bg-[#fffaf2] shadow-2xl overflow-hidden"
+        className="w-[640px] rounded-[5px] border border-[#030303]/10 bg-[#ffffff] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#ddd0b4]">
-          <Search className="h-4 w-4 text-[#8c7e66] shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#030303]/10">
+          <Search className="h-4 w-4 text-[#030303]/60 shrink-0" />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="노드 제목·내용·메모·메타데이터 검색…"
-            className="flex-1 bg-transparent text-[13px] text-[#2e2719] placeholder-[#8c7e66]/70 focus:outline-none"
+            placeholder="Search nodes, content, memos…"
+            className="flex-1 bg-transparent text-[13px] text-[#030303] placeholder-[#030303]/40 focus:outline-none"
           />
-          <kbd className="font-mono text-[9px] uppercase tracking-wider text-[#8c7e66] border border-[#ddd0b4] rounded px-1 py-0.5">
+          <kbd className="font-mono text-[9px] uppercase tracking-wider text-[#030303]/60 border border-[#030303]/10 rounded px-1 py-0.5">
             ESC
           </kbd>
         </div>
 
         <div className="max-h-[460px] overflow-y-auto">
           {!q.trim() ? (
-            <p className="px-4 py-5 text-center text-[11px] text-[#8c7e66]">
-              제목·내용·메모·메타데이터를 검색합니다. ↑↓로 탐색, Enter로 이동.
+            <p className="px-4 py-5 text-center text-[11px] text-[#030303]/60">
+              Search titles, content, memos, and metadata. ↑↓ to navigate, Enter
+              to open.
             </p>
           ) : loading && results.length === 0 ? (
-            <p className="px-4 py-5 text-center text-[11px] text-[#8c7e66]">
-              검색 중…
+            <p className="px-4 py-5 text-center text-[11px] text-[#030303]/60">
+              Searching…
             </p>
           ) : results.length === 0 ? (
-            <p className="px-4 py-5 text-center text-[11px] text-[#8c7e66]">
-              일치하는 결과가 없어요.
+            <p className="px-4 py-5 text-center text-[11px] text-[#030303]/60">
+              Nothing here yet
             </p>
           ) : (
             results.map((r, i) => (
@@ -171,20 +178,22 @@ export const SearchPalette = ({ open, onClose }: Props) => {
                 type="button"
                 onMouseEnter={() => setActive(i)}
                 onClick={() => focusNode(r.artifact_id)}
-                className={`block w-full text-left px-3 py-2 border-b border-[#ddd0b4]/50 last:border-b-0 transition-colors ${
-                  i === active ? "bg-[#ebe0ca]" : "hover:bg-[#f2e9d5]/60"
+                className={`block w-full text-left px-3 py-2 border-b border-[#030303]/[0.06] last:border-b-0 transition-colors ${
+                  i === active
+                    ? "bg-[#030303]/[0.05]"
+                    : "hover:bg-[#030303]/[0.03]"
                 }`}
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
                   {r.match === "memo" ? (
                     <StickyNote className="h-3 w-3 text-[#8e5572] shrink-0" />
                   ) : (
-                    <FileText className="h-3 w-3 text-[#8c7e66] shrink-0" />
+                    <FileText className="h-3 w-3 text-[#030303]/60 shrink-0" />
                   )}
-                  <span className="text-[12.5px] font-semibold text-[#2e2719] truncate">
+                  <span className="text-[12.5px] font-semibold text-[#030303] truncate">
                     {cleanTitle(r.title)}
                   </span>
-                  <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-[#8c7e66] shrink-0">
+                  <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-[#030303]/60 shrink-0">
                     {r.kind}
                     {r.type ? `·${r.type}` : ""}
                   </span>
@@ -205,17 +214,17 @@ export const SearchPalette = ({ open, onClose }: Props) => {
                   ))}
                   {r.match === "memo" && (
                     <span className="rounded-full border border-[#8e5572]/40 bg-[#8e5572]/10 px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-[#8e5572]">
-                      memo 매치
+                      memo match
                     </span>
                   )}
                   {r.status && r.status !== "draft" && (
-                    <span className="rounded-full border border-[#ddd0b4] bg-[#ebe0ca] px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-[#5a5040]">
+                    <span className="rounded-full border border-[#030303]/10 bg-[#030303]/[0.05] px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-[#030303]/80">
                       {r.status}
                     </span>
                   )}
                 </div>
                 {r.snippet && (
-                  <p className="text-[11px] text-[#5a5040] line-clamp-2">
+                  <p className="text-[11px] text-[#030303]/80 line-clamp-2">
                     {r.snippet}
                   </p>
                 )}
@@ -224,14 +233,15 @@ export const SearchPalette = ({ open, onClose }: Props) => {
           )}
         </div>
 
-        <div className="flex items-center gap-3 border-t border-[#ddd0b4] bg-[#f2e9d5]/60 px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-[#8c7e66]">
-          <span>↑↓ 탐색</span>
-          <span>↵ 이동</span>
+        <div className="flex items-center gap-3 border-t border-[#030303]/10 bg-[#030303]/[0.03] px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-[#030303]/60">
+          <span>↑↓ navigate</span>
+          <span>↵ open</span>
           <span className="ml-auto">
-            {results.length > 0 ? `${results.length}개 결과` : ""}
+            {results.length > 0 ? `${results.length} results` : ""}
           </span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

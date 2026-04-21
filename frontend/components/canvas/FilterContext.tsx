@@ -19,10 +19,10 @@ export const ALL_DOMAINS: Domain[] = [
 ];
 
 export const DOMAIN_LABEL: Record<Domain, string> = {
-  recruitment: "채용",
-  marketing: "마케팅",
-  sales: "매출",
-  documents: "서류",
+  recruitment: "Recruitment",
+  marketing: "Marketing",
+  sales: "Sales",
+  documents: "Documents",
 };
 
 export type TimeRange = number | null;

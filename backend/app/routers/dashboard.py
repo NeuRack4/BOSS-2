@@ -44,7 +44,7 @@ async def dashboard_summary(account_id: str = Query(...)):
             {"id": a["id"], "title": a.get("title") or "(제목 없음)"}
             for a in in_domain
             if a.get("kind") == "artifact" and a.get("type") != "archive"
-        ][:3]
+        ][:5]
         domains_stats[d] = {
             "active_count": len(active),
             "upcoming_count": len(upcoming),

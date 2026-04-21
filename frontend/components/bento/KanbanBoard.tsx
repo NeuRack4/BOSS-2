@@ -128,7 +128,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
 
   if (loading && !board) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-xs text-white/50">
+      <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] p-8 text-center text-xs text-[color:var(--kb-fg-muted)]">
         칸반 불러오는 중...
       </div>
     );
@@ -136,7 +136,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-[#E85D4E]/40 bg-[#E85D4E]/10 p-4 text-center text-xs text-[#E85D4E]">
+      <div className="rounded-[5px] border border-[#E85D4E]/40 bg-[#E85D4E]/10 p-4 text-center text-xs text-[#E85D4E]">
         불러오지 못했어요: {error}
       </div>
     );
@@ -144,8 +144,8 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
 
   if (!board || board.sub_hubs.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-xs text-white/50">
-        서브허브가 없어요.
+      <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] p-8 text-center text-xs text-[color:var(--kb-fg-muted)]">
+        Nothing here yet
       </div>
     );
   }
@@ -153,7 +153,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
   return (
     <div className="relative">
       {board.unassigned.length > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/5 px-4 py-3 text-[11px] text-amber-200/80">
+        <div className="mb-4 rounded-[5px] border border-[color:var(--kb-warn-border)] bg-[color:var(--kb-warn-bg)] px-4 py-3 text-[11px] text-[color:var(--kb-warn-fg)]">
           아직 서브허브에 배정되지 않은 항목 {board.unassigned.length}개. 아래
           컬럼으로 끌어 놓아 배정하세요.
         </div>

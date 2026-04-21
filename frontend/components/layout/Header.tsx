@@ -9,7 +9,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   CalendarClock,
   History,
-  LayoutGrid,
   LogOut,
   Moon,
   Search,
@@ -17,6 +16,10 @@ import {
 } from "lucide-react";
 import { ScheduleManagerModal } from "@/components/layout/ScheduleManagerModal";
 import { ActivityModal } from "@/components/layout/ActivityModal";
+import { ChatHistoryModal } from "@/components/layout/ChatHistoryModal";
+import { ProfileModal } from "@/components/layout/ProfileModal";
+import { LongTermMemoryModal } from "@/components/layout/LongTermMemoryModal";
+import { MemosModal } from "@/components/layout/MemosModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 
 export const Header = () => {
@@ -24,6 +27,10 @@ export const Header = () => {
   const supabase = createClient();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [longMemOpen, setLongMemOpen] = useState(false);
+  const [memosOpen, setMemosOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [darkBg, setDarkBg] = useState(false);
 
@@ -57,11 +64,26 @@ export const Header = () => {
   useEffect(() => {
     const onOpenSchedule = () => setScheduleOpen(true);
     const onOpenActivity = () => setActivityOpen(true);
+    const onOpenChatHistory = () => setChatHistoryOpen(true);
+    const onOpenProfile = () => setProfileOpen(true);
+    const onOpenLongMem = () => setLongMemOpen(true);
+    const onOpenMemos = () => setMemosOpen(true);
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
+    window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);
+    window.addEventListener("boss:open-profile-modal", onOpenProfile);
+    window.addEventListener("boss:open-longmem-modal", onOpenLongMem);
+    window.addEventListener("boss:open-memos-modal", onOpenMemos);
     return () => {
       window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
       window.removeEventListener("boss:open-activity-modal", onOpenActivity);
+      window.removeEventListener(
+        "boss:open-chat-history-modal",
+        onOpenChatHistory,
+      );
+      window.removeEventListener("boss:open-profile-modal", onOpenProfile);
+      window.removeEventListener("boss:open-longmem-modal", onOpenLongMem);
+      window.removeEventListener("boss:open-memos-modal", onOpenMemos);
     };
   }, []);
 
@@ -75,7 +97,7 @@ export const Header = () => {
     <header className="relative h-12 border-b border-[#ddd0b4] bg-[#fbf6eb] text-[#2e2719] flex items-center justify-between px-4 shrink-0 z-50 gap-4">
       <Link
         href="/dashboard"
-        aria-label="BOSS 대쉬보드"
+        aria-label="BOSS Dashboard"
         className="flex items-center rounded-sm transition-opacity hover:opacity-80 focus:outline-none focus:ring-1 focus:ring-[#bfae8a] shrink-0"
       >
         <Image
@@ -96,7 +118,7 @@ export const Header = () => {
           className="pointer-events-auto flex items-center gap-2 w-[420px] max-w-[60vw] rounded-md border border-[#ddd0b4] bg-[#ebe0ca]/40 px-3 py-1.5 text-[12px] text-[#8c7e66] hover:bg-[#ebe0ca] hover:text-[#5a5040] transition-colors"
         >
           <Search className="h-3.5 w-3.5" />
-          <span className="flex-1 text-left">노드·메모 검색…</span>
+          <span className="flex-1 text-left">Search…</span>
           <kbd className="font-mono text-[10px] uppercase tracking-wider border border-[#ddd0b4] rounded px-1 py-0.5 bg-[#fbf6eb]">
             ⌘K
           </kbd>
@@ -107,40 +129,28 @@ export const Header = () => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("boss:reset-layout"))
-          }
-          title="노드 정렬 초기화"
-          className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-        >
-          <LayoutGrid className="h-4 w-4 mr-1.5" />
-          정렬
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
           onClick={() => setScheduleOpen(true)}
-          title="일정 관리"
+          title="Schedule"
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
         >
           <CalendarClock className="h-4 w-4 mr-1.5" />
-          일정 관리
+          Schedule
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setActivityOpen(true)}
-          title="활동이력"
+          title="Activity"
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
         >
           <History className="h-4 w-4 mr-1.5" />
-          활동이력
+          Activity
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={toggleBg}
-          title={darkBg ? "배경 밝게" : "배경 어둡게"}
+          title={darkBg ? "Switch to light" : "Switch to dark"}
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
         >
           {darkBg ? (
@@ -157,7 +167,7 @@ export const Header = () => {
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
         >
           <LogOut className="h-4 w-4 mr-1.5" />
-          로그아웃
+          Logout
         </Button>
       </div>
 
@@ -169,6 +179,16 @@ export const Header = () => {
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
       />
+      <ChatHistoryModal
+        open={chatHistoryOpen}
+        onClose={() => setChatHistoryOpen(false)}
+      />
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <LongTermMemoryModal
+        open={longMemOpen}
+        onClose={() => setLongMemOpen(false)}
+      />
+      <MemosModal open={memosOpen} onClose={() => setMemosOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );

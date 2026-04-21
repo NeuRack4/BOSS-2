@@ -43,7 +43,7 @@ export const LogDetailModal = ({
         )}
         {!content && Object.keys(metadata).length === 0 && (
           <p className="py-6 text-center text-[12px] text-[#8c7e66]">
-            표시할 내용이 없습니다.
+            Nothing here yet
           </p>
         )}
       </div>

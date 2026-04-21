@@ -131,7 +131,7 @@ export const SummaryModal = ({ open, onClose, scope, title }: Props) => {
         <ScrollArea className="h-[360px] pr-2">
           {data.logs.length === 0 ? (
             <p className="py-8 text-center text-[12px] text-[#8c7e66]">
-              최근 30일 활동이 없습니다.
+              Nothing here yet
             </p>
           ) : (
             <ul className="space-y-2">

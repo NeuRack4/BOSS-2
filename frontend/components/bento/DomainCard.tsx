@@ -20,7 +20,7 @@ export const DomainCard = ({ domain, stats }: Props) => {
     <Link
       href={`/${domain}`}
       className={cn(
-        "group relative flex h-full flex-col justify-between overflow-hidden rounded-[5px] p-5 shadow-lg transition-all",
+        "group relative flex h-full flex-col overflow-hidden rounded-[5px] p-5 shadow-lg transition-all",
         "hover:scale-[1.015] hover:shadow-xl",
         meta.bg,
         textClass,
@@ -33,39 +33,90 @@ export const DomainCard = ({ domain, stats }: Props) => {
         )}
         aria-hidden
       />
-      <div className="relative flex items-start justify-between">
-        <span className="text-[15px] font-semibold tracking-tight">
+      <div className="relative mb-2.5 flex items-start justify-between">
+        <span className="text-base font-semibold tracking-tight">
           {meta.label}
         </span>
         <ArrowUpRight className="h-5 w-5 opacity-70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
       </div>
 
-      <div className="relative space-y-2">
-        <div className="flex items-baseline gap-3 text-[11px] font-medium tracking-wide">
-          <span className="flex items-center gap-1">
-            <span className="opacity-70">활성</span>
-            <b className="text-sm font-bold">{stats.active_count}</b>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="opacity-70">임박</span>
-            <b className="text-sm font-bold">{stats.upcoming_count}</b>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="opacity-70">최근</span>
-            <b className="text-sm font-bold">{stats.recent_count}</b>
-          </span>
-        </div>
-        <ul className="space-y-1 text-[11px] leading-snug opacity-90">
-          {stats.recent_titles.slice(0, 2).map((t) => (
-            <li key={t.id} className="truncate">
-              · {t.title}
-            </li>
-          ))}
-          {stats.recent_titles.length === 0 && (
-            <li className="italic opacity-60">최근 항목 없음</li>
-          )}
-        </ul>
+      <div
+        className={cn(
+          "relative grid grid-cols-3 overflow-hidden rounded-[5px]",
+          meta.isDark ? "bg-white/10" : "bg-black/[0.06]",
+        )}
+      >
+        <Stat
+          value={stats.active_count}
+          label="Active"
+          divider={meta.isDark ? "border-white/15" : "border-black/10"}
+        />
+        <Stat
+          value={stats.upcoming_count}
+          label="Due"
+          divider={meta.isDark ? "border-white/15" : "border-black/10"}
+          border
+        />
+        <Stat
+          value={stats.recent_count}
+          label="Recent"
+          divider={meta.isDark ? "border-white/15" : "border-black/10"}
+          border
+        />
       </div>
+
+      <ul
+        className={cn(
+          "relative mt-2.5 flex min-h-0 flex-1 flex-col justify-end gap-1 overflow-hidden text-[12.5px] leading-snug",
+        )}
+      >
+        {stats.recent_titles.length === 0 ? (
+          <li
+            className={cn(
+              "truncate rounded-[5px] px-2.5 py-1.5 italic opacity-60",
+              meta.isDark ? "bg-white/10" : "bg-black/[0.06]",
+            )}
+          >
+            Nothing here yet
+          </li>
+        ) : (
+          stats.recent_titles.slice(0, 4).map((t) => (
+            <li
+              key={t.id}
+              className={cn(
+                "truncate rounded-[5px] px-2.5 py-1.5",
+                meta.isDark ? "bg-white/10" : "bg-black/[0.06]",
+              )}
+            >
+              {t.title}
+            </li>
+          ))
+        )}
+      </ul>
     </Link>
   );
 };
+
+const Stat = ({
+  value,
+  label,
+  divider,
+  border = false,
+}: {
+  value: number;
+  label: string;
+  divider: string;
+  border?: boolean;
+}) => (
+  <div
+    className={cn(
+      "flex flex-col items-center justify-center px-1 py-1.5",
+      border && `border-l ${divider}`,
+    )}
+  >
+    <div className="text-lg font-bold leading-none tabular-nums">{value}</div>
+    <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider opacity-60">
+      {label}
+    </div>
+  </div>
+);

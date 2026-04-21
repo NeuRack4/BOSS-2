@@ -436,7 +436,7 @@ export const FlowCanvas = () => {
   const [stickyHoveredId, setStickyHoveredId] = useState<string | null>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const nodeOpRef = useRef<Map<string, number>>(new Map());
-  const { send: sendChat, openChat } = useChat();
+  const { send: sendChat } = useChat();
   const { timeRangeDays, selectedDomains, showArchive, setShowArchive } =
     useFilter();
   const filterRef = useRef({ timeRangeDays, selectedDomains });
@@ -1340,15 +1340,12 @@ export const FlowCanvas = () => {
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const data = node.data as unknown as ArtifactRow;
-      if (data.kind === "anchor") {
-        openChat();
-        return;
-      }
+      if (data.kind === "anchor") return;
       const detail = buildDetail(node.id);
       if (!detail) return;
       setModal({ type: "node-detail", node: detail });
     },
-    [buildDetail, openChat],
+    [buildDetail],
   );
 
   const menuItems = useMemo(

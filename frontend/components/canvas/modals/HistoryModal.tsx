@@ -68,7 +68,7 @@ export const HistoryModal = ({ open, onClose, artifactId, title }: Props) => {
         </div>
       ) : !logs || logs.length === 0 ? (
         <p className="py-8 text-center text-[12px] text-[#8c7e66]">
-          실행 이력이 없습니다.
+          Nothing here yet
         </p>
       ) : (
         <ScrollArea className="h-[360px] pr-2">

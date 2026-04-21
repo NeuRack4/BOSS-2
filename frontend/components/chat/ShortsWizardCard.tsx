@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
-  Youtube,
+  Video,
   Upload,
   ChevronRight,
   ChevronLeft,
@@ -30,7 +30,10 @@ export const extractShortsWizardPayload = (
   const m = text.match(_SHORTS_RE);
   if (!m) return { cleaned: text, payload: null };
   try {
-    return { cleaned: text.replace(_SHORTS_RE, "").trimEnd(), payload: JSON.parse(m[1]) };
+    return {
+      cleaned: text.replace(_SHORTS_RE, "").trimEnd(),
+      payload: JSON.parse(m[1]),
+    };
   } catch {
     return { cleaned: text.replace(_SHORTS_RE, "").trimEnd(), payload: null };
   }
@@ -46,14 +49,18 @@ type SlideItem = {
 };
 
 const STEP_LABELS: Record<Step, string> = {
-  upload:    "① 사진 업로드",
+  upload: "① 사진 업로드",
   subtitles: "② 자막 편집",
-  settings:  "③ 설정",
-  generate:  "④ 게시",
+  settings: "③ 설정",
+  generate: "④ 게시",
 };
 const STEPS: Step[] = ["upload", "subtitles", "settings", "generate"];
 
-export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) => {
+export const ShortsWizardCard = ({
+  payload,
+}: {
+  payload: ShortsWizardPayload;
+}) => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   const [step, setStep] = useState<Step>("upload");
   const [slides, setSlides] = useState<SlideItem[]>([]);
@@ -64,14 +71,16 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [duration, setDuration] = useState(payload.duration ?? 3);
-  const [privacy, setPrivacy] = useState<"private" | "unlisted" | "public">("private");
+  const [privacy, setPrivacy] = useState<"private" | "unlisted" | "public">(
+    "private",
+  );
 
   // youtube 연결 상태
   const [ytConnected, setYtConnected] = useState<boolean | null>(null);
 
   // generate
   const [genState, setGenState] = useState<GenState>("idle");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeUrl, setVideoUrl] = useState("");
   const [storageUrl, setStorageUrl] = useState("");
   const [genError, setGenError] = useState("");
 
@@ -86,12 +95,16 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
   // YouTube 연결 상태 확인
   const checkYtStatus = useCallback(async () => {
     const accountId = await getAccountId();
-    const res = await fetch(`${apiBase}/api/marketing/youtube/oauth/status?account_id=${accountId}`);
+    const res = await fetch(
+      `${apiBase}/api/marketing/youtube/oauth/status?account_id=${accountId}`,
+    );
     const json = await res.json();
     setYtConnected(json.connected ?? false);
   }, [apiBase]);
 
-  useEffect(() => { checkYtStatus(); }, [checkYtStatus]);
+  useEffect(() => {
+    checkYtStatus();
+  }, [checkYtStatus]);
 
   // 파일 선택
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,13 +132,18 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
       form.append("account_id", accountId);
       form.append("context", payload.topic);
       slides.forEach((s) => form.append("images", s.file));
-      const res = await fetch(`${apiBase}/api/marketing/youtube/shorts/preview-subtitles`, {
-        method: "POST",
-        body: form,
-      });
+      const res = await fetch(
+        `${apiBase}/api/marketing/youtube/shorts/preview-subtitles`,
+        {
+          method: "POST",
+          body: form,
+        },
+      );
       const json = await res.json();
       const subs: string[] = json.data?.subtitles ?? [];
-      setSlides((prev) => prev.map((s, i) => ({ ...s, subtitle: subs[i] ?? s.subtitle })));
+      setSlides((prev) =>
+        prev.map((s, i) => ({ ...s, subtitle: subs[i] ?? s.subtitle })),
+      );
       setStep("subtitles");
     } catch (err) {
       alert(err instanceof Error ? err.message : "자막 생성 실패");
@@ -135,11 +153,17 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
   };
 
   // YouTube OAuth 팝업
-  const handleConnectYoutube = async () => {
+  const handleConnectVideo = async () => {
     const accountId = await getAccountId();
-    const res = await fetch(`${apiBase}/api/marketing/youtube/oauth/start?account_id=${accountId}`);
+    const res = await fetch(
+      `${apiBase}/api/marketing/youtube/oauth/start?account_id=${accountId}`,
+    );
     const { url } = await res.json();
-    const popup = window.open(url, "youtube_oauth", "popup=true,width=600,height=700");
+    const popup = window.open(
+      url,
+      "youtube_oauth",
+      "popup=true,width=600,height=700",
+    );
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "youtube_connected") {
         window.removeEventListener("message", onMsg);
@@ -156,7 +180,10 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
 
   // 영상 생성 + 업로드
   const handleGenerate = async () => {
-    if (!ytConnected) { alert("먼저 YouTube를 연결해주세요."); return; }
+    if (!ytConnected) {
+      alert("먼저 YouTube를 연결해주세요.");
+      return;
+    }
     setGenState("generating");
     setGenError("");
     try {
@@ -165,20 +192,32 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
       form.append("account_id", accountId);
       form.append("title", title);
       form.append("description", description);
-      form.append("tags", JSON.stringify(tags.split(",").map((t) => t.trim()).filter(Boolean)));
+      form.append(
+        "tags",
+        JSON.stringify(
+          tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
+        ),
+      );
       form.append("subtitles", JSON.stringify(slides.map((s) => s.subtitle)));
       form.append("duration_per_slide", String(duration));
       form.append("privacy_status", privacy);
       slides.forEach((s) => form.append("images", s.file));
 
       setGenState("uploading");
-      const res = await fetch(`${apiBase}/api/marketing/youtube/shorts/generate`, {
-        method: "POST",
-        body: form,
-      });
+      const res = await fetch(
+        `${apiBase}/api/marketing/youtube/shorts/generate`,
+        {
+          method: "POST",
+          body: form,
+        },
+      );
       const json = await res.json();
-      if (!json.success && !json.storage_url) throw new Error(json.error || "생성 실패");
-      setYoutubeUrl(json.youtube_url ?? "");
+      if (!json.success && !json.storage_url)
+        throw new Error(json.error || "생성 실패");
+      setVideoUrl(json.youtube_url ?? "");
       setStorageUrl(json.storage_url ?? "");
       setGenError(json.error ?? "");
       setGenState("done");
@@ -194,8 +233,10 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
     <div className="w-[340px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
       {/* Header */}
       <div className="flex items-center gap-2 bg-[#ff0000] px-4 py-3">
-        <Youtube className="h-5 w-5 text-white" />
-        <span className="text-[13px] font-semibold text-white">YouTube Shorts 제작</span>
+        <Video className="h-5 w-5 text-white" />
+        <span className="text-[13px] font-semibold text-white">
+          YouTube Shorts 제작
+        </span>
       </div>
 
       {/* Step indicator */}
@@ -204,7 +245,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
           <div
             key={s}
             className={`flex-1 py-1.5 text-center text-[10px] font-medium transition-colors ${
-              step === s ? "border-b-2 border-[#ff0000] text-[#ff0000]" : "text-[#8c7e66]"
+              step === s
+                ? "border-b-2 border-[#ff0000] text-[#ff0000]"
+                : "text-[#8c7e66]"
             }`}
           >
             {STEP_LABELS[s]}
@@ -219,7 +262,14 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
             <p className="text-[12px] text-[#5a5040]">
               슬라이드로 사용할 사진을 <strong>2~10장</strong> 업로드하세요.
             </p>
-            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
 
             {slides.length === 0 ? (
               <button
@@ -228,14 +278,22 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                 className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#ddd0b4] py-8 text-[#8c7e66] hover:border-[#ff0000]/50 hover:bg-[#fff5f5] transition-colors"
               >
                 <Upload className="h-7 w-7 opacity-50" />
-                <span className="text-[12px]">사진을 업로드하세요 (최대 10장)</span>
+                <span className="text-[12px]">
+                  사진을 업로드하세요 (최대 10장)
+                </span>
               </button>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {slides.map((s, i) => (
                   <div key={i} className="relative">
                     <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-[#f0ece4]">
-                      <Image src={s.preview} alt={`slide-${i}`} fill className="object-cover" unoptimized />
+                      <Image
+                        src={s.preview}
+                        alt={`slide-${i}`}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
                     </div>
                     <button
                       type="button"
@@ -244,7 +302,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                     >
                       ✕
                     </button>
-                    <div className="mt-0.5 text-center text-[10px] text-[#8c7e66]">{i + 1}</div>
+                    <div className="mt-0.5 text-center text-[10px] text-[#8c7e66]">
+                      {i + 1}
+                    </div>
                   </div>
                 ))}
                 {slides.length < 10 && (
@@ -265,7 +325,16 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
               disabled={slides.length < 2 || loadingSubtitles}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#ff0000] py-2 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              {loadingSubtitles ? <><Loader2 className="h-4 w-4 animate-spin" />자막 생성 중...</> : <>AI 자막 생성 <ChevronRight className="h-4 w-4" /></>}
+              {loadingSubtitles ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  자막 생성 중...
+                </>
+              ) : (
+                <>
+                  AI 자막 생성 <ChevronRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </div>
         )}
@@ -273,12 +342,20 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
         {/* ── Step 2: 자막 편집 ── */}
         {step === "subtitles" && (
           <div className="space-y-3">
-            <p className="text-[12px] text-[#5a5040]">각 사진의 자막을 확인하고 수정하세요.</p>
+            <p className="text-[12px] text-[#5a5040]">
+              각 사진의 자막을 확인하고 수정하세요.
+            </p>
             <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
               {slides.map((s, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <div className="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-[#f0ece4]">
-                    <Image src={s.preview} alt={`s${i}`} fill className="object-cover" unoptimized />
+                    <Image
+                      src={s.preview}
+                      alt={`s${i}`}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
                   </div>
                   <input
                     type="text"
@@ -286,7 +363,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                     maxLength={25}
                     onChange={(e) =>
                       setSlides((prev) =>
-                        prev.map((sl, idx) => idx === i ? { ...sl, subtitle: e.target.value } : sl)
+                        prev.map((sl, idx) =>
+                          idx === i ? { ...sl, subtitle: e.target.value } : sl,
+                        ),
                       )
                     }
                     className="flex-1 rounded-lg border border-[#ddd0b4] px-2 py-1.5 text-[12px] outline-none focus:border-[#ff0000]"
@@ -296,10 +375,18 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
               ))}
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setStep("upload")} className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]">
+              <button
+                type="button"
+                onClick={() => setStep("upload")}
+                className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+              >
                 <ChevronLeft className="h-3.5 w-3.5" /> 이전
               </button>
-              <button type="button" onClick={() => setStep("settings")} className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90">
+              <button
+                type="button"
+                onClick={() => setStep("settings")}
+                className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90"
+              >
                 다음 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -310,7 +397,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
         {step === "settings" && (
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">제목</label>
+              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+                제목
+              </label>
               <input
                 type="text"
                 value={title}
@@ -320,7 +409,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">설명 (선택)</label>
+              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+                설명 (선택)
+              </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -329,7 +420,9 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">태그 (쉼표 구분)</label>
+              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+                태그 (쉼표 구분)
+              </label>
               <input
                 type="text"
                 value={tags}
@@ -340,17 +433,25 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">슬라이드당 초</label>
+                <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+                  슬라이드당 초
+                </label>
                 <select
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
                   className="w-full rounded-lg border border-[#ddd0b4] px-2 py-2 text-[12px] outline-none"
                 >
-                  {[2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}초</option>)}
+                  {[2, 3, 4, 5].map((v) => (
+                    <option key={v} value={v}>
+                      {v}초
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex-1">
-                <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">공개 범위</label>
+                <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+                  공개 범위
+                </label>
                 <select
                   value={privacy}
                   onChange={(e) => setPrivacy(e.target.value as typeof privacy)}
@@ -363,10 +464,18 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
               </div>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setStep("subtitles")} className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]">
+              <button
+                type="button"
+                onClick={() => setStep("subtitles")}
+                className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+              >
                 <ChevronLeft className="h-3.5 w-3.5" /> 이전
               </button>
-              <button type="button" onClick={() => setStep("generate")} className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90">
+              <button
+                type="button"
+                onClick={() => setStep("generate")}
+                className="ml-auto flex items-center gap-1 rounded-lg bg-[#ff0000] px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90"
+              >
                 다음 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -377,10 +486,18 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
         {step === "generate" && (
           <div className="space-y-3">
             {/* YouTube 연결 상태 */}
-            <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-[12px] ${ytConnected ? "bg-[#f0fff4] text-[#276749]" : "bg-[#fff5f5] text-[#8a3a28]"}`}>
-              <span>{ytConnected ? "✅ YouTube 연결됨" : "❌ YouTube 미연결"}</span>
+            <div
+              className={`flex items-center justify-between rounded-lg px-3 py-2 text-[12px] ${ytConnected ? "bg-[#f0fff4] text-[#276749]" : "bg-[#fff5f5] text-[#8a3a28]"}`}
+            >
+              <span>
+                {ytConnected ? "✅ YouTube 연결됨" : "❌ YouTube 미연결"}
+              </span>
               {!ytConnected && (
-                <button type="button" onClick={handleConnectYoutube} className="rounded-md bg-[#ff0000] px-2 py-1 text-[11px] font-semibold text-white hover:opacity-90">
+                <button
+                  type="button"
+                  onClick={handleConnectVideo}
+                  className="rounded-md bg-[#ff0000] px-2 py-1 text-[11px] font-semibold text-white hover:opacity-90"
+                >
                   연결하기
                 </button>
               )}
@@ -388,9 +505,20 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
 
             {/* 요약 */}
             <div className="rounded-lg border border-[#f0ece4] p-3 text-[12px] text-[#5a5040] space-y-1">
-              <div><strong>제목:</strong> {title}</div>
-              <div><strong>슬라이드:</strong> {slides.length}장 × {duration}초</div>
-              <div><strong>공개 범위:</strong> {privacy === "private" ? "비공개" : privacy === "unlisted" ? "미등록" : "공개"}</div>
+              <div>
+                <strong>제목:</strong> {title}
+              </div>
+              <div>
+                <strong>슬라이드:</strong> {slides.length}장 × {duration}초
+              </div>
+              <div>
+                <strong>공개 범위:</strong>{" "}
+                {privacy === "private"
+                  ? "비공개"
+                  : privacy === "unlisted"
+                    ? "미등록"
+                    : "공개"}
+              </div>
             </div>
 
             {genState === "done" ? (
@@ -400,18 +528,28 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                   <span>완료!</span>
                 </div>
                 {youtubeUrl && (
-                  <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg bg-[#ff0000] px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90">
+                  <a
+                    href={youtubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-[#ff0000] px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90"
+                  >
                     <Link className="h-3.5 w-3.5" /> YouTube에서 보기
                   </a>
                 )}
                 {storageUrl && !youtubeUrl && (
-                  <a href={storageUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]">
+                  <a
+                    href={storageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+                  >
                     <Link className="h-3.5 w-3.5" /> 영상 다운로드
                   </a>
                 )}
-                {genError && <p className="text-[11px] text-[#8a3a28]">{genError}</p>}
+                {genError && (
+                  <p className="text-[11px] text-[#8a3a28]">{genError}</p>
+                )}
               </div>
             ) : genState === "error" ? (
               <div className="space-y-2">
@@ -419,7 +557,11 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                   <XCircle className="h-4 w-4" />
                   <span className="truncate">{genError}</span>
                 </div>
-                <button type="button" onClick={handleGenerate} className="w-full rounded-lg border border-[#ddd0b4] py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]">
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  className="w-full rounded-lg border border-[#ddd0b4] py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+                >
                   다시 시도
                 </button>
               </div>
@@ -428,11 +570,18 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                 {(genState === "generating" || genState === "uploading") && (
                   <div className="flex items-center gap-2 text-[12px] text-[#5a5040]">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {genState === "generating" ? "영상 생성 중..." : "YouTube 업로드 중..."}
+                    {genState === "generating"
+                      ? "영상 생성 중..."
+                      : "YouTube 업로드 중..."}
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setStep("settings")} disabled={genState !== "idle"} className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4] disabled:opacity-50">
+                  <button
+                    type="button"
+                    onClick={() => setStep("settings")}
+                    disabled={genState !== "idle"}
+                    className="flex items-center gap-1 rounded-lg border border-[#ddd0b4] px-3 py-2 text-[12px] text-[#5a5040] hover:bg-[#f0ece4] disabled:opacity-50"
+                  >
                     <ChevronLeft className="h-3.5 w-3.5" /> 이전
                   </button>
                   <button
@@ -441,7 +590,7 @@ export const ShortsWizardCard = ({ payload }: { payload: ShortsWizardPayload }) 
                     disabled={!ytConnected || genState !== "idle"}
                     className="ml-auto flex items-center gap-1.5 rounded-lg bg-[#ff0000] px-4 py-2 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
-                    <Youtube className="h-4 w-4" />
+                    <Video className="h-4 w-4" />
                     Shorts 게시
                   </button>
                 </div>
