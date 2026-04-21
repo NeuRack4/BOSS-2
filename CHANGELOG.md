@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — feature/sales-analytics (비용 입력 + 매출 UX 개선)
+
+### Added
+
+**`supabase/migrations/022_cost_records.sql`**
+
+- `cost_records` 테이블 — `account_id, item_name, category, amount, memo, recorded_date, source`. RLS `auth.uid()` 기반.
+- VALID_CATEGORIES: 재료비 · 인건비 · 임대료 · 공과금 · 마케팅 · 기타 (CHECK 제약).
+- 인덱스: `idx_cost_records_account_date (account_id, recorded_date desc)`.
+
+**`backend/app/routers/costs.py`** (신규)
+
+- `POST /api/costs` (201) — 비용 다건 저장 + 임베딩 + `cost_report` artifact 자동 생성 + Costs 서브허브 `artifact_edges` 연결.
+- `GET /api/costs` — 기간별 비용 조회 (기본 최근 30일).
+- `GET /api/costs/summary` — 일/주/월 집계 (카테고리별 · 항목별 소계).
+- `DELETE /api/costs/{id}` — 단건 삭제 + 임베딩 제거.
+
+**`frontend/components/chat/CostInputTable.tsx`** (신규)
+
+- 항목명 · 카테고리(드롭다운) · 금액 · 메모 편집 가능한 비용 입력 모달.
+- 행 추가/삭제, 합계 실시간 계산, `POST /api/costs` 직접 호출.
+- `onSaved(message, artifactId?)` 콜백 — 저장 후 "캔버스에서 보기" 버튼 연동.
+
+### Changed
+
+**`backend/app/agents/sales.py`**
+
+- `_VAGUE_COST_RE` — "비용 입력" 류 의도 감지 정규식.
+- `vague_cost` 얼리 리턴 — GPT 우회, `cost_records` DB 조회 → 최근 기록 테이블 + `[ACTION:OPEN_COST_TABLE:{json}]` 마커 반환.
+- `vague_entry` 로직 개선 — 최근 매출 기록 있으면 3-버튼 UX 반환 (동일저장 / 표로 수정 / 글로 새로 입력), 없으면 빈 표 오픈.
+- `[CHOICES]` 예시 제거 + "vague 입력 시 CHOICES 금지" 명시 → 불필요한 선택버튼 5개 등장 버그 수정.
+- RAG/장기기억 컨텍스트를 vague_entry 경로에서 차단 → 구 데이터 재표시 버그 수정.
+
+**`frontend/components/chat/ChatOverlay.tsx`**
+
+- `parseCostAction()` — `[ACTION:OPEN_COST_TABLE:{json}]` 마커 파싱 (중괄호 깊이 카운팅).
+- `costAction` Message 필드 추가 + `CostInputTable` 모달 렌더링.
+- 비용 버튼 분기: `items===0` → "📋 표로 입력하기"; `items>0` → "💾 저장" + "📋 표로 수정입력하기" + "✏️ 새로 입력".
+- 매출 저장 후 `artifact_id` 추출 → "📍 캔버스에서 보기" 버튼 노출 + `boss:focus-node` 이벤트 발행.
+- `SalesInputTable.onSaved` 시그니처 `(message, artifactId?)` 로 확장.
+
+**`frontend/components/chat/SalesInputTable.tsx`**
+
+- `onSaved(message, artifactId?)` — 저장 응답에서 `artifact_id` 추출 후 콜백으로 전달.
+
+**`backend/app/main.py`** — `costs` 라우터 등록.
+
+---
+
 ## [Unreleased] — feature-marketing (Instagram 카드 렌더링 수정 + 오케스트레이터 라우팅 보강)
 
 ### Fixed
