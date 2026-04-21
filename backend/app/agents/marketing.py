@@ -507,14 +507,14 @@ async def run_shorts_wizard(
     history: list[dict],
     long_term_context: str = "",
     rag_context: str = "",
-    topic: str,
+    topic: str = "",
     slide_count: int = 5,
     duration: float = 3.0,
     **_: object,
 ) -> str:
     """YouTube Shorts 제작 마법사 UI를 채팅창에 표시."""
     import json as _json
-    payload = {"topic": topic, "slide_count": slide_count, "duration": duration}
+    payload = {"topic": topic or "YouTube Shorts", "slide_count": slide_count, "duration": duration}
     marker = f"[[SHORTS_WIZARD]]{_json.dumps(payload, ensure_ascii=False)}[[/SHORTS_WIZARD]]"
     return (
         f"YouTube Shorts 제작 마법사를 시작할게요! 🎬\n"
@@ -759,17 +759,18 @@ def describe(account_id: str) -> list[dict]:
             "name": "mkt_shorts_video",
             "description": (
                 "사용자가 업로드한 이미지 슬라이드로 YouTube Shorts 세로형 영상을 제작하고 자동 업로드한다. "
-                "쇼츠 / 유튜브 영상 / 슬라이드 영상 / 사진으로 영상 만들기 요청 시 사용."
+                "쇼츠 / 유튜브 영상 / 슬라이드 영상 / 사진으로 영상 만들기 요청 시 즉시 호출한다. "
+                "파라미터를 묻지 말고 바로 호출할 것 — 제목·슬라이드 수·시간은 위자드 UI에서 사용자가 직접 설정한다."
             ),
             "handler": run_shorts_wizard,
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic":       {"type": "string", "description": "영상 주제 또는 제목"},
-                    "slide_count": {"type": "integer", "description": "슬라이드 수 (2~10)", "default": 5},
-                    "duration":    {"type": "number", "description": "슬라이드당 초 (2~5)", "default": 3},
+                    "topic":       {"type": "string", "description": "메시지에서 파악된 주제 (없으면 빈 문자열)"},
+                    "slide_count": {"type": "integer", "description": "슬라이드 수 (기본 5)", "default": 5},
+                    "duration":    {"type": "number", "description": "슬라이드당 초 (기본 3)", "default": 3},
                 },
-                "required": ["topic"],
+                "required": [],
             },
         },
         {
