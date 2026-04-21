@@ -81,6 +81,16 @@ _VAGUE_ENTRY_RE = re.compile(
 # "글로 입력하기" 클릭 감지 — vague_entry 제외 대상 (ACTION 마커 재삽입 방지)
 _EXPLICIT_TEXT_RE = re.compile(r"글로\s*(입력|작성|쓸|쓰)", re.IGNORECASE)
 
+# 비용 입력 의도 감지
+_VAGUE_COST_RE = re.compile(
+    r"(비용|지출|원가|경비|지출비|출금|나간\s*돈|쓴\s*돈).{0,20}(입력|기록|넣|저장|할래|하고\s*싶|어떻게|방법|시작)"
+    r"|비용\s*(입력|기록|넣|저장)",
+    re.IGNORECASE,
+)
+
+# 비용 저장 의도 (history의 마지막 COST 마커 재삽입용)
+_COST_ACTION_RE = re.compile(r"\[ACTION:OPEN_COST_TABLE:(.*?)\]", re.DOTALL)
+
 # 저장 의도 감지 — history에서 마지막 ACTION 마커를 재삽입
 _SAVE_INTENT_RE = re.compile(
     r"(저장|기록해|넣어줘|기록해줘|확인|맞아|응|ㅇㅇ|그래|ok)",
@@ -294,15 +304,11 @@ artifact 저장 시 sub_domain 필드를 반드시 포함:
 - 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
 - 없는 수치(매출·방문자 수 등)는 절대 추측하지 않음
 - 실용적이고 바로 사용 가능한 한국어로 작성
+- 과거 컨텍스트(RAG)에 이전 매출 데이터가 있더라도 현재 메시지에 명시된 수량/금액만 파싱할 것 — 이전 데이터를 새 입력으로 재파싱 금지
 
-예시 (정보 부족 시):
-"매출 관련해서 무엇을 도와드릴까요?
-[CHOICES]
-매출 분석 리포트 보기
-가격 전략 수립
-고객 응대 스크립트
-비용 기록하기
-[/CHOICES]"
+[중요] "매출 입력해줘", "기록할게", "오늘 매출 입력" 등 수량 없이 입력 의도만 있는 경우:
+→ [CHOICES] 버튼 출력 금지
+→ 반드시 [ACTION:OPEN_SALES_TABLE:{"date":"오늘날짜","items":[]}] 마커만 출력
 """
 )
 
@@ -347,6 +353,34 @@ async def _parse_sales_from_message(message: str) -> dict | None:
         return json.loads(raw)
     except Exception as e:
         log.warning("sales parse error: %s", e)
+        return None
+
+
+async def _parse_cost_from_message(message: str) -> list[dict] | None:
+    """자연어 비용 텍스트에서 항목/금액 파싱 (GPT-4o-mini)."""
+    today = date.today().isoformat()
+    prompt = (
+        f"오늘 날짜: {today}\n"
+        "아래 텍스트에서 비용 항목을 파싱해 반드시 다음 JSON 형식으로만 반환해. 다른 텍스트 절대 금지.\n"
+        '{"items":[{"item_name":"항목명","category":"분류","amount":금액정수}]}\n'
+        "- category 허용값: 재료비|인건비|임대료|공과금|마케팅|기타\n"
+        "- amount = 수량×단가 계산 후 정수. 단가만 있으면 그게 amount\n"
+        "- 파싱 불가 시 {\"items\":[]}"
+    )
+    try:
+        resp = await chat_completion(
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": message},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw = resp.choices[0].message.content or "{}"
+        obj = json.loads(raw)
+        items = obj.get("items", [])
+        return items if items else None
+    except Exception as e:
+        log.warning("cost parse error: %s", e)
         return None
 
 
@@ -537,9 +571,96 @@ async def run_sales_checklist(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+async def run_cost_entry(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """비용 입력 의도 → vague_cost 로직 직접 실행 (GPT 우회)."""
+    if re.search(r"글로\s*(입력|쓸|작성)", message):
+        return "비용 내역을 알려주세요! 예: '식재료비 50,000원, 포장재 12,000원'"
+
+    from datetime import date as _date
+    from app.core.supabase import get_supabase
+    today = _date.today().isoformat()
+
+    # 실제 비용 데이터가 포함된 메시지면 파싱 후 표+저장버튼 반환
+    if not _VAGUE_COST_RE.search(message):
+        parsed_items = await _parse_cost_from_message(message)
+        if parsed_items:
+            rows = ["| 항목 | 분류 | 금액 |", "|------|------|-----:|"]
+            total = 0
+            for it in parsed_items:
+                rows.append(f"| {it['item_name']} | {it.get('category','기타')} | {it['amount']:,} |")
+                total += it["amount"]
+            rows.append(f"| **합계** | | **{total:,}원** |")
+            table_md = "\n".join(rows)
+            action = json.dumps({"date": today, "items": parsed_items}, ensure_ascii=False)
+            return (
+                f"아래 내용으로 비용을 기록할까요?\n\n"
+                f"{table_md}\n\n"
+                f"[ACTION:OPEN_COST_TABLE:{action}]"
+            )
+    try:
+        sb = get_supabase()
+        recent = (
+            sb.table("cost_records")
+            .select("item_name,category,amount,recorded_date")
+            .eq("account_id", account_id)
+            .order("recorded_date", desc=True)
+            .limit(30)
+            .execute()
+            .data
+        ) or []
+    except Exception:
+        recent = []
+
+    if recent:
+        last_date = recent[0]["recorded_date"]
+        same_day = [r for r in recent if r["recorded_date"] == last_date]
+        rows = ["| 항목 | 분류 | 금액 |", "|------|------|------|"]
+        total = 0
+        items_json = []
+        for r in same_day:
+            rows.append(f"| {r['item_name']} | {r.get('category','기타')} | {r['amount']:,} |")
+            total += r["amount"]
+            items_json.append({
+                "item_name": r["item_name"],
+                "category": r.get("category", "기타"),
+                "amount": r["amount"],
+                "memo": "",
+            })
+        rows.append(f"| **합계** | | **{total:,}원** |")
+        table_md = "\n".join(rows)
+        action = json.dumps({"date": today, "items": items_json}, ensure_ascii=False)
+        return (
+            f"최근 비용 기록({last_date})이에요. 오늘도 동일하게 저장하시겠어요?\n\n"
+            f"{table_md}\n\n"
+            f"[ACTION:OPEN_COST_TABLE:{action}]"
+        )
+    else:
+        return (
+            "비용을 기록할게요! 항목명·분류·금액을 알려주시거나, 표로 직접 작성하실 수 있어요.\n\n"
+            f'[ACTION:OPEN_COST_TABLE:{{"date":"{today}","items":[]}}]'
+        )
+
+
 def describe(account_id: str) -> list[dict]:
-    """Sales 도메인 capability 매니페스트 (6종)."""
+    """Sales 도메인 capability 매니페스트 (7종)."""
     return [
+        {
+            "name": "sales_cost_entry",
+            "description": (
+                "비용·지출·경비를 기록하고 싶을 때 호출. "
+                "'비용 입력할래', '오늘 재료비 기록', '지출 넣어줘' 등 비용 기록 의도. "
+                "매출 입력과 구분: 이 capability는 지출/비용 전용."
+            ),
+            "handler": run_cost_entry,
+            "parameters": {"type": "object", "properties": {}},
+        },
         {
             "name": "sales_revenue_entry",
             "description": (
@@ -634,6 +755,19 @@ def describe(account_id: str) -> list[dict]:
     ]
 
 
+def _last_message_was_cost_prompt(history: list[dict]) -> bool:
+    """직전 assistant 메시지가 비용 입력 안내였는지 확인."""
+    for msg in reversed(history):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            return (
+                "비용 내역을 알려주세요" in content
+                or "항목명·분류·금액을 알려주시거나" in content
+                or "OPEN_COST_TABLE" in content
+            )
+    return False
+
+
 # ── 메인 run ─────────────────────────────────────────────────────────────────
 
 async def run(
@@ -643,6 +777,25 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
+    # 비용 입력 모드: 직전 안내 후 사용자가 실제 데이터를 보낸 경우
+    if _last_message_was_cost_prompt(history) and not _VAGUE_COST_RE.search(message):
+        parsed_items = await _parse_cost_from_message(message)
+        if parsed_items:
+            from datetime import date as _date
+            today = _date.today().isoformat()
+            rows = ["| 항목 | 분류 | 금액 |", "|------|------|-----:|"]
+            total = 0
+            for it in parsed_items:
+                rows.append(f"| {it['item_name']} | {it.get('category','기타')} | {it['amount']:,} |")
+                total += it["amount"]
+            rows.append(f"| **합계** | | **{total:,}원** |")
+            action = json.dumps({"date": today, "items": parsed_items}, ensure_ascii=False)
+            return (
+                f"아래 내용으로 비용을 기록할까요?\n\n"
+                + "\n".join(rows)
+                + f"\n\n[ACTION:OPEN_COST_TABLE:{action}]"
+            )
+
     # 매출 입력 의도 빠른 감지 → 파싱 선행
     parsed_sales: dict | None = None
     wants_table_input = bool(_TABLE_INPUT_RE.search(message))
@@ -651,10 +804,12 @@ async def run(
         and not _is_revenue_input(message)
         and not wants_table_input
     )
+    vague_cost = bool(_VAGUE_COST_RE.search(message))
     vague_entry = (
         not _is_revenue_input(message)
         and not wants_table_input
         and not save_intent
+        and not vague_cost
         and not bool(_EXPLICIT_TEXT_RE.search(message))
         and bool(_VAGUE_ENTRY_RE.search(message))
     )
@@ -672,17 +827,116 @@ async def run(
                 + last_marker
             )
 
+    # 막연한 매출 입력 의도 — GPT 호출 없이 처리
+    if vague_entry:
+        from datetime import date
+        from app.core.supabase import get_supabase
+        today = date.today().isoformat()
+        try:
+            sb = get_supabase()
+            recent = (
+                sb.table("sales_records")
+                .select("item_name,category,quantity,unit_price,recorded_date")
+                .eq("account_id", account_id)
+                .order("recorded_date", desc=True)
+                .limit(30)
+                .execute()
+                .data
+            ) or []
+        except Exception:
+            recent = []
+
+        if recent:
+            last_date = recent[0]["recorded_date"]
+            same_day = [r for r in recent if r["recorded_date"] == last_date]
+            rows = ["| 메뉴/상품 | 수량 | 단가 | 금액 |", "|-----------|------|------|------|"]
+            total = 0
+            items_json = []
+            for r in same_day:
+                amount = r["quantity"] * r["unit_price"]
+                total += amount
+                rows.append(f"| {r['item_name']} | {r['quantity']} | {r['unit_price']:,} | {amount:,} |")
+                items_json.append({
+                    "item_name": r["item_name"],
+                    "category": r.get("category", "기타"),
+                    "quantity": r["quantity"],
+                    "unit_price": r["unit_price"],
+                })
+            rows.append(f"| **합계** | | | **{total:,}원** |")
+            table_md = "\n".join(rows)
+            action = json.dumps({"date": today, "items": items_json}, ensure_ascii=False)
+            return (
+                f"최근 매출 기록({last_date})이에요. 오늘도 동일하게 저장하시겠어요?\n\n"
+                f"{table_md}\n\n"
+                f"[ACTION:OPEN_SALES_TABLE:{action}]"
+            )
+        else:
+            return (
+                "첫 매출 기록이에요! 품목·수량·금액을 알려주시거나, 표로 직접 작성하실 수 있어요.\n\n"
+                f'[ACTION:OPEN_SALES_TABLE:{{"date":"{today}","items":[]}}]'
+            )
+
+    # 막연한 비용 입력 의도 — GPT 호출 없이 처리
+    if vague_cost:
+        from datetime import date as _date
+        from app.core.supabase import get_supabase
+        today = _date.today().isoformat()
+        try:
+            sb = get_supabase()
+            recent = (
+                sb.table("cost_records")
+                .select("item_name,category,amount,recorded_date")
+                .eq("account_id", account_id)
+                .order("recorded_date", desc=True)
+                .limit(30)
+                .execute()
+                .data
+            ) or []
+        except Exception:
+            recent = []
+
+        if recent:
+            last_date = recent[0]["recorded_date"]
+            same_day = [r for r in recent if r["recorded_date"] == last_date]
+            rows = ["| 항목 | 분류 | 금액 |", "|------|------|------|"]
+            total = 0
+            items_json = []
+            for r in same_day:
+                rows.append(f"| {r['item_name']} | {r.get('category','기타')} | {r['amount']:,} |")
+                total += r["amount"]
+                items_json.append({
+                    "item_name": r["item_name"],
+                    "category": r.get("category", "기타"),
+                    "amount": r["amount"],
+                    "memo": "",
+                })
+            rows.append(f"| **합계** | | **{total:,}원** |")
+            table_md = "\n".join(rows)
+            action = json.dumps({"date": today, "items": items_json}, ensure_ascii=False)
+            return (
+                f"최근 비용 기록({last_date})이에요. 오늘도 동일하게 저장하시겠어요?\n\n"
+                f"{table_md}\n\n"
+                f"[ACTION:OPEN_COST_TABLE:{action}]"
+            )
+        else:
+            return (
+                "비용을 기록할게요! 항목명·분류·금액을 알려주시거나, 표로 직접 작성하실 수 있어요.\n\n"
+                f'[ACTION:OPEN_COST_TABLE:{{"date":"{today}","items":[]}}]'
+            )
+
     system = SYSTEM_PROMPT + "\n\n" + today_context()
 
     hubs = list_sub_hub_titles(account_id, "sales")
     if hubs:
         system += "\n\n[이 계정의 sales 서브허브]\n- " + "\n- ".join(hubs)
 
-    if long_term_context:
-        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-
-    if rag_context:
-        system += f"\n\n{rag_context}"
+    # 새 매출 입력 의도(수량 미포함)일 때는 이전 데이터 컨텍스트 주입 금지
+    # — 이전 revenue_entry 데이터를 현재 입력으로 재파싱하는 오동작 방지
+    if not vague_entry:
+        if long_term_context:
+            system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+        if rag_context:
+            system += f"\n\n{rag_context}"
 
     fb = feedback_context(account_id, "sales")
     if fb:

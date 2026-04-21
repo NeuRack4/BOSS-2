@@ -5,29 +5,31 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-export type SalesActionData = {
+const CATEGORIES = ["재료비", "인건비", "임대료", "공과금", "마케팅", "기타"] as const;
+
+export type CostActionData = {
   date: string;
   items: Array<{
     item_name: string;
     category: string;
-    quantity: number;
-    unit_price: number;
+    amount: number;
+    memo: string;
   }>;
 };
 
 type Props = {
-  data: SalesActionData;
+  data: CostActionData;
   apiBase: string;
   onClose: () => void;
   onSaved?: (message: string, artifactId?: string) => void;
 };
 
-export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
+export const CostInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
   const [date, setDate] = useState(data.date);
   const [items, setItems] = useState(
     data.items.length > 0
       ? data.items.map((it) => ({ ...it }))
-      : [{ item_name: "", category: "기타", quantity: 1, unit_price: 0 }],
+      : [{ item_name: "", category: "기타", amount: 0, memo: "" }],
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -45,17 +47,17 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
   const addRow = () =>
     setItems((prev) => [
       ...prev,
-      { item_name: "", category: "기타", quantity: 1, unit_price: 0 },
+      { item_name: "", category: "기타", amount: 0, memo: "" },
     ]);
 
   const removeRow = (i: number) =>
     setItems((prev) => prev.filter((_, idx) => idx !== i));
 
-  const total = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+  const total = items.reduce((s, it) => s + it.amount, 0);
 
   const handleSave = async () => {
     if (!apiBase) {
-      setError("API 주소가 설정되지 않았습니다. 프론트엔드를 재시작해 주세요.");
+      setError("API 주소가 설정되지 않았습니다.");
       return;
     }
     const supabase = createClient();
@@ -68,21 +70,20 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
 
     const validItems = items.filter((it) => it.item_name.trim());
     if (validItems.length === 0) {
-      setError("상품명을 하나 이상 입력해 주세요.");
+      setError("항목명을 하나 이상 입력해 주세요.");
       return;
     }
 
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${apiBase}/api/sales`, {
+      const res = await fetch(`${apiBase}/api/costs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account_id: userId,
           items: validItems.map((it) => ({
             ...it,
-            amount: it.quantity * it.unit_price,
             recorded_date: date,
             source: "chat",
           })),
@@ -95,10 +96,7 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
       const saved = await res.json();
       const count = saved?.data?.saved ?? items.length;
       const artifactId: string | undefined = saved?.data?.artifact_id;
-      onSaved?.(
-        `매출 ${count}건이 저장됐어요.`,
-        artifactId,
-      );
+      onSaved?.(`비용 ${count}건이 저장됐어요.`, artifactId);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
@@ -113,7 +111,7 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#ddd0b4] px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-[#2e2719]">매출 입력</h3>
+            <h3 className="text-sm font-semibold text-[#2e2719]">비용 입력</h3>
             <input
               type="date"
               value={date}
@@ -135,11 +133,10 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#ddd0b4] text-left text-xs text-[#8c7e66]">
-                <th className="pb-2 pr-3 font-medium">메뉴/상품</th>
-                <th className="pb-2 pr-3 font-medium">카테고리</th>
-                <th className="pb-2 pr-3 text-right font-medium">수량</th>
-                <th className="pb-2 pr-3 text-right font-medium">단가(원)</th>
-                <th className="pb-2 text-right font-medium">금액</th>
+                <th className="pb-2 pr-3 font-medium">항목명</th>
+                <th className="pb-2 pr-3 font-medium">분류</th>
+                <th className="pb-2 pr-3 text-right font-medium">금액(원)</th>
+                <th className="pb-2 font-medium">메모</th>
                 <th className="w-6 pb-2" />
               </tr>
             </thead>
@@ -150,49 +147,39 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                     <input
                       value={it.item_name}
                       onChange={(e) => update(i, "item_name", e.target.value)}
-                      placeholder="상품명"
+                      placeholder="예: 식재료비"
                       className="w-full bg-transparent text-[#2e2719] placeholder:text-[#bfae8a] focus:outline-none"
                     />
                   </td>
                   <td className="py-1.5 pr-3">
-                    <input
+                    <select
                       value={it.category}
                       onChange={(e) => update(i, "category", e.target.value)}
-                      className="w-24 bg-transparent text-[#5a5040] focus:outline-none"
-                    />
+                      className="bg-transparent text-[#5a5040] focus:outline-none"
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="py-1.5 pr-3 text-right">
                     <input
                       type="number"
-                      value={it.quantity}
-                      min={1}
-                      onChange={(e) =>
-                        update(
-                          i,
-                          "quantity",
-                          Math.max(1, parseInt(e.target.value) || 1),
-                        )
-                      }
-                      className="w-16 bg-transparent text-right text-[#2e2719] focus:outline-none"
-                    />
-                  </td>
-                  <td className="py-1.5 pr-3 text-right">
-                    <input
-                      type="number"
-                      value={it.unit_price}
+                      value={it.amount}
                       min={0}
                       onChange={(e) =>
-                        update(
-                          i,
-                          "unit_price",
-                          Math.max(0, parseInt(e.target.value) || 0),
-                        )
+                        update(i, "amount", Math.max(0, parseInt(e.target.value) || 0))
                       }
                       className="w-28 bg-transparent text-right text-[#2e2719] focus:outline-none"
                     />
                   </td>
-                  <td className="py-1.5 text-right text-[#2e2719]">
-                    {(it.quantity * it.unit_price).toLocaleString()}원
+                  <td className="py-1.5 pr-3">
+                    <input
+                      value={it.memo}
+                      onChange={(e) => update(i, "memo", e.target.value)}
+                      placeholder="메모"
+                      className="w-full bg-transparent text-[#5a5040] placeholder:text-[#bfae8a] focus:outline-none"
+                    />
                   </td>
                   <td className="py-1.5 pl-2">
                     <button
@@ -209,7 +196,7 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
             <tfoot>
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={2}
                   className="pt-3 pr-3 text-right text-xs font-semibold text-[#2e2719]"
                 >
                   합계
@@ -217,7 +204,7 @@ export const SalesInputTable = ({ data, apiBase, onClose, onSaved }: Props) => {
                 <td className="pt-3 text-right text-sm font-bold text-[#2e2719]">
                   {total.toLocaleString()}원
                 </td>
-                <td />
+                <td colSpan={2} />
               </tr>
             </tfoot>
           </table>

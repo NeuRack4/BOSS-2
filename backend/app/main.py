@@ -24,6 +24,7 @@ from app.routers import (
     artifacts,
     auth,
     chat,
+    costs,
     evaluations,
     marketing,
     memos,
@@ -59,6 +60,7 @@ app.include_router(recruitment.router)
 app.include_router(search.router)
 app.include_router(uploads.router)
 app.include_router(reviews.router)
+app.include_router(costs.router)
 app.include_router(sales.router)
 
 
