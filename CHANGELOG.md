@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] — feature-signinup (Sign up 페이지 신설 + Sign in·헤더·대시보드 UI 전면 리프레시)
+
+### Added — Auth 페이지
+
+- **`frontend/app/(auth)/signup/page.tsx`** — 신규. 이메일+비밀번호 Supabase Auth (`supabase.auth.signUp`) 회원가입 페이지. Sign in 과 동일 쉘(`max-w-1440`, 12-col bento, 5×6 `t-form`) + 비밀번호 강도 미터(10자+/대문자+소문자/숫자+특수문자 기준 4단계) + `STRENGTH_LABELS`. 우측 hero/stats/agents 3개 타일만 유지(preview/integrations/security/proof 제거).
+- **`frontend/proxy.ts`** — `PUBLIC_PATHS = new Set(["/login", "/signup"])` 로 비로그인 허용 + 로그인 상태 진입 시 `/dashboard` 리다이렉트 대상에 signup 포함.
+
+### Changed — Sign in 페이지
+
+- **`frontend/app/(auth)/login/page.tsx`** — 레이아웃을 Sign up 과 동일 쉘로 정렬 (`max-w-1200 → 1440`, `grid-auto-rows 108 → 116`, `t-form span 6/5 → 5/6`, padding 30 → 32). 상단 `page-head` (“Sign in to BOSS” + 날짜) 제거, 하단 `t-tip` 타일 제거. 브랜드 텍스트 마크 → `/boss-logo.png` 이미지 (`h-8 w-auto`). 타일 모서리 `--radius: 20px → 5px`.
+
+### Removed — Auth 다크 모드
+
+- **`frontend/app/(auth)/login/page.tsx`** · **`.../signup/page.tsx`** — `Theme` 타입 + `theme` 상태 + `setTheme` + `data-theme={theme}` 속성 + 우하단 Light/Dark 토글 버튼 + `.boss-signin[data-theme="dark"]` / `.boss-signup[data-theme="dark"]` 전체 CSS 블록 + `.theme-toggle` 스타일 전부 제거. Light 테마 단일 운용.
+
+### Changed — Header 재구조화
+
+- **`frontend/components/layout/Header.tsx`** — `sidebar?: boolean` prop 추가. `true` (dashboard) 이면 ≥1500px 에서 `ProfileMemorySidebar` 와 동일 치수(`min-w-[220px] max-w-[320px] flex-1 basis-0`) 의 로고 슬롯을 좌측에 렌더해 그리드 오프셋을 흉내냄. 그리드 칼럼의 예비 로고는 `invisible` 로 공간 유지 → Logout 이 1400 박스 오른쪽 모서리에 고정. `false` (DomainPage 기본) 이면 사이드바 없이 중앙 `max-w-[1400px]`.
+- **외곽 패딩 `px-4 md:px-6`** + inner wrapper `mx-auto w-full max-w-[1400px]` — 아래 그리드 컨테이너 (`p-4 md:p-6` / `max-w-[1400px]`) 와 정확히 동일한 박스 폭.
+- **검색바 헤더 루트 기준 중앙** — `relative` 헤더에 `absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2` 로 뷰포트 정중앙 배치.
+- **아이콘·경계선·배경 제거** — CalendarClock/History/MessageSquare/Send/LogOut/Search 아이콘 전부 삭제. 하단 `border-b border-[#ddd0b4]` 및 `bg-[#fbf6eb]` 제거 → 완전 투명 + 글자만.
+- **`frontend/app/globals.css`** — `.bento-shell header { background: transparent; border: none }` 로 글로벌 정의 업데이트.
+- **`frontend/app/dashboard/page.tsx`** — `<Header sidebar />` 로 사이드바 매칭 활성화.
+
+### Removed — Dashboard 다크 모드
+
+- **`frontend/components/layout/Header.tsx`** — `darkBg` 상태 + `toggleBg` + `localStorage.boss2:bg-dark` 로드/저장 + Sun/Moon 토글 버튼 + 관련 `lucide-react` import 전부 제거.
+- **`frontend/app/globals.css`** — `html[data-bg="dark"] .bento-shell` 블록 2개 (shell 배경 + Kanban 테마 토큰 오버라이드) 삭제, 주석도 정리. 단일 light 팔레트만 유지.
+
+### Changed — 대시보드 색상 팔레트
+
+- **`frontend/app/globals.css`** — `.bento-shell { background: #f4f1ed → #f5f1ea }`.
+- **`frontend/components/bento/ChatCenterCard.tsx`** — `bg-[#fefefe] → bg-[#ffffff]`.
+- **`frontend/components/bento/types.ts`** — `DOMAIN_META` 배경 재정렬: recruitment `#f7e6da → #f1d9c7` · marketing `#f0d7df → #f4dbd9` · sales `#c4dbd9 → #cfd9cc` · documents `#c8c7d6 → #d9d4e6`.
+- **`frontend/components/bento/ScheduleCard.tsx`** — `#cae0e4 → #eee3c4`.
+- **`frontend/components/bento/ActivityCard.tsx`** — `#e3e9dd → #c6dad1`.
+- **`frontend/components/bento/PreviousChatCard.tsx`** — `#d4e5e3 → #d9d4e6`.
+- **`frontend/components/bento/CommentQueueCard.tsx`** — `#f0eaf8 → #f4dbd9`.
+- **`frontend/components/bento/SubsidyMatchCard.tsx`** — `#e8f0e4 → #cfd9cc`.
+- **`frontend/components/bento/ProfileMemorySidebar.tsx`** — ProfileCard `#f9e0e2 → #f1d9c7` · LongMemoryCard `#f8eaec → #eee3c4` · MemosCard `#f7ddd9 → #c6dad1`.
+
+---
+
 ## [1.4.1] — feature/sales-stats-chart (Revenue 상세 모달 통계 패널 + 데이터 부족 UX 안내)
 
 ### Added — Sales 통계 패널
