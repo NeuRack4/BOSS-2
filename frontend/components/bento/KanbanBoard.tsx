@@ -177,35 +177,35 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
       )}
 
       <div className="w-full overflow-x-auto pb-4">
-      <div className="flex gap-3" style={{ minWidth: "max-content" }}>
-        {board.unassigned.length > 0 && (
-          <KanbanColumn
-            title="미분류"
-            subHubId="__unassigned__"
-            domain={domain}
-            cards={board.unassigned}
-            draggingId={draggingId}
-            onCardDragStart={onCardDragStart}
-            onCardDragEnd={onCardDragEnd}
-            onCardDrop={onCardDrop}
-            onCardClick={handleCardClick}
-          />
-        )}
-        {board.sub_hubs.map((h) => (
-          <KanbanColumn
-            key={h.id}
-            title={h.title}
-            subHubId={h.id}
-            domain={domain}
-            cards={board.cards[h.id] ?? []}
-            draggingId={draggingId}
-            onCardDragStart={onCardDragStart}
-            onCardDragEnd={onCardDragEnd}
-            onCardDrop={onCardDrop}
-            onCardClick={handleCardClick}
-          />
-        ))}
-      </div>
+        <div className="flex gap-3" style={{ minWidth: "max-content" }}>
+          {board.unassigned.length > 0 && (
+            <KanbanColumn
+              title="미분류"
+              subHubId="__unassigned__"
+              domain={domain}
+              cards={board.unassigned}
+              draggingId={draggingId}
+              onCardDragStart={onCardDragStart}
+              onCardDragEnd={onCardDragEnd}
+              onCardDrop={onCardDrop}
+              onCardClick={handleCardClick}
+            />
+          )}
+          {board.sub_hubs.map((h) => (
+            <KanbanColumn
+              key={h.id}
+              title={h.title}
+              subHubId={h.id}
+              domain={domain}
+              cards={board.cards[h.id] ?? []}
+              draggingId={draggingId}
+              onCardDragStart={onCardDragStart}
+              onCardDragEnd={onCardDragEnd}
+              onCardDrop={onCardDrop}
+              onCardClick={handleCardClick}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 from celery import Celery
-from celery.schedules import schedule as celery_schedule
+from celery.schedules import crontab, schedule as celery_schedule
 
 from app.core.config import settings
 
@@ -29,8 +29,9 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
-    timezone="UTC",
-    enable_utc=True,
+    # v1.3: Beat crontab 이 KST 기준으로 돌도록 — tick(60s interval) 은 timezone 무관.
+    timezone="Asia/Seoul",
+    enable_utc=False,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
@@ -42,8 +43,14 @@ celery_app.conf.beat_schedule = {
         "task": "app.scheduler.tasks.tick",
         "schedule": celery_schedule(run_every=settings.scheduler_tick_seconds),
     },
+    # YouTube 댓글 1시간마다 자동 수집 (dev)
     "comment-scan": {
-        "task": "app.scheduler.tasks.scan_comments",
-        "schedule": celery_schedule(run_every=3600),  # 1시간마다
+        "task":     "app.scheduler.tasks.scan_comments",
+        "schedule": celery_schedule(run_every=3600),
+    },
+    # v1.3: memory_long 7일 이전 row 매일 00:00 KST 청소.
+    "cleanup-old-memories": {
+        "task":     "app.scheduler.tasks.cleanup_old_memories",
+        "schedule": crontab(hour=0, minute=0),
     },
 }

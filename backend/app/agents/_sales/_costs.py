@@ -167,9 +167,20 @@ async def dispatch_save_costs(
     if artifact_id:
         try:
             from app.memory.long_term import log_artifact_to_memory
+            items_preview = ", ".join(
+                f"{r.get('item_name','')}({r.get('category','')}, {r.get('amount',0):,}원)"
+                for r in saved_rows[:5]
+            )
             await log_artifact_to_memory(
                 account_id, "sales", "cost_report",
                 f"{recorded_date} 비용 ({len(saved_rows)}건, 총 {total_amount:,}원)",
+                content=items_preview,
+                metadata={
+                    "recorded_date": recorded_date,
+                    "total_amount":  total_amount,
+                    "record_count":  len(saved_rows),
+                    "source":        source,
+                },
             )
         except Exception:
             pass

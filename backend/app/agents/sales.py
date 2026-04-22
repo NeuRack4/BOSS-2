@@ -15,6 +15,8 @@ import logging
 import re
 from datetime import date
 
+from langsmith import traceable
+
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
@@ -937,6 +939,7 @@ def _last_message_was_cost_prompt(history: list[dict]) -> bool:
 
 # ── 메인 run ─────────────────────────────────────────────────────────────────
 
+@traceable(name="sales.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, MessageSquare, Play } from "lucide-react";
+import { ArrowUpRight, Play } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type CommentItem = {
@@ -79,7 +79,6 @@ export const CommentQueueCard = ({ accountId }: Props) => {
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-[#7c4daa]" />
           <span className="text-base font-semibold tracking-tight text-[#030303]">
             Comment Queue
           </span>

@@ -84,28 +84,28 @@ export const BentoGrid = ({ accountId }: Props) => {
             </div>
           </div>
 
-          {/* Bottom section — 3×2 grid: col 1-4 / 5-8 / 9-12, rows 5-8 */}
-          {/* Chat History: col 1-4, spans 4 rows */}
-          <div className="order-6 md:col-span-4 md:row-span-4 md:col-start-1 md:row-start-5 h-[568px] md:h-auto">
+          {/* Bottom section — 3:3:6 top row, 5:4 under (chat history excluded) */}
+          {/* Chat History: col 1-3, spans 4 rows */}
+          <div className="order-6 md:col-span-3 md:row-span-4 md:col-start-1 md:row-start-5 h-[568px] md:h-auto">
             <PreviousChatCard />
           </div>
 
-          {/* Upcoming Schedule: col 5-8, rows 5-6 */}
-          <div className="order-7 md:col-span-4 md:row-span-2 md:col-start-5 md:row-start-5 h-[284px] md:h-auto">
+          {/* Upcoming Schedule: col 4-6, rows 5-6 */}
+          <div className="order-7 md:col-span-3 md:row-span-2 md:col-start-4 md:row-start-5 h-[284px] md:h-auto">
             <ScheduleCard items={summary?.upcoming ?? []} />
           </div>
 
-          {/* Recent Activity: col 9-12, rows 5-6 */}
-          <div className="order-8 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-5 h-[284px] md:h-auto">
+          {/* Recent Activity: col 7-12, rows 5-6 */}
+          <div className="order-8 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-5 h-[284px] md:h-auto">
             <ActivityCard items={summary?.recent_activity ?? []} />
           </div>
 
-          {/* Comment Queue: col 5-8, rows 7-8 */}
-          <div className="order-9 md:col-span-4 md:row-span-2 md:col-start-5 md:row-start-7 h-[284px] md:h-auto">
+          {/* Comment Queue: col 4-8, rows 7-8 (5 cols) */}
+          <div className="order-9 md:col-span-5 md:row-span-2 md:col-start-4 md:row-start-7 h-[284px] md:h-auto">
             <CommentQueueCard accountId={accountId} />
           </div>
 
-          {/* Placeholder: col 9-12, rows 7-8 */}
+          {/* Placeholder: col 9-12, rows 7-8 (4 cols) */}
           <div className="order-10 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-7 h-[284px] md:h-auto">
             <div className="h-full w-full rounded-[5px] bg-[#f0eaf8] shadow-lg" />
           </div>

@@ -25,7 +25,10 @@ from app.agents._artifact import (
 )
 from app.agents._doc_templates import (
     VALID_CONTRACT_SUBTYPES,
+    TYPE_TO_CATEGORY,
+    CATEGORY_LABELS,
     build_doc_context,
+    detect_doc_category,
     detect_doc_intent,
 )
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
@@ -41,15 +44,27 @@ VALID_TYPES: tuple[str, ...] = (
     "notice",
     "checklist",
     "guide",
+    # Step 3-B — Operations 신규 2종
+    "subsidy_application",
+    "admin_application",
+    # Step 3-A — Tax&HR 신규 3종
+    "hr_evaluation",
+    "payroll_doc",
+    "tax_calendar",
 )
 
 _TYPE_TO_SUBHUB: dict[str, str] = {
-    "contract":  "Contracts",
-    "estimate":  "Operations",
-    "proposal":  "Operations",
-    "notice":    "Operations",
-    "checklist": "Tax&HR",
-    "guide":     "Tax&HR",
+    "contract":            "Review",
+    "proposal":            "Review",
+    "estimate":            "Operations",
+    "notice":              "Operations",
+    "subsidy_application": "Operations",
+    "admin_application":   "Operations",
+    "checklist":           "Tax&HR",
+    "guide":               "Tax&HR",
+    "hr_evaluation":       "Tax&HR",
+    "payroll_doc":         "Tax&HR",
+    "tax_calendar":        "Tax&HR",
 }
 
 _REVIEW_REQUEST_RE = re.compile(r"\[REVIEW_REQUEST\](.*?)\[/REVIEW_REQUEST\]", re.DOTALL)
@@ -79,10 +94,11 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
    - 제안 회신 기한 → due_date + due_label='제안 회신 기한'
    자연어 기한은 YYYY-MM-DD 로 환산.
 5. 법령·관행 근거가 주입되면 그 범위 안에서만 판단하세요. 새 판례 날조 금지.
-6. artifact 저장 시 sub_domain 필드를 반드시 포함하세요:
-   - contract                    → sub_domain: Contracts
-   - estimate, proposal, notice  → sub_domain: Operations
-   - checklist, guide            → sub_domain: Tax&HR
+6. artifact 저장 시 sub_domain 필드를 반드시 포함하세요. Documents 서브허브는 4종:
+   - **Review**      — 공정 중립이 필요한 서류. `contract`, `proposal` 이 여기.
+   - **Tax&HR**      — 인사평가·세무 관련. `checklist`, `guide` 가 여기.
+   - **Legal**       — 법률 자문 (`legal_advice`). 별도 서브브랜치에서 자동 처리.
+   - **Operations**  — 서류 초안·행정 업무. `estimate`, `notice`, 국가 지원사업 신청서·행정 처리 신청서가 여기.
 
 [계약서 subtype 가이드]
 - labor (근로계약서) — 근로기준법·최저임금법
@@ -297,6 +313,17 @@ def _format_review_append(result: dict) -> str:
 # LangGraph state
 # ──────────────────────────────────────────────────────────────────────────
 
+DocCategory = Literal["review", "tax_hr", "legal", "operations"]
+DocIntent = Literal[
+    "legal",            # 법률 자문 → _legal_node
+    "review",           # 업로드 문서 공정성 분석 → _review_node
+    "write_review",     # 계약서·제안서 작성 → _write_review_node
+    "write_tax_hr",     # 세무·인사평가·체크리스트·가이드 → _write_tax_hr_node
+    "write_operations", # 견적서·공지문·지원사업·행정 → _write_operations_node
+    "ask_category",     # 카테고리 불명 → _ask_category_node (4-category CHOICES)
+]
+
+
 class DocState(TypedDict):
     message: str
     account_id: str
@@ -304,10 +331,61 @@ class DocState(TypedDict):
     rag_context: str
     long_term_context: str
     # set by classify node
-    intent: Literal["legal", "review", "write"]
+    intent: DocIntent
+    category: DocCategory | None
     uploaded_doc: dict | None
     # output
     reply: str
+
+
+# 카테고리별 system prompt 추가 블록 — write 경로에서 사용.
+# Planner 가 capability 레벨에서 이미 톤을 결정했더라도, legacy 폴백·직접 run() 호출 시
+# 이 블록이 에이전트의 톤과 타입 CHOICES 를 4카테고리 축으로 고정해준다.
+_CATEGORY_GUIDANCE: dict[str, str] = {
+    "review": """\
+[카테고리: Review — 공정 중립이 필요한 서류]
+이 카테고리는 계약서·제안서처럼 양측(갑/을, 발주자/수주자) 이익이 맞물린 서류를 다룹니다.
+- 작성 시 한쪽이 현저히 불리하지 않도록 관행·법령 기준의 표준 조항을 활용하세요.
+- contract 은 갑/을 지칭이 필요하므로 `[CHOICES]` 로 역할을 먼저 확정.
+- type 이 아직 모호하면 아래 CHOICES 로 먼저 물어보세요:
+  [CHOICES]
+  계약서 (양측 간 법적 구속력)
+  제안서 (제안·협상 단계)
+  [/CHOICES]
+- 저장 시 `sub_domain: Review`.
+""",
+    "tax_hr": """\
+[카테고리: Tax&HR — 인사평가·세무 (채용 제외)]
+이 카테고리는 세무 신고·4대보험·급여·인사평가·근태 관리 관련 문서를 다룹니다.
+- 현재 지원 타입: checklist(체크리스트), guide(가이드/매뉴얼).
+  인사평가서·급여명세서·세무 캘린더 capability 는 추후 추가 예정.
+- 프로필의 직원 수·업종 정보가 있으면 적극 활용. 없으면 CHOICES 로 좁혀가세요.
+- **채용(모집·공고·면접)은 recruitment 도메인 소관**이므로 이 카테고리에서 다루지 마세요.
+- type 이 모호하면:
+  [CHOICES]
+  체크리스트 (단계별 확인 항목)
+  가이드 (절차·원칙 안내문)
+  [/CHOICES]
+- 저장 시 `sub_domain: Tax&HR`.
+""",
+    "operations": """\
+[카테고리: Operations — 서류 초안·행정 업무]
+이 카테고리는 견적서·공지문·국가 지원사업 신청서·행정 처리 신청서 등 일상 서류 초안 작성을 담당합니다.
+- 현재 지원 타입: estimate(견적서), notice(공지문).
+  지원사업·행정 신청서 capability 는 추후 추가 예정 — 요청이 들어오면 "아직 지원사업 자동 작성은 준비 중입니다.
+  대신 어떤 지원사업인지 알려주시면 일반 서류 형식으로 초안을 잡아드릴 수 있습니다." 로 대응.
+- 마감·게시 일자가 있는 서류는 `due_date` + `due_label` 반드시 포함.
+- type 이 모호하면:
+  [CHOICES]
+  견적서 (품목·단가·유효기간)
+  공지문 (대상·일정·내용)
+  [/CHOICES]
+- 저장 시 `sub_domain: Operations`.
+""",
+    # legal 은 `_legal_node` 경로에서 별도 처리되므로 write 에 주입되지 않지만,
+    # 형식상 키를 포함해둔다.
+    "legal": "",
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -315,28 +393,81 @@ class DocState(TypedDict):
 # ──────────────────────────────────────────────────────────────────────────
 
 async def _classify_node(state: DocState) -> DocState:
-    """intent 분류: legal | review | write."""
+    """intent 분류 (v1.3 2단 라우터).
+
+    1. 업로드된 문서 있음 → review (기존 공정성 분석)
+    2. type 잡힘 → TYPE_TO_CATEGORY 로 write_<category>
+    3. type 없음 + legal 의도 → legal
+    4. type 없음 + category 키워드 잡힘 → write_<category>
+    5. 둘 다 없음 → ask_category (4-카테고리 CHOICES)
+
+    동시 감지는 하되 타입이 잡히면 타입을 우선한다. (사용자 지시: Q2)
+    """
     message = state["message"]
     account_id = state["account_id"]
     history = state["history"]
 
     uploaded_doc = _find_recent_uploaded_doc(account_id)
-    type_guess, _ = detect_doc_intent(message)
+    if uploaded_doc:
+        log.info(
+            "[documents/graph] classify → review (account=%s doc=%s)",
+            account_id, uploaded_doc.get("id") or "ephemeral",
+        )
+        return {
+            **state,
+            "intent": "review",
+            "category": "review",
+            "uploaded_doc": uploaded_doc,
+        }
 
-    # legal 분기: 서류 작성/검토 의도가 없고 업로드 문서도 없을 때만
-    if not type_guess and not uploaded_doc:
+    # type + category 동시 감지 — 타입 우선
+    type_guess, _ = detect_doc_intent(message)
+    category: str | None = None
+    if type_guess:
+        category = TYPE_TO_CATEGORY.get(type_guess)
+
+    # type 이 안 잡힌 경우에만 legal / category 키워드 분기
+    if not type_guess:
         intent_obj = await classify_legal_intent(message, history)
         if intent_obj.is_legal:
             log.info("[documents/graph] classify → legal (account=%s)", account_id)
-            return {**state, "intent": "legal", "uploaded_doc": None}
+            return {
+                **state,
+                "intent": "legal",
+                "category": "legal",
+                "uploaded_doc": None,
+            }
+        category = detect_doc_category(message)
 
-    # review 분기: 최근 업로드 문서 있음
-    if uploaded_doc:
-        log.info("[documents/graph] classify → review (account=%s doc=%s)", account_id, uploaded_doc.get("id") or "ephemeral")
-        return {**state, "intent": "review", "uploaded_doc": uploaded_doc}
+    # 분기 매핑
+    intent: DocIntent
+    if category == "review":
+        intent = "write_review"
+    elif category == "tax_hr":
+        intent = "write_tax_hr"
+    elif category == "operations":
+        intent = "write_operations"
+    elif category == "legal":
+        log.info("[documents/graph] classify → legal (via category kw) (account=%s)", account_id)
+        return {
+            **state,
+            "intent": "legal",
+            "category": "legal",
+            "uploaded_doc": None,
+        }
+    else:
+        intent = "ask_category"
 
-    log.info("[documents/graph] classify → write (account=%s)", account_id)
-    return {**state, "intent": "write", "uploaded_doc": None}
+    log.info(
+        "[documents/graph] classify → %s (account=%s type=%s category=%s)",
+        intent, account_id, type_guess, category,
+    )
+    return {
+        **state,
+        "intent": intent,
+        "category": category if category in ("review", "tax_hr", "operations") else None,
+        "uploaded_doc": None,
+    }
 
 
 async def _legal_node(state: DocState) -> DocState:
@@ -446,7 +577,7 @@ async def _review_node(state: DocState) -> DocState:
     if user_role not in ("갑", "을", "미지정"):
         user_role = "미지정"
     doc_type = marker.get("doc_type") or "계약서"
-    if doc_type not in ("계약서", "제안서", "기타"):
+    if doc_type not in ("계약서", "제안서", "견적서", "기타"):
         doc_type = "계약서"
     subtype = marker.get("contract_subtype") or None
     if subtype in ("", "없음"):
@@ -478,8 +609,12 @@ async def _review_node(state: DocState) -> DocState:
     return {**state, "reply": final}
 
 
-async def _write_node(state: DocState) -> DocState:
-    """서류 작성 처리 — CLARIFY 루프 또는 ARTIFACT 생성."""
+async def _run_write(state: DocState, category: DocCategory) -> DocState:
+    """카테고리 공통 서류 작성 — system prompt 의 category guidance 블록만 다름.
+
+    Review/Tax&HR/Operations 세 write 노드가 공유하는 실제 로직.
+    Legal 은 `_legal_node` 에서 별도 처리되므로 여기 오지 않는다.
+    """
     account_id = state["account_id"]
     message = state["message"]
 
@@ -493,12 +628,15 @@ async def _write_node(state: DocState) -> DocState:
                     break
 
     doc_ctx = build_doc_context(type_guess, subtype_guess)
+    cat_block = _CATEGORY_GUIDANCE.get(category, "")
     hubs = list_sub_hub_titles(account_id, "documents")
-    system = SYSTEM_PROMPT + "\n\n" + today_context() + "\n\n" + doc_ctx
+    system = SYSTEM_PROMPT + "\n\n" + today_context()
+    if cat_block:
+        system += "\n\n" + cat_block
+    system += "\n\n" + doc_ctx
     if hubs:
         system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
-    # 분석 결과 후속 질문 대응 — 이전 분석 context를 write 노드에서만 주입
-    prev_analysis_ctx = _build_upload_context(None, account_id, include_analysis=False)
+    # 분석 결과 후속 질문 대응 — 이전 분석 context 를 write 노드에서만 주입
     analysis = _find_recent_analysis(account_id)
     if analysis:
         am = analysis.get("metadata") or {}
@@ -542,7 +680,39 @@ async def _write_node(state: DocState) -> DocState:
     return {**state, "reply": reply}
 
 
-def _route_intent(state: DocState) -> Literal["legal", "review", "write"]:
+async def _write_review_node(state: DocState) -> DocState:
+    return await _run_write(state, "review")
+
+
+async def _write_tax_hr_node(state: DocState) -> DocState:
+    return await _run_write(state, "tax_hr")
+
+
+async def _write_operations_node(state: DocState) -> DocState:
+    return await _run_write(state, "operations")
+
+
+async def _ask_category_node(state: DocState) -> DocState:
+    """카테고리 모호 — 4-category CHOICES 를 즉시 반환 (LLM 호출 없음).
+
+    사용자가 선택한 라벨은 다음 턴 message 로 들어와서 `detect_doc_category`
+    또는 `detect_doc_intent` 가 재판정한다 (라벨에 "계약서/세무/법률 자문/견적서"
+    등 대표 키워드 포함).
+    """
+    lines = [
+        "어떤 도움이 필요하신가요? 아래 네 가지 중에서 골라주세요.",
+        "",
+        "[CHOICES]",
+        CATEGORY_LABELS["review"],
+        CATEGORY_LABELS["tax_hr"],
+        CATEGORY_LABELS["legal"],
+        CATEGORY_LABELS["operations"],
+        "[/CHOICES]",
+    ]
+    return {**state, "reply": "\n".join(lines)}
+
+
+def _route_intent(state: DocState) -> DocIntent:
     return state["intent"]
 
 
@@ -555,16 +725,25 @@ def _build_graph():
     g.add_node("classify", _classify_node)
     g.add_node("legal", _legal_node)
     g.add_node("review", _review_node)
-    g.add_node("write", _write_node)
+    g.add_node("write_review", _write_review_node)
+    g.add_node("write_tax_hr", _write_tax_hr_node)
+    g.add_node("write_operations", _write_operations_node)
+    g.add_node("ask_category", _ask_category_node)
     g.set_entry_point("classify")
     g.add_conditional_edges("classify", _route_intent, {
-        "legal":  "legal",
-        "review": "review",
-        "write":  "write",
+        "legal":            "legal",
+        "review":           "review",
+        "write_review":     "write_review",
+        "write_tax_hr":     "write_tax_hr",
+        "write_operations": "write_operations",
+        "ask_category":     "ask_category",
     })
     g.add_edge("legal", END)
     g.add_edge("review", END)
-    g.add_edge("write", END)
+    g.add_edge("write_review", END)
+    g.add_edge("write_tax_hr", END)
+    g.add_edge("write_operations", END)
+    g.add_edge("ask_category", END)
     return g.compile()
 
 
@@ -588,7 +767,8 @@ async def run(
         "history": history,
         "rag_context": rag_context,
         "long_term_context": long_term_context,
-        "intent": "write",
+        "intent": "ask_category",  # classify_node 가 반드시 덮어쓴다
+        "category": None,
         "uploaded_doc": None,
         "reply": "",
     }
@@ -725,6 +905,185 @@ async def run_checklist_guide(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Step 3-B — Operations 신규 2종
+# ──────────────────────────────────────────────────────────────────────────
+
+async def run_subsidy_application(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    subsidy_name: str | None = None,
+    scope: str | None = None,
+    extra_note: str | None = None,
+) -> str:
+    """국가 지원사업 신청서 초안.
+
+    subsidy_name 이 확정됐으면 바로 초안. 미확정이면 `search_subsidy_programs`
+    RAG 로 후보 3~5개 주입 → 에이전트가 CHOICES 로 되묻는다 (agent 성 핵심).
+    """
+    extra_ctx = ""
+    if not subsidy_name:
+        import asyncio
+        from app.agents._marketing_knowledge import search_subsidy_programs
+        try:
+            rows = await asyncio.to_thread(search_subsidy_programs, message, 5)
+        except Exception:
+            rows = []
+        if rows:
+            lines = ["[지원사업 후보 — RAG 검색 결과]"]
+            for i, r in enumerate(rows, 1):
+                snippet = (r.get("content") or "").strip().replace("\n", " ")[:200]
+                lines.append(f"{i}. {snippet}")
+            lines.append(
+                "\n위 후보 중 사용자 요청에 맞는 것이 있으면 [CHOICES] 로 한 번에 물어보세요. "
+                "후보가 명백히 요청과 맞지 않으면 사용자에게 구체적 지원사업명을 되묻세요."
+            )
+            extra_ctx = "\n".join(lines)
+
+    lines: list[str] = []
+    if subsidy_name:
+        lines.append(f"[지원사업명] {subsidy_name}")
+    if scope:
+        lines.append(f"[신청 범위] {scope}")
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "국가 지원사업 신청서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=subsidy_application, sub_domain=Operations) 포함. "
+        "subsidy_name 이 확정됐으면 즉시 초안 작성, 아니면 후보를 CHOICES 로 먼저 확인.\n"
+        + (extra_ctx + "\n\n" if extra_ctx else "")
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_admin_application(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    application_type: str,
+    purpose: str,
+    extra_note: str | None = None,
+) -> str:
+    """사업자등록 정정·영업허가 갱신·식품영업신고·인허가 등 행정 신청서 초안."""
+    lines = [
+        f"[신청 종류] {application_type}",
+        f"[신청 목적] {purpose}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "행정 처리용 신청서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=admin_application, sub_domain=Operations) 포함. "
+        "한국 행정 실무(사업자등록·영업허가·식품영업신고·인허가) 양식에 맞게.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Step 3-A — Tax&HR 신규 3종
+# ──────────────────────────────────────────────────────────────────────────
+
+async def run_hr_evaluation(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    evaluatee: str,
+    period: str,
+    metrics: list[str] | None = None,
+    evaluation_type: str = "연간",
+) -> str:
+    """인사평가서 템플릿 생성. 프로필(employees_count, business_type) 자동 활용."""
+    metrics_line = ", ".join(metrics) if metrics else "업무 성과·태도·고객 응대·팀워크·성장 의지"
+    lines = [
+        f"[평가 대상] {evaluatee}",
+        f"[평가 기간] {period}",
+        f"[평가 유형] {evaluation_type} (연간/반기/분기/수시)",
+        f"[평가 지표] {metrics_line}",
+    ]
+    synthetic = (
+        "인사평가서를 작성해주세요. "
+        "[ARTIFACT] 블록(type=hr_evaluation, sub_domain=Tax&HR) 포함. "
+        "프로필의 직원 수·업종을 반영한 실용적 지표(5점 척도) + 종합 등급 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_payroll_doc(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    doc_kind: str,
+    target: str,
+    pay_month: str,
+    extra_note: str | None = None,
+) -> str:
+    """급여명세서·원천징수영수증·4대보험 신고용 문서 초안."""
+    lines = [
+        f"[문서 종류] {doc_kind} (급여명세서 | 원천징수영수증 | 4대보험 신고서)",
+        f"[대상자] {target}",
+        f"[지급월/대상기간] {pay_month}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "급여·세무 문서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=payroll_doc, sub_domain=Tax&HR) 포함. "
+        "4대보험 요율·소득세 간이세액표·비과세 한도를 반영. "
+        "당해 공식 요율은 발행 시 재확인 안내 문구 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_tax_calendar(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    business_type: str,
+    target_year: int,
+    extra_note: str | None = None,
+) -> str:
+    """세무 신고 캘린더 생성 — 부가세·종소세·원천세·4대보험 등."""
+    lines = [
+        f"[사업자 형태] {business_type} (개인 일반/간이 | 법인)",
+        f"[대상 연도] {target_year}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "세무 신고 캘린더를 작성해주세요. "
+        "[ARTIFACT] 블록(type=tax_calendar, sub_domain=Tax&HR) 포함. "
+        "부가세·종소세·법인세·원천세·4대보험 일정을 월별 표로 구성하고, "
+        "각 일정의 근거 법조(부가세법 §49, 소득세법 §70 등) 를 함께 명시.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
 async def run_review(
     *,
     account_id: str,
@@ -777,8 +1136,10 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "doc_contract",
             "description": (
-                "계약서 초안을 작성한다 (근로·임대차·용역·납품·파트너십·프랜차이즈·NDA 7종). "
-                "subtype·갑·을 확정 시에만 호출. [sub_domain: Contracts]"
+                "계약서 초안 작성 — 근로·임대차·용역·납품·파트너십·프랜차이즈·NDA 7종. "
+                "'계약서 써줘/만들어줘' 요청이면 이 tool. "
+                "subtype·갑·을 확정 시에만 호출. "
+                "[카테고리: Review — 공정 중립이 필요한 서류]"
             ),
             "handler": run_contract,
             "parameters": {
@@ -797,7 +1158,11 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_estimate",
-            "description": "견적서 초안을 작성한다. [sub_domain: Operations]",
+            "description": (
+                "견적서 초안 작성 — 발주처·품목·총액·유효기간. "
+                "'견적서 써줘/뽑아줘' 요청이면 이 tool. "
+                "[카테고리: Operations — 서류 초안·행정 업무]"
+            ),
             "handler": run_estimate,
             "parameters": {
                 "type": "object",
@@ -812,7 +1177,11 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_proposal",
-            "description": "제안서 초안을 작성한다. [sub_domain: Operations]",
+            "description": (
+                "제안서 초안 작성 — 제안 대상·업무 범위·가격·회신 기한. "
+                "'제안서 써줘/초안 만들어줘' 요청이면 이 tool. "
+                "[카테고리: Review — 공정 중립이 필요한 서류]"
+            ),
             "handler": run_proposal,
             "parameters": {
                 "type": "object",
@@ -827,7 +1196,11 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_notice",
-            "description": "직원/고객/거래처 대상 공지문을 작성한다. [sub_domain: Operations]",
+            "description": (
+                "직원·고객·거래처 대상 공지문 작성 — 대상·주제·게시일. "
+                "임금 지급·휴무·가격 변경·매장 공지 등 일방적 통지문. "
+                "[카테고리: Operations — 서류 초안·행정 업무]"
+            ),
             "handler": run_notice,
             "parameters": {
                 "type": "object",
@@ -841,7 +1214,11 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "doc_checklist_guide",
-            "description": "세무·인사·운영 관련 체크리스트 또는 가이드. [sub_domain: Tax&HR]",
+            "description": (
+                "세무·인사·운영 관련 체크리스트 또는 가이드 — "
+                "창업 준비·연말정산·4대보험·근태 관리·인사평가 등 절차·원칙 문서. "
+                "[카테고리: Tax&HR — 인사평가·세무 (채용 제외)]"
+            ),
             "handler": run_checklist_guide,
             "parameters": {
                 "type": "object",
@@ -852,11 +1229,115 @@ def describe(account_id: str) -> list[dict]:
                 "required": ["topic"],
             },
         },
+        # ──────────────────────────────────────────────────────
+        # Step 3-B — Operations 신규 2종
+        # ──────────────────────────────────────────────────────
+        {
+            "name": "doc_subsidy_application",
+            "description": (
+                "국가 지원사업 신청서 초안 작성 — 소상공인 지원·정부 보조금·창업 지원금·고용 지원금 등. "
+                "'지원사업 신청서 써줘', '보조금 신청', '창업 지원금 지원하고 싶어' 요청이면 이 tool. "
+                "subsidy_name 이 파라미터로 안 넘어오면 내부에서 search_subsidy_programs 로 "
+                "후보 3~5개를 조회해 에이전트가 CHOICES 로 되묻는 흐름. "
+                "[카테고리: Operations — 국가 지원사업·행정 업무]"
+            ),
+            "handler": run_subsidy_application,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subsidy_name": {"type": "string", "description": "지원사업 공식명 (확정된 경우만)"},
+                    "scope":        {"type": "string", "description": "신청 범위·사업 내용"},
+                    "extra_note":   {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": "doc_admin_application",
+            "description": (
+                "행정 처리 신청서 초안 — 사업자등록 정정·영업허가 갱신·식품영업신고·인허가 변경 등. "
+                "'사업자등록 변경 신청서', '영업허가 갱신 서류', '식품영업신고서 작성해줘' 요청이면 이 tool. "
+                "[카테고리: Operations — 행정 업무 신청서]"
+            ),
+            "handler": run_admin_application,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "application_type": {"type": "string", "description": "신청 종류 (예: 사업자등록 정정, 영업허가 갱신, 식품영업신고)"},
+                    "purpose":          {"type": "string", "description": "신청 목적·사유"},
+                    "extra_note":       {"type": "string"},
+                },
+                "required": ["application_type", "purpose"],
+            },
+        },
+        # ──────────────────────────────────────────────────────
+        # Step 3-A — Tax&HR 신규 3종
+        # ──────────────────────────────────────────────────────
+        {
+            "name": "doc_hr_evaluation",
+            "description": (
+                "인사평가서 템플릿 생성 — 5점 척도 지표 + 종합 등급 포함. "
+                "'직원 평가서 만들어줘', '인사평가 양식 뽑아줘' 요청이면 이 tool. "
+                "프로필의 직원 수·업종 자동 반영. "
+                "[카테고리: Tax&HR — 인사평가 관리]"
+            ),
+            "handler": run_hr_evaluation,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "evaluatee":       {"type": "string", "description": "피평가자 (직원명 또는 직책)"},
+                    "period":          {"type": "string", "description": "평가 기간 (예: 2026년 상반기, 2026-01~06)"},
+                    "metrics":         {"type": "array", "items": {"type": "string"}, "description": "평가 지표 목록"},
+                    "evaluation_type": {"type": "string", "enum": ["연간", "반기", "분기", "수시"], "default": "연간"},
+                },
+                "required": ["evaluatee", "period"],
+            },
+        },
+        {
+            "name": "doc_payroll_doc",
+            "description": (
+                "급여명세서·원천징수영수증·4대보험 신고용 문서 초안. "
+                "'급여명세서 뽑아줘', '원천징수 영수증 만들어줘', '4대보험 신고서' 요청이면 이 tool. "
+                "4대보험 요율·소득세 간이세액·비과세 한도 반영. "
+                "[카테고리: Tax&HR — 세무 (채용 제외)]"
+            ),
+            "handler": run_payroll_doc,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_kind":   {"type": "string", "enum": ["급여명세서", "원천징수영수증", "4대보험 신고서"]},
+                    "target":     {"type": "string", "description": "대상자 (직원명)"},
+                    "pay_month":  {"type": "string", "description": "지급월 (예: 2026-03) 또는 대상 기간"},
+                    "extra_note": {"type": "string"},
+                },
+                "required": ["doc_kind", "target", "pay_month"],
+            },
+        },
+        {
+            "name": "doc_tax_calendar",
+            "description": (
+                "연간 세무 신고 캘린더 — 부가세·종소세·법인세·원천세·4대보험 일정을 월별 표로. "
+                "'세무 일정 정리해줘', '세금 신고 캘린더', '부가세 신고 일정' 요청이면 이 tool. "
+                "사업자 형태(개인/법인)에 따라 분기. "
+                "[카테고리: Tax&HR — 세무 일정]"
+            ),
+            "handler": run_tax_calendar,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "business_type": {"type": "string", "description": "사업자 형태: '개인 일반' | '개인 간이' | '법인'"},
+                    "target_year":   {"type": "integer", "description": "대상 연도 (예: 2026)"},
+                    "extra_note":    {"type": "string"},
+                },
+                "required": ["business_type", "target_year"],
+            },
+        },
         {
             "name": "doc_legal_advice",
             "description": (
                 "한국 법률·법령·조례·시행령에 대한 질문에 RAG 기반으로 답한다. "
-                "노동·임대차·공정거래·개인정보·세법·상법·식품위생·건축·저작권 등 분야 무관."
+                "노동·임대차·공정거래·개인정보·세법·상법·식품위생·건축·저작권 등 분야 무관. "
+                "서류 작성/검토가 아니라 **법령 자체에 대한 자문** 이 필요할 때 선택. "
+                "[카테고리: Legal — 법률 자문]"
             ),
             "handler": run_legal_advice,
             "parameters": {
@@ -882,12 +1363,13 @@ def describe(account_id: str) -> list[dict]:
         caps.append({
             "name": "doc_review",
             "description": (
-                f"[즉시 호출 가능] 현재 업로드된 계약서 '{_doc_title}' 의 공정성"
+                f"[즉시 호출 가능] 현재 업로드된 서류 '{_doc_title}' 의 공정성"
                 "(갑·을 비율, 위험 조항)을 분석한다. 사용자가 '공정성 분석', '검토', "
-                "'계약서 봐줘' 등을 요청하면 바로 이 tool 을 호출하세요. "
+                "'계약서/제안서 봐줘' 등을 요청하면 바로 이 tool 을 호출하세요. "
                 "문서는 이미 서버가 파싱 완료한 상태이므로 '업로드 안 됐다'고 답하거나 "
                 "다시 업로드를 요청하면 안 됩니다. user_role 이 '갑/을/미지정' 중 불확실하면 "
-                "미지정으로 호출하세요."
+                "미지정으로 호출하세요. "
+                "[카테고리: Review — 기존 서류 공정성 분석]"
             ),
             "handler": run_review,
             "parameters": {

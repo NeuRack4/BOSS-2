@@ -296,58 +296,58 @@ const SnsPreview = ({
 
   return (
     <div className="flex justify-center">
-    <div className="w-[260px] overflow-hidden rounded-[6px] border border-[#ddd0b4] bg-white">
-      <div className="flex items-center gap-2.5 border-b border-[#ddd0b4]/60 px-3 py-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-[11px] font-bold text-white">
-          IG
-        </div>
-        <div className="flex-1">
-          <div className="text-[12px] font-semibold text-[#1a1a1a]">
-            {title || "Instagram post"}
+      <div className="w-[260px] overflow-hidden rounded-[6px] border border-[#ddd0b4] bg-white">
+        <div className="flex items-center gap-2.5 border-b border-[#ddd0b4]/60 px-3 py-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-[11px] font-bold text-white">
+            IG
           </div>
-          <div className="font-mono text-[9.5px] uppercase tracking-wider text-[#8c8c8c]">
-            sns preview
+          <div className="flex-1">
+            <div className="text-[12px] font-semibold text-[#1a1a1a]">
+              {title || "Instagram post"}
+            </div>
+            <div className="font-mono text-[9.5px] uppercase tracking-wider text-[#8c8c8c]">
+              sns preview
+            </div>
           </div>
         </div>
-      </div>
-      <div className="relative aspect-[4/5] w-full bg-[#f0ece4]">
-        {imageUrl ? (
-          <Image
-            src={imageUrl}
-            alt={title || "SNS 포스트 이미지"}
-            fill
-            className="object-cover"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-4xl opacity-30">
-            🖼️
+        <div className="relative aspect-[4/5] w-full bg-[#f0ece4]">
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={title || "SNS 포스트 이미지"}
+              fill
+              className="object-cover"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-4xl opacity-30">
+              🖼️
+            </div>
+          )}
+        </div>
+        {finalCaption && (
+          <div className="whitespace-pre-wrap px-3 py-2.5 text-[12.5px] leading-relaxed text-[#1a1a1a]">
+            {finalCaption}
+          </div>
+        )}
+        {finalHashtags.length > 0 && (
+          <div className="flex flex-wrap gap-1 border-t border-[#f0ece4] px-3 py-2">
+            {finalHashtags.map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-[#e8f0f9] px-2 py-0.5 text-[11px] text-[#3b7aba]"
+              >
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+        {finalBestTime && (
+          <div className="border-t border-[#f0ece4] px-3 py-1.5 font-mono text-[10.5px] text-[#8c7e66]">
+            {finalBestTime}
           </div>
         )}
       </div>
-      {finalCaption && (
-        <div className="whitespace-pre-wrap px-3 py-2.5 text-[12.5px] leading-relaxed text-[#1a1a1a]">
-          {finalCaption}
-        </div>
-      )}
-      {finalHashtags.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-t border-[#f0ece4] px-3 py-2">
-          {finalHashtags.map((t) => (
-            <span
-              key={t}
-              className="rounded-full bg-[#e8f0f9] px-2 py-0.5 text-[11px] text-[#3b7aba]"
-            >
-              #{t}
-            </span>
-          ))}
-        </div>
-      )}
-      {finalBestTime && (
-        <div className="border-t border-[#f0ece4] px-3 py-1.5 font-mono text-[10.5px] text-[#8c7e66]">
-          {finalBestTime}
-        </div>
-      )}
-    </div>
     </div>
   );
 };
@@ -827,6 +827,7 @@ export const NodeDetailModal = () => {
       await loadRecords();
       setEditingRecordId(null);
       setEditBuf({});
+      notifyArtifactsChanged();
     } catch (e) {
       setRecordsError(e instanceof Error ? e.message : "수정 실패");
     } finally {
@@ -846,6 +847,7 @@ export const NodeDetailModal = () => {
       const res = await fetch(endpoint, { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await loadRecords();
+      notifyArtifactsChanged();
     } catch (e) {
       setRecordsError(e instanceof Error ? e.message : "삭제 실패");
     } finally {
@@ -953,6 +955,7 @@ export const NodeDetailModal = () => {
       });
       setNewMemo("");
       await reload();
+      notifyArtifactsChanged();
     } finally {
       setSavingMemo(false);
     }
@@ -964,6 +967,7 @@ export const NodeDetailModal = () => {
       method: "DELETE",
     });
     await reload();
+    notifyArtifactsChanged();
   };
 
   // -- Feedback --------------------------------------------------------------
@@ -979,6 +983,7 @@ export const NodeDetailModal = () => {
       }),
     });
     await reload();
+    notifyArtifactsChanged();
   };
 
   // -- Memory Boost ----------------------------------------------------------
@@ -998,6 +1003,7 @@ export const NodeDetailModal = () => {
       });
       setBoostDone(true);
       setBoostNote("");
+      notifyArtifactsChanged();
     } finally {
       setBoosting(false);
     }

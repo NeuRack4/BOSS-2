@@ -4,6 +4,8 @@ import re
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
+from langsmith import traceable
+
 from app.core.llm import chat_completion
 from app.core.config import settings
 from app.core.supabase import get_supabase
@@ -1307,6 +1309,7 @@ async def _handle_planning(
     return _extract_and_save_nickname(account_id, reply)
 
 
+@traceable(name="orchestrator.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,

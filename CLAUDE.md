@@ -55,7 +55,7 @@
 - `_planner.py` (v1.1+) — JSON-schema 강제 플래너. `planner_completion` 통해 OpenAI(gpt-4o-mini 기본) 또는 Anthropic Claude 호출.
 - `_capability.py` — capability 레지스트리. `V2_DOMAINS = ("recruitment", "documents", "marketing", "sales")` — **4개 도메인 모두 function-calling 으로 통합**. sales 도 v1.2 에서 합류.
 - `recruitment.py` — type 매트릭스(`job_posting | job_posting_set | job_posting_poster | interview_questions | checklist | guide | hiring_drive`). 당근알바/알바천국/사람인 3종 플랫폼 공고 동시 작성 (`[JOB_POSTINGS]` 마커 → 부모 `job_posting_set` + 자식 `job_posting × 3` + `metadata.platform`). HTML 포스터는 `core.poster_gen.generate_job_posting_poster` 가 GPT-4o standalone HTML 을 만들어 Supabase Storage `recruitment-posters` 버킷 + `artifacts.content` 이중 저장 (플랫폼별 1:1 / 4:5 / 3:2 비율). 업종별 CHOICES 분기는 `_recruit_templates.detect_category(business_type)` (cafe/restaurant/retail/beauty/academy/default). 인건비는 `_recruit_calc.py` (연도별 최저임금 + 주휴수당 + 4대보험).
-- `documents.py` — type 매트릭스(`contract | estimate | proposal | notice | checklist | guide`) + 계약서 subtype 7종(`labor | lease | service | supply | partnership | franchise | nda`). 서브타입별 스켈레톤/법령·관행 조항은 `_doc_templates.build_doc_context` 가 주입하고, 원본 markdown 은 `_doc_knowledge/<subtype>/{acceptable,risks}.md`. 저장 시 `metadata.contract_subtype` + `due_label` 을 동반. **공정성 분석**: `_upload_context.get_pending_upload()` 로 이번 턴에 업로드된 파일 payload 를 받아 역할 CHOICES(갑/을/미지정) → `[REVIEW_REQUEST]` 마커 → `_doc_review.dispatch_review` → `type='analysis'` artifact + `analyzed_from` 엣지 + 응답 끝 `[[REVIEW_JSON]]` (프론트 `ReviewResultCard` 렌더). **Legal 서브브랜치**: `_legal.classify_legal_intent` 로 일반 법률 자문 질문을 감지 (휴리스틱상 서류 작성 의도 없고 업로드 컨텍스트 없을 때만) → `search_legal_knowledge` RPC + `legal_annual_values` 테이블 조회(연도별 최저임금·세율 등) → GPT-4o 조언 + 면책 고지 + `type='legal_advice'` artifact 를 Documents > Legal 서브허브 아래 저장.
+- `documents.py` — type 매트릭스(v1.3 Step 3 에서 11종으로 확장): 기본 6종(`contract | estimate | proposal | notice | checklist | guide`) + Operations 신규 2종(`subsidy_application | admin_application`) + Tax&HR 신규 3종(`hr_evaluation | payroll_doc | tax_calendar`). 계약서 subtype 7종(`labor | lease | service | supply | partnership | franchise | nda` — NDA knowledge 폴더도 Step 3-D 에서 추가됨). 서브타입별 스켈레톤/법령·관행 조항은 `_doc_templates.build_doc_context` 가 주입하고, 원본 markdown 은 `_doc_knowledge/<subtype>/{acceptable,risks}.md`. 저장 시 `metadata.contract_subtype` + `due_label` 을 동반. **서브허브 매핑**(v1.3, `_TYPE_TO_SUBHUB`): `contract`·`proposal` → **Review**, `estimate`·`notice` → **Operations**, `checklist`·`guide` → **Tax&HR**, `legal_advice` → **Legal**. 내부 식별자(`contract_subtype`, `*_contract_knowledge_chunks`, `search_*_contract_knowledge` RPC)는 "contract" 이름을 유지 — 사용자 노출 라벨만 Review. 각 capability 의 `describe()` description 에 `[카테고리: …]` 힌트를 달아 Planner 가 4카테고리 축으로 라우팅하도록 유도. **LangGraph 라우터 2단 구조**(v1.3, legacy 세이프티넷·직접 run() 호출 경로): `_classify_node` → `{_legal_node, _review_node, _write_review_node, _write_tax_hr_node, _write_operations_node, _ask_category_node}` 6노드. `detect_doc_intent` 로 type 감지 후 `TYPE_TO_CATEGORY` 매핑이 있으면 `write_<category>` 로, type 없으면 `classify_legal_intent` → legal, `detect_doc_category` 키워드 감지 → `write_<category>`, 모두 실패 시 `ask_category` 가 `CATEGORY_LABELS` 기반 4-choice CHOICES 를 **LLM 호출 없이** 즉시 반환. `_run_write(state, category)` 공통 헬퍼가 카테고리별 `_CATEGORY_GUIDANCE` 블록만 system 에 스왑. **공정성 분석**: `_upload_context.get_pending_upload()` 로 이번 턴에 업로드된 파일 payload 를 받아 역할 CHOICES(갑/을/미지정) → `[REVIEW_REQUEST]` 마커 → `_doc_review.dispatch_review` → `type='analysis'` artifact + `analyzed_from` 엣지 + 응답 끝 `[[REVIEW_JSON]]` (프론트 `ReviewResultCard` 렌더). analysis artifact 는 Review 서브허브 아래로 연결 (`pick_sub_hub_id(prefer_keywords=("Review","contract"))`). **Legal 서브브랜치**: `_legal.classify_legal_intent` 로 일반 법률 자문 질문을 감지 (휴리스틱상 서류 작성 의도 없고 업로드 컨텍스트 없을 때만) → `search_legal_knowledge` RPC + `legal_annual_values` 테이블 조회(연도별 최저임금·세율 등) → GPT-4o 조언 + 면책 고지 + `type='legal_advice'` artifact 를 Documents > Legal 서브허브 아래 저장.
 - `marketing.py` — type 매트릭스(`sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post | shorts_video`). 인스타그램 Meta Graph API 자동 게시(`/api/marketing/instagram/publish`), 네이버 블로그 자동 업로드(Playwright, `/api/marketing/blog/upload`), YouTube Shorts 생성 (`/api/marketing/youtube/shorts/generate` 4-step 위저드), DALL·E 3 이미지 생성, 리뷰 답글 톤 분기 등. Subsidy(지원사업) 검색 RPC 포함.
 - `sales.py` — type 매트릭스(`revenue_entry | cost_report | price_strategy | customer_script | customer_analysis | sales_report | promotion | checklist`). v1.2 에서 capability describe 를 export 하며 `_sales/` 서브패키지로 비즈니스 로직 분할. 서브허브 매핑: Reports(revenue_entry / sales_report / promotion / checklist), Costs(cost_report), Pricing(price_strategy), Customers(customer_script / customer_analysis). 매출/비용 입력은 `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 마커로 프론트 인라인 테이블을 여는 흐름.
 - `_sales/` (v1.2 신규 서브패키지):
@@ -66,7 +66,7 @@
 - `_upload_context.py` — per-request ContextVar 로 업로드 payload 공유 (chat router → documents agent). v1.0 이후 업로드 자체는 artifact 를 만들지 않고 payload 만 전달.
 - `_doc_review.py` — `analyze(content, user_role, doc_type, contract_subtype) → ReviewResult` + `dispatch_review(...)`. RAG: `search_{law,pattern,acceptable}_contract_knowledge` 3-way RRF RPC. 분석 artifact 는 원본과 `analyzed_from` 엣지만 생성 (서브허브 `contains` 엣지는 의도적으로 만들지 않음).
 - `_doc_classify.py` — 업로드 문서 분류 헬퍼 (`documents | receipt | invoice | tax | id | other`). 키워드 스코어링 + GPT-4o-mini JSON 폴백.
-- `_doc_templates.py` — `TYPE_SPEC` / `SKELETONS` / `build_doc_context` / `detect_doc_intent`.
+- `_doc_templates.py` — `TYPE_SPEC` / `SKELETONS` / `build_doc_context` / `detect_doc_intent` + v1.3 의 `TYPE_TO_CATEGORY` / `CATEGORY_LABELS` / `CATEGORY_TO_SUBHUB` / `detect_doc_category` (키워드 기반 4카테고리 축 라우팅).
 - `_legal.py` — `classify_legal_intent` + `_retrieve_legal_context` + `_generate_advice` + `_save_legal_advice`. `search_legal_knowledge` RPC (018·019 마이그레이션) + `legal_annual_values` 테이블(020 마이그레이션) 연동. `DISCLAIMER` 상수가 면책 문구 통일.
 - `_marketing_knowledge.py` — 마케팅 지식 RAG + 지원사업(subsidy) 검색 헬퍼.
 - `_recruit_templates.py` / `_recruit_calc.py` / `_recruit_knowledge/` — 채용 보조.
@@ -100,8 +100,17 @@
 
 - 계정 = Supabase Auth `auth.uid()` (이메일 + 비밀번호).
 - `memory_short` (Upstash Redis) + `memory_long` (Supabase pgvector) — 계정별 독립.
-- 대화 턴 20 초과 시 자동 context 압축 (GPT-4o-mini 요약, `memory/compressor.py`).
-- 장기 기억은 RAG 하이브리드 서치로 recall.
+- 대화 턴 20 초과 시 자동 context 압축 (GPT-4o-mini 요약, `memory/compressor.py`) → 요약은 `memory_long` 에 도메인 null 상태로 저장.
+- **Long-term memory 저장 (v1.3, 025 마이그레이션)**:
+  - **도메인 × 일자(KST) digest 단위** — 한 계정의 같은 도메인·같은 날짜 이벤트는 하나의 row 에 누적. `(account_id, domain, digest_date)` partial unique index.
+  - `log_artifact_to_memory(account_id, domain, artifact_type, title, content, metadata)` — artifact 생성 시 호출. `gpt-4o-mini` 로 2~3문장 요약 → 기존 digest 에 `- [HH:MM] {type} '{title}' — {요약}` 한 줄 append → 전체 재임베딩 후 `upsert_memory_long` RPC.
+  - 시각은 모두 **KST (`ZoneInfo("Asia/Seoul")`)** 로 표기 (DB `created_at` 는 UTC 유지).
+  - `importance` 기본값: artifact digest 2.0 · compressor 요약 1.5 · 사용자 Boost 0.2~1.0 · 피드백 0.6/0.85.
+- **Long-term memory recall (v1.3)**:
+  - `memory_search(p_account_id, p_embedding, p_query_text, p_limit)` — vector RRF + FTS RRF 합산에 `importance` 곱셈.
+  - **7일 recency 필터** — `where created_at > now() - interval '7 days'` 내장.
+  - 최대 N건(`chat.py:78` 은 `limit=3`) 을 `long_term_context` 로 각 도메인 에이전트 system prompt 에 주입.
+- **Retention** — Celery Beat 매일 00:00 KST `app.scheduler.tasks.cleanup_old_memories` 실행 → 7일 이전 row DELETE.
 - **Chat sessions** — `chat_sessions` + `chat_messages` 에 세션/메시지 저장. `chat_messages.speaker` (text[], 023 마이그레이션) 로 assistant 메시지의 화자 기록. 첫 user 메시지가 들어오면 `sessions.generate_title` 이 백그라운드로 제목 생성.
 
 ### RAG / 하이브리드 서치
@@ -147,7 +156,10 @@ artifact_edges        — parent_id, child_id, relation(contains|derives_from|re
 evaluations           — artifact_id, account_id, rating(up|down), feedback
 embeddings            — account_id, source_type, source_id, embedding(vector 1024), fts, content
 memory_short          — account_id, session_id, messages(jsonb), turn_count
-memory_long           — account_id, content, embedding(vector 1024), importance
+memory_long           — account_id, content, embedding(vector 1024), importance,
+                        domain (recruitment|marketing|sales|documents|null),
+                        digest_date (KST date, nullable), fts(tsvector)
+                        (025: 도메인×일자 digest + RRF + 7일 TTL)
 activity_logs         — account_id, type, domain, title, description, metadata(jsonb)
                         type 허용값: artifact_created | agent_run | schedule_run | schedule_notify
 schedules             — (DEPRECATED — 020 마이그레이션 이후 신규 인서트 없음, 기존 행만 남음 가능)
@@ -175,11 +187,23 @@ marketing_knowledge_chunks — 마케팅 지식 RAG (015) + hybrid RPC (016)
 - `kind === "anchor"` — 계정당 1개, 4개 도메인 허브의 부모.
 - `kind === "domain"`:
   - **메인 허브** — `type` 필드 없음/기본값. 4개 (recruitment/marketing/sales/documents).
-  - **서브 허브** — `type = 'category'`. **모든 계정 공통 18개 표준 세트** (`021_sales_records.sql` 이 `ensure_standard_sub_hubs` 를 재정의하며 Sales 에 **Revenue** 를 추가해 17 → 18 세트가 됨):
+  - **서브 허브** — `type = 'category'`. **모든 계정 공통 18개 표준 세트** (`021_sales_records.sql` 이 `ensure_standard_sub_hubs` 를 재정의하며 Sales 에 **Revenue** 를 추가해 17 → 18 세트. `024_rename_contracts_to_review.sql` 이 Documents 쪽 `Contracts` → `Review` 로 재명명):
     - Recruitment: `Job_posting` · `Interviews` · `Onboarding` · `Evaluations`
-    - Documents: `Contracts` · `Tax&HR` · `Legal` · `Operations`
+    - Documents: `Review` · `Tax&HR` · `Legal` · `Operations`
     - Sales: `Revenue` · `Costs` · `Pricing` · `Customers` · `Reports`
     - Marketing: `Social` · `Blog` · `Campaigns` · `Events` · `Reviews`
+
+**Documents 서브허브 역할** (v1.3 재정의, Step 3 에서 capability 5종 추가 완료):
+
+| 서브허브       | 역할                                                                                                                                                                                                                                                                 | 담당 타입                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Review**     | 공정 중립이 필요한 서류의 **작성·검토**. 계약서·제안서 초안 생성 + 업로드된 기존 서류의 공정성 분석 (갑/을 비율 + 위험 조항). 견적서·제안서 등 비계약 서류도 Step 3-C 에서 분석 가능 (contract_subtype 없이 일반 관행 기반).                                         | `contract` · `proposal` · `analysis`                                     |
+| **Tax&HR**     | 인사평가 관리 + 세무 관련 문서 (채용 제외). Step 3-A 에서 3종 capability 추가 — `doc_hr_evaluation` (인사평가서 5점 척도) · `doc_payroll_doc` (급여명세서·원천징수영수증·4대보험) · `doc_tax_calendar` (부가세·종소세·법인세·원천세·4대보험 연간 캘린더).            | `checklist` · `guide` · `hr_evaluation` · `payroll_doc` · `tax_calendar` |
+| **Legal**      | 법률 자문. 법령 RAG + `legal_annual_values` (연도별 최저임금·세율) 기반 조언 + 면책 고지.                                                                                                                                                                            | `legal_advice`                                                           |
+| **Operations** | 서류 초안 작성·행정 업무. 견적서·공지문. Step 3-B 에서 2종 capability 추가 — `doc_subsidy_application` (국가 지원사업 신청서, `search_subsidy_programs` RAG 후보 → CHOICES) · `doc_admin_application` (사업자등록·영업허가·식품영업신고·인허가 갱신 등 행정 신청서). | `estimate` · `notice` · `subsidy_application` · `admin_application`      |
+
+역할 구분 축은 **Planner 가 capability description 의 `[카테고리: …]` 힌트를 읽고 판정** 한다. Agent 내부의 2단 라우터(`detect_doc_intent` + `classify_legal_intent`)는 legacy 세이프티넷에서만 활성화.
+
 - `kind === "artifact"` + `type === 'archive'` — 아카이브 폴더.
 - 크로스 도메인 artifact 는 `domains` 에 여러 값 저장.
 
@@ -385,6 +409,10 @@ supabase/migrations/
   021_sales_records.sql               # sales_records 테이블 + Revenue 서브허브 추가
   022_cost_records.sql                # cost_records 테이블
   023_chat_messages_speaker.sql       # chat_messages.speaker text[]
+  024_rename_contracts_to_review.sql  # Documents 서브허브 Contracts → Review 재명명
+                                      # + ensure_standard_sub_hubs 재정의
+  025_memory_long_rrf_digest.sql      # memory_long 도메인×일자 digest + RRF + FTS + 7일 TTL
+                                      # upsert_memory_long / memory_search(query_text) 재작성
 ```
 
 > 두 파일이 같은 020 프리픽스를 갖지만 Supabase MCP 는 파일명 알파벳 순서로 실행한다 (`020_legal_annual_values.sql` → `020_schedule_to_metadata.sql`). 운영상 충돌 없음.
@@ -404,7 +432,7 @@ backend/app/agents/
     ├── supply/{acceptable,risks}.md
     ├── partnership/{acceptable,risks}.md
     ├── franchise/{acceptable,risks}.md
-    └── nda/
+    └── nda/{acceptable,risks}.md     # v1.3 Step 3-D 에서 보강
 
 backend/app/core/
 ├── doc_parser.py             # PDF / DOCX / TXT / RTF / XLSX·CSV → 텍스트 추출

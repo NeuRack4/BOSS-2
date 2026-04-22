@@ -41,9 +41,14 @@ const formatRelative = (iso: string): string => {
 };
 
 export const ChatHistoryModal = ({ open, onClose }: Props) => {
-  const { requestLoadSession, currentSessionId, requestNewSession } = useChat();
+  const {
+    requestLoadSession,
+    currentSessionId,
+    requestNewSession,
+    sessions,
+    setSessions,
+  } = useChat();
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -77,7 +82,7 @@ export const ChatHistoryModal = ({ open, onClose }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, setSessions]);
 
   const handlePick = (id: string) => {
     requestLoadSession(id);

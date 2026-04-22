@@ -8,7 +8,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from croniter import croniter
 
@@ -225,3 +225,24 @@ def run_schedule_artifact(self, artifact_id: str) -> dict:
     ).execute()
 
     return {"ok": True, "artifact_id": artifact_id, "log_id": log_id, "next_run": next_run}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Memory 유지보수 — 7일 이전 memory_long 레코드 매일 00:00 KST 삭제
+# ──────────────────────────────────────────────────────────────────────────
+@celery_app.task(name="app.scheduler.tasks.cleanup_old_memories")
+def cleanup_old_memories() -> dict:
+    """7일 이전 memory_long rows DELETE (KST 기준 자정 beat schedule).
+
+    v1.3: 장기기억 retention 정책. created_at 은 UTC 로 저장되지만 비교는 절대시간이라 문제 없음.
+    """
+    sb = get_supabase()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    try:
+        res = sb.table("memory_long").delete().lt("created_at", cutoff).execute()
+        deleted = len(res.data or [])
+    except Exception as exc:
+        log.warning("[cleanup_old_memories] failed: %s", exc)
+        return {"deleted": 0, "error": str(exc)}
+    log.info("[cleanup_old_memories] deleted %d rows older than %s", deleted, cutoff)
+    return {"deleted": deleted, "cutoff": cutoff}
