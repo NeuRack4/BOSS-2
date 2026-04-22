@@ -132,7 +132,7 @@ async def dispatch_save_revenue(
             .eq("account_id", account_id)
             .eq("kind", "domain")
             .eq("type", "category")
-            .ilike("title", "%Reports%")
+            .ilike("title", "%Revenue%")
             .limit(1)
             .execute()
         )
