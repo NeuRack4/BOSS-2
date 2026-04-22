@@ -49,7 +49,7 @@ Celery Beat (60s tick) → 실행 / D-7·D-3·D-1·D-0 알림
 - **YouTube Shorts 4-step 위저드 v1.0** — `ShortsWizardCard` 로 사진 업로드 → 자막 편집 → 설정 → 생성 흐름. 인증은 `/api/marketing/youtube/oauth/*`, 자막 미리보기는 `/preview-subtitles`, 생성은 `/generate`. 결과물은 YouTube 자동 업로드 + 클라우드 스토리지 URL 이중 반환.
 - **인스타그램 Meta Graph API 자동 게시 v1.0** — `/api/marketing/instagram/publish` (이미지 + 캡션 + 해시태그). DALL·E 3 이미지 생성 (`/api/marketing/image`) + 업로드된 사진 라이브러리 (`/photos`) + `PhotoLibraryModal` UI.
 - **Recruitment 3종 플랫폼 공고 동시 작성 + HTML 포스터 v0.9~** — 당근알바/알바천국/사람인 세트를 `[JOB_POSTINGS]` 마커로 동시 생성 → 부모 `job_posting_set` + 자식 `job_posting × 3` + `metadata.platform`. HTML 포스터는 GPT-4o standalone HTML 로 플랫폼별 비율(1:1 / 4:5 / 3:2) 생성 후 Supabase Storage `recruitment-posters` + `artifacts.content` 이중 저장. 인건비는 `_recruit_calc.py` 에서 연도별 최저임금 + 주휴수당 + 4대보험 의무 시뮬레이션.
-- **Documents 에이전트 v0.7 → v1.3** — 계약서·견적서·제안서·공지문·체크리스트·가이드 6종 type + 계약서 subtype 7종. 스켈레톤 + 한국 법령·관행 조항 markdown 이 system 프롬프트에 자동 주입. `due_label` 메타로 스케쥴러 **D-7/D-3/D-1/D-0** 알림. v1.3 에서 서브허브를 4카테고리 역할 축으로 재정의: **Review**(공정 중립 — 계약서·제안서 작성/검토) · **Tax&HR**(인사평가·세무, 채용 제외) · **Legal**(법률 자문) · **Operations**(국가 지원사업·행정 처리 신청서·서류 초안). 각 capability `describe()` 에 `[카테고리: …]` 힌트를 달아 Planner 가 4축으로 라우팅.
+- **Documents 에이전트 v0.7 → v1.3** — type 11종: 기본 6종(`contract` · `estimate` · `proposal` · `notice` · `checklist` · `guide`) + Step 3-B 에서 Operations 2종 추가(`subsidy_application` 국가 지원사업 신청서 · `admin_application` 행정 처리 신청서) + Step 3-A 에서 Tax&HR 3종 추가(`hr_evaluation` 인사평가서 · `payroll_doc` 급여명세서·원천징수·4대보험 · `tax_calendar` 세무 신고 캘린더). 계약서 subtype 7종 (NDA knowledge 는 Step 3-D 에서 완성). 스켈레톤 + 한국 법령·관행 조항 markdown 이 system 프롬프트에 자동 주입. `due_label` 메타로 스케쥴러 **D-7/D-3/D-1/D-0** 알림. v1.3 에서 서브허브를 4카테고리 역할 축으로 재정의: **Review**(공정 중립 — 계약서·제안서 작성/검토, 견적서·제안서 비계약 분석도 포함) · **Tax&HR**(인사평가·급여·세무 문서, 채용 제외) · **Legal**(법률 자문) · **Operations**(견적서·공지문·국가 지원사업·행정 처리). 각 capability `describe()` 에 `[카테고리: …]` 힌트를 달아 Planner 가 4축으로 라우팅. `doc_subsidy_application` 은 `search_subsidy_programs` RAG 후보를 CHOICES 로 되물어 사용자 의도 맞춤 초안 생성 (agent 성 보강).
 - **공정성 분석 v0.8** — PDF/DOCX/이미지 업로드 → 이미지는 gpt-4o vision OCR → 1,349 청크 지식 베이스(법령 1,171 + 위험패턴 100 + 허용조항 78) **3-way RRF RAG** → 갑/을 유불리 비율 + 위험 조항 JSON. `type='analysis'` artifact + `analyzed_from` 엣지, 프론트 `ReviewResultCard` 로 렌더.
 - **Legal 서브브랜치 v0.9** — 다분야 법령(노동·임대차·공정거래·개인정보·세법·상법·가맹·전자상거래·식품위생 등) 16종 RAG + `legal_annual_values` 테이블 (매년 갱신되는 최저임금/세율/보험료 등 확정 수치) 연동. GPT-4o 답변 + 면책 고지 자동 첨부 → Documents > Legal 서브허브에 `legal_advice` artifact.
 - **표준 서브허브 18종** — 모든 계정 가입 시 자동 부트스트랩. Recruitment 4 + Documents 4(`Review · Tax&HR · Legal · Operations` — 024 에서 `Contracts → Review` 재명명) + Sales 5(`Revenue · Costs · Pricing · Customers · Reports` — 021 에서 Revenue 추가) + Marketing 5. `ensure_standard_sub_hubs(account_id)` 가 idempotent.
@@ -103,8 +103,10 @@ BOSS-2/
 │   │   │   ├── _upload_context.py   # per-request 업로드 payload
 │   │   │   ├── _sales_context.py    # per-request 영수증/저장 payload
 │   │   │   ├── recruitment.py     # 3종 플랫폼 공고 + HTML 포스터
-│   │   │   ├── documents.py       # 6종 type + 계약 subtype 7 + 공정성 분석 + Legal 분기
+│   │   │   ├── documents.py       # 11종 type + 계약 subtype 7 + 공정성 분석 + Legal 분기
 │   │   │   │                       # 서브허브: Review / Tax&HR / Legal / Operations (v1.3)
+│   │   │   │                       # v1.3 Step 3 신규 capability: subsidy_application,
+│   │   │   │                       #   admin_application, hr_evaluation, payroll_doc, tax_calendar
 │   │   │   ├── marketing.py       # SNS/Blog/Campaign/Shorts/리뷰 답글
 │   │   │   ├── sales.py           # 8종 type, v1.2 describe() export
 │   │   │   ├── _sales/            # 매출 도메인 서브패키지 (v1.2)

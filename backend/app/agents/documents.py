@@ -44,15 +44,27 @@ VALID_TYPES: tuple[str, ...] = (
     "notice",
     "checklist",
     "guide",
+    # Step 3-B — Operations 신규 2종
+    "subsidy_application",
+    "admin_application",
+    # Step 3-A — Tax&HR 신규 3종
+    "hr_evaluation",
+    "payroll_doc",
+    "tax_calendar",
 )
 
 _TYPE_TO_SUBHUB: dict[str, str] = {
-    "contract":  "Review",
-    "proposal":  "Review",
-    "estimate":  "Operations",
-    "notice":    "Operations",
-    "checklist": "Tax&HR",
-    "guide":     "Tax&HR",
+    "contract":            "Review",
+    "proposal":            "Review",
+    "estimate":            "Operations",
+    "notice":              "Operations",
+    "subsidy_application": "Operations",
+    "admin_application":   "Operations",
+    "checklist":           "Tax&HR",
+    "guide":               "Tax&HR",
+    "hr_evaluation":       "Tax&HR",
+    "payroll_doc":         "Tax&HR",
+    "tax_calendar":        "Tax&HR",
 }
 
 _REVIEW_REQUEST_RE = re.compile(r"\[REVIEW_REQUEST\](.*?)\[/REVIEW_REQUEST\]", re.DOTALL)
@@ -565,7 +577,7 @@ async def _review_node(state: DocState) -> DocState:
     if user_role not in ("갑", "을", "미지정"):
         user_role = "미지정"
     doc_type = marker.get("doc_type") or "계약서"
-    if doc_type not in ("계약서", "제안서", "기타"):
+    if doc_type not in ("계약서", "제안서", "견적서", "기타"):
         doc_type = "계약서"
     subtype = marker.get("contract_subtype") or None
     if subtype in ("", "없음"):
@@ -893,6 +905,185 @@ async def run_checklist_guide(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Step 3-B — Operations 신규 2종
+# ──────────────────────────────────────────────────────────────────────────
+
+async def run_subsidy_application(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    subsidy_name: str | None = None,
+    scope: str | None = None,
+    extra_note: str | None = None,
+) -> str:
+    """국가 지원사업 신청서 초안.
+
+    subsidy_name 이 확정됐으면 바로 초안. 미확정이면 `search_subsidy_programs`
+    RAG 로 후보 3~5개 주입 → 에이전트가 CHOICES 로 되묻는다 (agent 성 핵심).
+    """
+    extra_ctx = ""
+    if not subsidy_name:
+        import asyncio
+        from app.agents._marketing_knowledge import search_subsidy_programs
+        try:
+            rows = await asyncio.to_thread(search_subsidy_programs, message, 5)
+        except Exception:
+            rows = []
+        if rows:
+            lines = ["[지원사업 후보 — RAG 검색 결과]"]
+            for i, r in enumerate(rows, 1):
+                snippet = (r.get("content") or "").strip().replace("\n", " ")[:200]
+                lines.append(f"{i}. {snippet}")
+            lines.append(
+                "\n위 후보 중 사용자 요청에 맞는 것이 있으면 [CHOICES] 로 한 번에 물어보세요. "
+                "후보가 명백히 요청과 맞지 않으면 사용자에게 구체적 지원사업명을 되묻세요."
+            )
+            extra_ctx = "\n".join(lines)
+
+    lines: list[str] = []
+    if subsidy_name:
+        lines.append(f"[지원사업명] {subsidy_name}")
+    if scope:
+        lines.append(f"[신청 범위] {scope}")
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "국가 지원사업 신청서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=subsidy_application, sub_domain=Operations) 포함. "
+        "subsidy_name 이 확정됐으면 즉시 초안 작성, 아니면 후보를 CHOICES 로 먼저 확인.\n"
+        + (extra_ctx + "\n\n" if extra_ctx else "")
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_admin_application(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    application_type: str,
+    purpose: str,
+    extra_note: str | None = None,
+) -> str:
+    """사업자등록 정정·영업허가 갱신·식품영업신고·인허가 등 행정 신청서 초안."""
+    lines = [
+        f"[신청 종류] {application_type}",
+        f"[신청 목적] {purpose}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "행정 처리용 신청서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=admin_application, sub_domain=Operations) 포함. "
+        "한국 행정 실무(사업자등록·영업허가·식품영업신고·인허가) 양식에 맞게.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Step 3-A — Tax&HR 신규 3종
+# ──────────────────────────────────────────────────────────────────────────
+
+async def run_hr_evaluation(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    evaluatee: str,
+    period: str,
+    metrics: list[str] | None = None,
+    evaluation_type: str = "연간",
+) -> str:
+    """인사평가서 템플릿 생성. 프로필(employees_count, business_type) 자동 활용."""
+    metrics_line = ", ".join(metrics) if metrics else "업무 성과·태도·고객 응대·팀워크·성장 의지"
+    lines = [
+        f"[평가 대상] {evaluatee}",
+        f"[평가 기간] {period}",
+        f"[평가 유형] {evaluation_type} (연간/반기/분기/수시)",
+        f"[평가 지표] {metrics_line}",
+    ]
+    synthetic = (
+        "인사평가서를 작성해주세요. "
+        "[ARTIFACT] 블록(type=hr_evaluation, sub_domain=Tax&HR) 포함. "
+        "프로필의 직원 수·업종을 반영한 실용적 지표(5점 척도) + 종합 등급 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_payroll_doc(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    doc_kind: str,
+    target: str,
+    pay_month: str,
+    extra_note: str | None = None,
+) -> str:
+    """급여명세서·원천징수영수증·4대보험 신고용 문서 초안."""
+    lines = [
+        f"[문서 종류] {doc_kind} (급여명세서 | 원천징수영수증 | 4대보험 신고서)",
+        f"[대상자] {target}",
+        f"[지급월/대상기간] {pay_month}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "급여·세무 문서 초안을 작성해주세요. "
+        "[ARTIFACT] 블록(type=payroll_doc, sub_domain=Tax&HR) 포함. "
+        "4대보험 요율·소득세 간이세액표·비과세 한도를 반영. "
+        "당해 공식 요율은 발행 시 재확인 안내 문구 포함.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_tax_calendar(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    business_type: str,
+    target_year: int,
+    extra_note: str | None = None,
+) -> str:
+    """세무 신고 캘린더 생성 — 부가세·종소세·원천세·4대보험 등."""
+    lines = [
+        f"[사업자 형태] {business_type} (개인 일반/간이 | 법인)",
+        f"[대상 연도] {target_year}",
+    ]
+    if extra_note:
+        lines.append(f"[특이사항] {extra_note}")
+    synthetic = (
+        "세무 신고 캘린더를 작성해주세요. "
+        "[ARTIFACT] 블록(type=tax_calendar, sub_domain=Tax&HR) 포함. "
+        "부가세·종소세·법인세·원천세·4대보험 일정을 월별 표로 구성하고, "
+        "각 일정의 근거 법조(부가세법 §49, 소득세법 §70 등) 를 함께 명시.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
 async def run_review(
     *,
     account_id: str,
@@ -1036,6 +1227,108 @@ def describe(account_id: str) -> list[dict]:
                     "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
                 },
                 "required": ["topic"],
+            },
+        },
+        # ──────────────────────────────────────────────────────
+        # Step 3-B — Operations 신규 2종
+        # ──────────────────────────────────────────────────────
+        {
+            "name": "doc_subsidy_application",
+            "description": (
+                "국가 지원사업 신청서 초안 작성 — 소상공인 지원·정부 보조금·창업 지원금·고용 지원금 등. "
+                "'지원사업 신청서 써줘', '보조금 신청', '창업 지원금 지원하고 싶어' 요청이면 이 tool. "
+                "subsidy_name 이 파라미터로 안 넘어오면 내부에서 search_subsidy_programs 로 "
+                "후보 3~5개를 조회해 에이전트가 CHOICES 로 되묻는 흐름. "
+                "[카테고리: Operations — 국가 지원사업·행정 업무]"
+            ),
+            "handler": run_subsidy_application,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subsidy_name": {"type": "string", "description": "지원사업 공식명 (확정된 경우만)"},
+                    "scope":        {"type": "string", "description": "신청 범위·사업 내용"},
+                    "extra_note":   {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": "doc_admin_application",
+            "description": (
+                "행정 처리 신청서 초안 — 사업자등록 정정·영업허가 갱신·식품영업신고·인허가 변경 등. "
+                "'사업자등록 변경 신청서', '영업허가 갱신 서류', '식품영업신고서 작성해줘' 요청이면 이 tool. "
+                "[카테고리: Operations — 행정 업무 신청서]"
+            ),
+            "handler": run_admin_application,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "application_type": {"type": "string", "description": "신청 종류 (예: 사업자등록 정정, 영업허가 갱신, 식품영업신고)"},
+                    "purpose":          {"type": "string", "description": "신청 목적·사유"},
+                    "extra_note":       {"type": "string"},
+                },
+                "required": ["application_type", "purpose"],
+            },
+        },
+        # ──────────────────────────────────────────────────────
+        # Step 3-A — Tax&HR 신규 3종
+        # ──────────────────────────────────────────────────────
+        {
+            "name": "doc_hr_evaluation",
+            "description": (
+                "인사평가서 템플릿 생성 — 5점 척도 지표 + 종합 등급 포함. "
+                "'직원 평가서 만들어줘', '인사평가 양식 뽑아줘' 요청이면 이 tool. "
+                "프로필의 직원 수·업종 자동 반영. "
+                "[카테고리: Tax&HR — 인사평가 관리]"
+            ),
+            "handler": run_hr_evaluation,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "evaluatee":       {"type": "string", "description": "피평가자 (직원명 또는 직책)"},
+                    "period":          {"type": "string", "description": "평가 기간 (예: 2026년 상반기, 2026-01~06)"},
+                    "metrics":         {"type": "array", "items": {"type": "string"}, "description": "평가 지표 목록"},
+                    "evaluation_type": {"type": "string", "enum": ["연간", "반기", "분기", "수시"], "default": "연간"},
+                },
+                "required": ["evaluatee", "period"],
+            },
+        },
+        {
+            "name": "doc_payroll_doc",
+            "description": (
+                "급여명세서·원천징수영수증·4대보험 신고용 문서 초안. "
+                "'급여명세서 뽑아줘', '원천징수 영수증 만들어줘', '4대보험 신고서' 요청이면 이 tool. "
+                "4대보험 요율·소득세 간이세액·비과세 한도 반영. "
+                "[카테고리: Tax&HR — 세무 (채용 제외)]"
+            ),
+            "handler": run_payroll_doc,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_kind":   {"type": "string", "enum": ["급여명세서", "원천징수영수증", "4대보험 신고서"]},
+                    "target":     {"type": "string", "description": "대상자 (직원명)"},
+                    "pay_month":  {"type": "string", "description": "지급월 (예: 2026-03) 또는 대상 기간"},
+                    "extra_note": {"type": "string"},
+                },
+                "required": ["doc_kind", "target", "pay_month"],
+            },
+        },
+        {
+            "name": "doc_tax_calendar",
+            "description": (
+                "연간 세무 신고 캘린더 — 부가세·종소세·법인세·원천세·4대보험 일정을 월별 표로. "
+                "'세무 일정 정리해줘', '세금 신고 캘린더', '부가세 신고 일정' 요청이면 이 tool. "
+                "사업자 형태(개인/법인)에 따라 분기. "
+                "[카테고리: Tax&HR — 세무 일정]"
+            ),
+            "handler": run_tax_calendar,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "business_type": {"type": "string", "description": "사업자 형태: '개인 일반' | '개인 간이' | '법인'"},
+                    "target_year":   {"type": "integer", "description": "대상 연도 (예: 2026)"},
+                    "extra_note":    {"type": "string"},
+                },
+                "required": ["business_type", "target_year"],
             },
         },
         {
