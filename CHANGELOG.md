@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] — fix/kanban-column-scroll (Kanban 컬럼 고정 너비 제거 + 가로 스크롤 해소)
+
+### Fixed — Frontend
+
+- **`frontend/components/bento/KanbanColumn.tsx`** — 컬럼 너비를 고정 `w-[280px] shrink-0` 에서 유동 `flex-1 min-w-[200px]` 으로 변경. 5개 서브허브를 가진 Sales·Marketing 도메인에서 발생하던 가로 스크롤 제거. 4개 서브허브 도메인(Recruitment·Documents)은 컬럼이 화면 너비에 맞게 더 넓게 표시됨.
+
 ## [1.2.1] — fix/sales-input-error (Sales revenue_entry 서브허브 오분류 수정)
 
 ### Fixed — Sales
