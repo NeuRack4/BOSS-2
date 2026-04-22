@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] — feature/sales-menu-analysis (Sales 메뉴별 수익성 분석 + 차트 시각화)
+
+### Added — 메뉴별 수익성 분석 기능
+
+- **`backend/app/agents/_sales/_menu_analysis.py`** — 신규. `analyze_menu(account_id, period, category, top_n)` — `sales_records` 기간별 집계 → 메뉴별 매출·판매량·매출비중·판매량비중 순위 반환. `_resolve_days()` 기간 키워드(오늘/이번주/이번달/3개월/전체 등) → 조회 일수 매핑. `format_analysis_text()` — 마크다운 순위표 + 핵심 인사이트 3줄.
+- **`backend/app/agents/sales.py`** — `run_menu_analysis` 핸들러 추가. `period` / `category` / `top_n` 파라미터 지원. 분석 결과에 `[[MENU_CHART]]{JSON}[[/MENU_CHART]]` 마커 삽입 (프론트 차트 카드 연동). `[ARTIFACT]` 블록으로 Reports 서브허브에 자동 저장. `describe()` 에 `sales_menu_analysis` capability 등록.
+- **`frontend/components/chat/MenuAnalysisCard.tsx`** — 신규. `[[MENU_CHART]]` 마커 파싱 (`extractMenuChartPayload`). 3탭 차트 카드: 가로 바 차트(매출 순위) · SVG 도넛 차트(카테고리별 비중) · SVG 산점도(가격 vs 판매량 4사분면). `ResizeObserver` 기반 반응형 너비. 외부 라이브러리 없이 순수 CSS/SVG 구현.
+- **`frontend/components/chat/InlineChat.tsx`** — `MenuAnalysisCard` import + `menuChart` 필드를 `Message` 타입에 추가. 응답 수신·히스토리 로드 시 `extractMenuChartPayload` 파싱 → `MenuAnalysisCard` 조건부 표시.
+- **`frontend/components/detail/NodeDetailModal.tsx`** — `sales_report` 타입 + `metadata.menu_chart` 보유 시 `MenuAnalysisCard` 렌더 조건 추가.
+
+---
+
 ## [1.3.3] — feature-marketing (Instagram DM 자동 발송 캠페인)
 
 ### Added — Instagram DM Campaign

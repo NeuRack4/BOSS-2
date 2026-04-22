@@ -766,6 +766,63 @@ async def run_parse_csv(
     )
 
 
+@_traceable(name="sales.run_menu_analysis")
+async def run_menu_analysis(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    period: str = "이번달",
+    category: str | None = None,
+    top_n: int = 10,
+) -> str:
+    """메뉴/상품별 매출 집계 + 수익성 순위 분석."""
+    log.info("[SALES] run_menu_analysis 진입 | account=%s period=%s", account_id, period)
+    from app.agents._sales._menu_analysis import analyze_menu, format_analysis_text
+
+    result = await analyze_menu(
+        account_id=account_id,
+        period=period,
+        category=category or None,
+        top_n=top_n,
+    )
+    analysis_text = format_analysis_text(result)
+
+    if result.get("items"):
+        chart_json = json.dumps(result, ensure_ascii=False)
+        chart_marker = f"\n\n[[MENU_CHART]]{chart_json}[[/MENU_CHART]]"
+        artifact_block = (
+            f"\n\n[ARTIFACT]\n"
+            f"type: sales_report\n"
+            f"title: {period} 메뉴별 수익성 분석\n"
+            f"sub_domain: Reports\n"
+            f"[/ARTIFACT]"
+        )
+        # 저장용: 마커 없는 깨끗한 텍스트 (NodeDetailModal에서 마커가 노출되지 않도록)
+        artifact_id = await save_artifact_from_reply(
+            account_id,
+            "sales",
+            analysis_text + artifact_block,
+            default_title="메뉴별 수익성 분석",
+            valid_types=VALID_TYPES,
+        )
+        # NodeDetailModal 차트 렌더용 — metadata에 chart JSON 저장
+        if artifact_id:
+            try:
+                from app.core.supabase import get_supabase
+                get_supabase().table("artifacts").update(
+                    {"metadata": {"menu_chart": result}}
+                ).eq("id", artifact_id).execute()
+            except Exception as e:
+                log.warning("[SALES] menu_chart metadata patch failed: %s", e)
+        # 반환용: 차트 마커 포함 (InlineChat에서 MenuAnalysisCard 렌더링)
+        return analysis_text + chart_marker + artifact_block
+
+    return analysis_text
+
+
 @_traceable(name="sales.run_save_revenue")
 async def run_save_revenue(
     *,
@@ -953,6 +1010,23 @@ def describe(account_id: str) -> list[dict]:
                     "topic": {"type": "string", "description": "예: '월말 재고 점검', '주간 발주'"},
                 },
                 "required": ["topic"],
+            },
+        },
+        {
+            "name": "sales_menu_analysis",
+            "description": (
+                "메뉴/상품별 매출 집계 및 수익성 순위 분석. "
+                "'어떤 메뉴가 제일 잘 팔려?', '이번달 베스트 메뉴', '수익성 분석해줘', "
+                "'상품별 매출 순위' 등 메뉴·상품 단위 분석 요청 시 호출."
+            ),
+            "handler": run_menu_analysis,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "period":   {"type": "string", "description": "예: '이번달', '이번주', '3개월', '전체'"},
+                    "category": {"type": "string", "description": "특정 카테고리만 필터 (예: '음료', '디저트')"},
+                    "top_n":    {"type": "integer", "description": "상위 N개 (기본 10)"},
+                },
             },
         },
     ]
