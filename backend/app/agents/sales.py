@@ -718,6 +718,54 @@ async def run_parse_receipt(
     return "\n".join(summary_lines)
 
 
+@_traceable(name="sales.run_parse_csv")
+async def run_parse_csv(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """업로드된 CSV/Excel 파일 → 매출 항목 파싱 → SalesInputTable 오픈 마커.
+
+    pending_receipt 의 mime_type 또는 original_name 이 CSV/Excel 일 때 호출.
+    """
+    log.info("[SALES] run_parse_csv 진입 | account=%s", account_id)
+    from app.agents._sales_context import get_pending_receipt
+    from app.agents._sales._csv_parser import parse_sales_file
+
+    pending = get_pending_receipt()
+    if not pending or not pending.get("storage_path"):
+        return "CSV/Excel 파일이 아직 도착하지 않았어요. 다시 업로드해 주시겠어요?"
+
+    result = await parse_sales_file(
+        storage_path=pending["storage_path"],
+        bucket=pending.get("bucket") or "documents-uploads",
+        mime_type=pending.get("mime_type") or "text/csv",
+        original_name=pending.get("original_name") or "",
+    )
+
+    items = result.get("items") or []
+    total_rows = result.get("total_rows", 0)
+
+    if not items:
+        return (
+            f"파일에서 매출 항목을 찾지 못했어요. ({total_rows}행 확인)\n\n"
+            "컬럼명이 '메뉴명', '수량', '단가', '금액' 형식인지 확인해 주세요."
+        )
+
+    today = date.today().isoformat()
+    action_payload = {"date": today, "items": items}
+    action = f"[ACTION:OPEN_SALES_TABLE:{json.dumps(action_payload, ensure_ascii=False)}]"
+
+    date_note = "" if result.get("mapped_date") else "\n> 날짜 컬럼을 인식하지 못해 오늘 날짜로 일괄 처리했어요. 표에서 수정 가능해요."
+    return (
+        f"파일에서 **{len(items)}건** 을 인식했어요. 확인 후 저장하세요.{date_note}\n\n"
+        f"{action}"
+    )
+
+
 @_traceable(name="sales.run_save_revenue")
 async def run_save_revenue(
     *,
@@ -911,21 +959,40 @@ def describe(account_id: str) -> list[dict]:
 
     # 조건부 capability — 요청 범위 contextvar 에 따라 advertise.
 
-    # 영수증 파싱 (업로드된 이미지가 이번 턴에 있을 때만)
+    # CSV/Excel 파싱 또는 영수증 OCR (업로드된 파일이 이번 턴에 있을 때만)
     pending_receipt = get_pending_receipt()
     if pending_receipt:
-        fname = pending_receipt.get("original_name") or "업로드 영수증"
-        caps.append({
-            "name": "sales_parse_receipt",
-            "description": (
-                f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
-                "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
-                "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
-                "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
-            ),
-            "handler": run_parse_receipt,
-            "parameters": {"type": "object", "properties": {}},
-        })
+        fname = pending_receipt.get("original_name") or ""
+        mime = pending_receipt.get("mime_type") or ""
+        is_csv_excel = (
+            "csv" in mime
+            or "excel" in mime
+            or "spreadsheet" in mime
+            or fname.lower().endswith((".csv", ".xlsx", ".xls"))
+        )
+        if is_csv_excel:
+            caps.append({
+                "name": "sales_parse_csv",
+                "description": (
+                    f"[즉시 호출 가능] 방금 업로드된 CSV/Excel 파일 '{fname}' 에서 매출 항목을 "
+                    "파싱해 SalesInputTable 을 여는 ACTION 마커를 응답에 담는다. "
+                    "사용자가 '파싱해줘', '불러와줘', '매출로 등록' 등을 요청하면 즉시 호출."
+                ),
+                "handler": run_parse_csv,
+                "parameters": {"type": "object", "properties": {}},
+            })
+        else:
+            caps.append({
+                "name": "sales_parse_receipt",
+                "description": (
+                    f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
+                    "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
+                    "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
+                    "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
+                ),
+                "handler": run_parse_receipt,
+                "parameters": {"type": "object", "properties": {}},
+            })
 
     # 사용자 확정 항목 저장 (SalesInputTable/CostInputTable Save 버튼)
     pending_save = get_pending_save() or {}
