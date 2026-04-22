@@ -37,8 +37,9 @@ class Settings(BaseSettings):
     naver_blog_pw: str = ""
 
     # Meta / Instagram (optional)
-    meta_access_token: str = ""   # 장기 액세스 토큰 (60일)
-    instagram_user_id: str = ""   # Instagram 비즈니스 계정 숫자 ID
+    meta_access_token: str = ""         # EAA 토큰 — graph.facebook.com 댓글 조회용
+    meta_ig_access_token: str = ""      # IGAA 토큰 — graph.instagram.com DM 발송용
+    instagram_user_id: str = ""         # Instagram 비즈니스 계정 숫자 ID
 
     # YouTube (optional)
     youtube_client_id: str = ""

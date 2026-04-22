@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Moon,
   Search,
+  Send,
   Sun,
 } from "lucide-react";
 import { ScheduleManagerModal } from "@/components/layout/ScheduleManagerModal";
@@ -22,6 +23,7 @@ import { ProfileModal } from "@/components/layout/ProfileModal";
 import { LongTermMemoryModal } from "@/components/layout/LongTermMemoryModal";
 import { MemosModal } from "@/components/layout/MemosModal";
 import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
+import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 
 export const Header = () => {
@@ -34,6 +36,7 @@ export const Header = () => {
   const [longMemOpen, setLongMemOpen] = useState(false);
   const [memosOpen, setMemosOpen] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [dmCampaignOpen, setDmCampaignOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [darkBg, setDarkBg] = useState(false);
 
@@ -72,6 +75,7 @@ export const Header = () => {
     const onOpenLongMem = () => setLongMemOpen(true);
     const onOpenMemos = () => setMemosOpen(true);
     const onOpenComment = () => setCommentOpen(true);
+    const onOpenDmCampaign = () => setDmCampaignOpen(true);
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
     window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);
@@ -79,6 +83,7 @@ export const Header = () => {
     window.addEventListener("boss:open-longmem-modal", onOpenLongMem);
     window.addEventListener("boss:open-memos-modal", onOpenMemos);
     window.addEventListener("boss:open-comment-modal", onOpenComment);
+    window.addEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
     return () => {
       window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
       window.removeEventListener("boss:open-activity-modal", onOpenActivity);
@@ -90,6 +95,7 @@ export const Header = () => {
       window.removeEventListener("boss:open-longmem-modal", onOpenLongMem);
       window.removeEventListener("boss:open-memos-modal", onOpenMemos);
       window.removeEventListener("boss:open-comment-modal", onOpenComment);
+      window.removeEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
     };
   }, []);
 
@@ -165,6 +171,16 @@ export const Header = () => {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setDmCampaignOpen(true)}
+          title="DM Campaigns"
+          className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+        >
+          <Send className="h-4 w-4 mr-1.5" />
+          DM
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={toggleBg}
           title={darkBg ? "Switch to light" : "Switch to dark"}
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
@@ -208,6 +224,10 @@ export const Header = () => {
       <CommentManagerModal
         open={commentOpen}
         onClose={() => setCommentOpen(false)}
+      />
+      <DMCampaignModal
+        open={dmCampaignOpen}
+        onClose={() => setDmCampaignOpen(false)}
       />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
