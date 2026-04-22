@@ -122,14 +122,26 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
       });
       const json = await res.json();
       if (json.data) {
-        const { sent, scanned, skip_no_id, skip_already_sent, skip_no_keyword, skip_dm_failed } = json.data;
+        const {
+          sent,
+          scanned,
+          skip_no_id,
+          skip_already_sent,
+          skip_no_keyword,
+          skip_dm_failed,
+        } = json.data;
         const skips: string[] = [];
-        if (skip_no_id)       skips.push(`사용자 ID 없음 ${skip_no_id}개`);
-        if (skip_already_sent) skips.push(`중복 발송 방지 ${skip_already_sent}개`);
-        if (skip_no_keyword)  skips.push(`키워드 불일치 ${skip_no_keyword}개`);
-        if (skip_dm_failed)   skips.push(`DM 발송 실패 ${skip_dm_failed}개`);
-        const skipMsg = skips.length ? `\n미발송 사유: ${skips.join(", ")}` : "";
-        alert(`스캔 완료 — 댓글 ${scanned}개 확인 / DM ${sent}개 발송${skipMsg}`);
+        if (skip_no_id) skips.push(`사용자 ID 없음 ${skip_no_id}개`);
+        if (skip_already_sent)
+          skips.push(`중복 발송 방지 ${skip_already_sent}개`);
+        if (skip_no_keyword) skips.push(`키워드 불일치 ${skip_no_keyword}개`);
+        if (skip_dm_failed) skips.push(`DM 발송 실패 ${skip_dm_failed}개`);
+        const skipMsg = skips.length
+          ? `\n미발송 사유: ${skips.join(", ")}`
+          : "";
+        alert(
+          `스캔 완료 — 댓글 ${scanned}개 확인 / DM ${sent}개 발송${skipMsg}`,
+        );
       }
       await loadCampaigns();
     } catch {
@@ -142,7 +154,12 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
   // ── 캠페인 생성 ────────────────────────────────────────────────────────────
 
   const handleCreate = async () => {
-    if (!form.post_id.trim() || !form.post_url.trim() || !form.trigger_keyword.trim() || !form.dm_template.trim()) {
+    if (
+      !form.post_id.trim() ||
+      !form.post_url.trim() ||
+      !form.trigger_keyword.trim() ||
+      !form.dm_template.trim()
+    ) {
       alert("모든 항목을 입력해주세요.");
       return;
     }
@@ -192,10 +209,9 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
     if (!aid) return;
     setDeletingId(camp.id);
     try {
-      await fetch(
-        `${apiBase}/api/dm-campaigns/${camp.id}?account_id=${aid}`,
-        { method: "DELETE" },
-      );
+      await fetch(`${apiBase}/api/dm-campaigns/${camp.id}?account_id=${aid}`, {
+        method: "DELETE",
+      });
       setCampaigns((prev) => prev.filter((c) => c.id !== camp.id));
       if (expandedId === camp.id) setExpandedId(null);
     } finally {
@@ -264,8 +280,7 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
               onClick={() => setShowForm((v) => !v)}
               className="flex items-center gap-1 rounded-md bg-[#7c4daa] px-3 py-1.5 text-[12px] font-semibold text-white hover:opacity-90"
             >
-              <Plus className="h-3.5 w-3.5" />
-              새 캠페인
+              <Plus className="h-3.5 w-3.5" />새 캠페인
             </button>
           </div>
         </div>
@@ -285,19 +300,21 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
                   type="text"
                   placeholder="예: 18023456789012345"
                   value={form.post_id}
-                  onChange={(e) => setForm((f) => ({ ...f, post_id: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, post_id: e.target.value }))
+                  }
                   className="w-full rounded border border-[#ddd0b4] bg-white px-3 py-1.5 text-[13px] outline-none focus:border-[#7c4daa]"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-[#5a5040]">
-                  게시물 URL
-                </label>
+                <label className="text-[11px] text-[#5a5040]">게시물 URL</label>
                 <input
                   type="text"
                   placeholder="https://www.instagram.com/p/..."
                   value={form.post_url}
-                  onChange={(e) => setForm((f) => ({ ...f, post_url: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, post_url: e.target.value }))
+                  }
                   className="w-full rounded border border-[#ddd0b4] bg-white px-3 py-1.5 text-[13px] outline-none focus:border-[#7c4daa]"
                 />
               </div>
@@ -309,7 +326,9 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
                   type="text"
                   placeholder="예: 신청, 쿠폰, 정보"
                   value={form.trigger_keyword}
-                  onChange={(e) => setForm((f) => ({ ...f, trigger_keyword: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, trigger_keyword: e.target.value }))
+                  }
                   className="w-full rounded border border-[#ddd0b4] bg-white px-3 py-1.5 text-[13px] outline-none focus:border-[#7c4daa]"
                 />
                 <p className="text-[10px] text-[#8c7e66]">
@@ -317,14 +336,14 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-[#5a5040]">
-                  DM 내용
-                </label>
+                <label className="text-[11px] text-[#5a5040]">DM 내용</label>
                 <textarea
                   rows={3}
                   placeholder="안녕하세요! 댓글 감사드려요. 아래 링크로 신청하실 수 있습니다 ↓"
                   value={form.dm_template}
-                  onChange={(e) => setForm((f) => ({ ...f, dm_template: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, dm_template: e.target.value }))
+                  }
                   className="w-full resize-none rounded border border-[#ddd0b4] bg-white px-3 py-1.5 text-[13px] outline-none focus:border-[#7c4daa]"
                 />
               </div>
@@ -332,7 +351,10 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setForm(EMPTY_FORM); }}
+                onClick={() => {
+                  setShowForm(false);
+                  setForm(EMPTY_FORM);
+                }}
                 className="rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
               >
                 취소
@@ -343,7 +365,11 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
                 disabled={creating}
                 className="flex items-center gap-1.5 rounded-md bg-[#7c4daa] px-4 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
-                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {creating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
                 {creating ? "저장 중…" : "캠페인 시작"}
               </button>
             </div>
@@ -422,7 +448,9 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
 
                       {/* 게시물 링크 */}
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-[#030303]/40">게시물:</span>
+                        <span className="text-[11px] text-[#030303]/40">
+                          게시물:
+                        </span>
                         <a
                           href={camp.post_url}
                           target="_blank"
@@ -466,7 +494,10 @@ export const DMCampaignModal = ({ open, onClose }: Props) => {
                             </p>
                           ) : (
                             sentItems.map((s) => (
-                              <div key={s.id} className="flex items-center justify-between text-[12px]">
+                              <div
+                                key={s.id}
+                                className="flex items-center justify-between text-[12px]"
+                              >
                                 <span className="font-medium text-[#030303]">
                                   {s.commenter_name || s.commenter_ig_id}
                                 </span>

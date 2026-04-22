@@ -42,6 +42,7 @@
    - 단일 도메인은 `_call_domain_with_shortcut` 로 shortcut(에이전트 1회 호출 → `[CHOICES]` 있으면 히스토리로 추정 재호출) 실행.
    - 복수 도메인은 per-domain 호출 후 `[CHOICES]` 미해결 시 `_synthesize_cross_domain` 으로 합성.
    - CHOICES sticky override (`_last_assistant_unresolved_choices` / `_has_context_reference` / `_guess_domain_from_recent`) 는 legacy 에서만 유효.
+   - **v1.4 CHOICES 컨텍스트 주입**: `_dispatch_via_planner` 에서 `_last_assistant_unresolved_choices(history)` 를 감지해 `plan()` 의 `choices_context` 파라미터로 전달 → 플래너 시스템 프롬프트에 `[직전 CHOICES 컨텍스트 — 최우선 라우팅 힌트]` 블록 주입. 직전 CHOICES 에 대한 사용자 단답이 엉뚱한 도메인으로 오라우팅되는 버그 방지.
 
 **Speaker 추적** (v1.2 신규):
 
@@ -181,6 +182,15 @@ legal_annual_values   — category (minimum_wage 등) + year + value(jsonb) — 
 law_contract_knowledge_chunks / pattern_contract_knowledge_chunks / acceptable_contract_knowledge_chunks
                       — 계약서 공정성 분석 RAG 3종 (011) + search_{law,pattern,acceptable}_contract_knowledge RPC (012)
 marketing_knowledge_chunks — 마케팅 지식 RAG (015) + hybrid RPC (016)
+subsidy_programs      — id, title, organization, region, program_kind, sub_kind, target,
+                        start_date, end_date, period_raw, is_ongoing, description,
+                        detail_url, external_url, form_files(jsonb), hashtags(text[])
+                        (026_subsidy_forms.sql) + search_subsidy_programs RPC (027)
+subsidy_cache         — account_id(PK), results(jsonb), computed_at, is_computing(bool)
+                        계정별 맞춤 추천 24h 캐시. 로그인 touch 시 자동 계산, 프로필 변경 시 invalidate.
+                        (028_subsidy_cache.sql)
+instagram_dm_campaigns — 댓글 트리거 기반 DM 자동 발송 캠페인 (feature-marketing, 026_instagram_dm_campaigns.sql)
+instagram_dm_sent     — 발송 이력 (campaign_id + commenter_ig_id UNIQUE)
 ```
 
 - `artifacts`는 대시보드/칸반의 모든 노드를 하나의 테이블로 통합한 DAG 구조.
@@ -413,9 +423,14 @@ supabase/migrations/
                                       # + ensure_standard_sub_hubs 재정의
   025_memory_long_rrf_digest.sql      # memory_long 도메인×일자 digest + RRF + FTS + 7일 TTL
                                       # upsert_memory_long / memory_search(query_text) 재작성
+  026_subsidy_forms.sql               # subsidy_programs 테이블 (공고명·기관·지역·기간·form_files·hashtags 등)
+  027_search_subsidy_programs.sql     # search_subsidy_programs RPC — pgvector + FTS RRF
+  028_subsidy_cache.sql               # subsidy_cache(account_id PK, results jsonb, is_computing) — 24h 캐시
+  026_instagram_dm_campaigns.sql      # instagram_dm_campaigns + instagram_dm_sent (feature-marketing)
 ```
 
 > 두 파일이 같은 020 프리픽스를 갖지만 Supabase MCP 는 파일명 알파벳 순서로 실행한다 (`020_legal_annual_values.sql` → `020_schedule_to_metadata.sql`). 운영상 충돌 없음.
+> `026` 프리픽스가 두 브랜치에서 충돌함 (`026_subsidy_forms.sql` vs `026_instagram_dm_campaigns.sql`). Supabase MCP 적용 시 알파벳 순서(`026_instagram_dm_campaigns.sql` → `026_subsidy_forms.sql`)로 실행되므로 순서 의존성 없으면 무방.
 
 ### documents 에이전트 자산
 

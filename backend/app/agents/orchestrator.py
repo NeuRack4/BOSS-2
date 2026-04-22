@@ -645,6 +645,9 @@ async def _dispatch_via_planner(
 
     memos_ctx = _memos_context(account_id)
 
+    # 미해결 CHOICES가 있으면 플래너에게 라우팅 힌트로 주입
+    choices_ctx = _last_assistant_unresolved_choices(history)
+
     result = await _planner.plan(
         account_id=account_id,
         message=message,
@@ -654,6 +657,7 @@ async def _dispatch_via_planner(
         nick_ctx=nick_ctx,
         memos_context=memos_ctx,
         tools_catalog=tools,
+        choices_context=choices_ctx,
     )
     mode = result.get("mode")
     if mode == "error":
@@ -1510,6 +1514,32 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
     now = datetime.now(timezone.utc)
     since = last_seen_at or (now - timedelta(days=7))
     since_iso = since.isoformat()
+
+    # 핵심 4개 필드 누락 시 온보딩 브리핑 즉시 발화 (8h 조건 무시)
+    _onboarding_keys = ("display_name", "business_type", "location", "primary_goal")
+    _p = get_profile(account_id)
+    _missing_onboard = [k for k in _onboarding_keys if not (_p or {}).get(k)]
+    if len(_missing_onboard) >= 2:
+        _nick = (_p or {}).get("display_name") or "사장님"
+        _label_map = {
+            "display_name": "호칭(닉네임)",
+            "business_type": "업종",
+            "location": "지역",
+            "primary_goal": "주요 목표",
+        }
+        _missing_labels = " / ".join(_label_map[k] for k in _missing_onboard)
+        _onboard_msg = (
+            f"안녕하세요, {_nick}! 저는 BOSS예요.\n\n"
+            f"사장님의 회사/가게 운영을 도와드리는 AI 어시스턴트입니다.\n\n"
+            f"맞춤 추천과 자동화 품질을 높이려면 간단한 정보가 필요해요.\n\n"
+            f"아래 폼을 채워주시면 바로 시작할게요!\n\n"
+            "[[ONBOARDING_FORM]]"
+        )
+        return {
+            "should_fire": True,
+            "message": _onboard_msg,
+            "meta": {"onboarding": True},
+        }
 
     agg = _aggregate_activity(account_id, since_iso)
 

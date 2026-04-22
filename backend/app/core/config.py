@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_redirect_uri: str = "http://localhost:8000/api/marketing/youtube/oauth/callback"
 
+    # Bizinfo (기업마당 공공 API)
+    bizinfo_api_key: str = ""
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축

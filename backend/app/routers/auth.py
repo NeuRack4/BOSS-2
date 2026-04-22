@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 
 from app.agents.orchestrator import build_briefing
+from app.agents._subsidy_cache import maybe_refresh
 from app.core.supabase import get_supabase
 from app.models.schemas import SessionTouchRequest, SessionTouchResponse
 
@@ -58,6 +59,12 @@ async def session_touch(req: SessionTouchRequest):
     # 판정 후 갱신
     now_iso = datetime.now(timezone.utc).isoformat()
     sb.table("profiles").update({"last_seen_at": now_iso}).eq("id", account_id).execute()
+
+    # 지원사업 캐시 갱신 (만료됐으면 백그라운드 재계산)
+    try:
+        await maybe_refresh(account_id)
+    except Exception:
+        pass
 
     return SessionTouchResponse(
         data={
