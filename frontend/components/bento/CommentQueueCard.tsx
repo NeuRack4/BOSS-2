@@ -75,7 +75,7 @@ export const CommentQueueCard = ({ accountId }: Props) => {
           openModal();
         }
       }}
-      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#f0eaf8] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#f4dbd9] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
