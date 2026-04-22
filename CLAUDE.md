@@ -249,6 +249,14 @@ instagram_dm_sent     — 발송 이력 (campaign_id + commenter_ig_id UNIQUE)
 
 모든 RLS 정책은 `auth.uid()` 기반. Supabase Auth 이메일 + 비밀번호 사용.
 
+## Auth Pages (frontend, `app/(auth)/`)
+
+- **`/login`** · **`/signup`** (v1.4.2 신설) — 두 페이지 모두 `proxy.ts` 의 `PUBLIC_PATHS = {"/login","/signup"}` 에 포함되어 비로그인 접근 허용 + 로그인 상태에서 진입 시 `/dashboard` 리다이렉트.
+- 공통 쉘: `max-w-1440` 외곽, 12-col bento 그리드, 5×6 `t-form` 카드, 타일 `--radius: 5px`. 브랜드는 `/boss-logo.png` 이미지 (`h-8 w-auto`) 공통.
+- 다크 테마 전면 제거 — 두 페이지 모두 light 테마 전용 (`Theme` 타입·`data-theme="dark"` CSS·우하단 토글 버튼 전부 삭제).
+- `/login` 타일 구성: `t-form` · `t-welcome` · `t-status` · `t-quick` (하단 `t-tip` 제거).
+- `/signup` 타일 구성: `t-form` · `t-hero` · `t-stats` · `t-agents` (하단 `t-preview/t-integrations/t-security/t-proof` 제거).
+
 ## Dashboard Layout (frontend, v1.0.0~)
 
 > **캔버스는 v1.2 에서 완전히 삭제**됐다. `components/canvas/` 디렉토리 자체가 제거 (FlowCanvas, AnchorNode, DomainNode, ArtifactChipNode, 7개 모달 전부). `/dashboard` 는 Bento Grid, `/[domain]` 은 Kanban Board 를 기본 레이아웃으로 한다. `/canvas-legacy` route 도 제거.
@@ -261,6 +269,7 @@ instagram_dm_sent     — 발송 이력 (campaign_id + commenter_ig_id UNIQUE)
 
 ### Dashboard Cards (공통 디자인 규약)
 
+- **색상 팔레트** (v1.4.2) — shell `#f5f1ea` · ChatCenter `#ffffff` · Recruitment `#f1d9c7` · Marketing `#f4dbd9` · Sales `#cfd9cc` · Documents `#d9d4e6` · Schedule `#eee3c4` · Activity `#c6dad1` · PreviousChat `#d9d4e6` · CommentQueue `#f4dbd9` · Subsidy `#cfd9cc` · ProfileCard `#f1d9c7` · LongMemoryCard `#eee3c4` · MemosCard `#c6dad1`. 6색 베이스 팔레트 (`#f1d9c7/#cfd9cc/#f4dbd9/#d9d4e6/#eee3c4/#c6dad1`) 를 도메인 4 + 기타 카드 8 에 재분배.
 - 모든 카드 **`rounded-[5px]`** + `shadow-lg` + `hover:scale-[1.015] hover:shadow-xl` + `role="button"` (카드 전체 클릭 시 모달 열기).
 - 내부 아이템은 `<button stopPropagation>` 으로 별도 액션.
 - **빈 상태 문구** — 전역 `Nothing here yet` 하나로 통일.
@@ -278,7 +287,7 @@ instagram_dm_sent     — 발송 이력 (campaign_id + commenter_ig_id UNIQUE)
 - `KanbanBoard` 는 해당 도메인의 서브허브를 컬럼으로 펼침. 미분류 artifact 는 "미분류" 컬럼. 드래그 → `PATCH /api/kanban/move` 로 `artifact_edges.relation='contains'` 부모 교체.
 - **카드 클릭** → `useNodeDetail().openDetail(artifactId)` → 전역 `NodeDetailModal` 이 열림 (모든 도메인 공용).
 - `boss:artifacts-changed` 리스너로 매출/비용 저장 후 자동 새로고침.
-- **Kanban 테마 토큰** — `globals.css` 의 `.bento-shell` 스코프 CSS 변수 (`--kb-fg`, `--kb-border`, `--kb-surface`, `--kb-card`, `--kb-dday-urgent`, `--kb-dday-soon`, `--kb-warn-*`, `--kb-fg-on-banner` 등). `html[data-bg="dark"] .bento-shell` 에서 오버라이드.
+- **Kanban 테마 토큰** — `globals.css` 의 `.bento-shell` 스코프 CSS 변수 (`--kb-fg`, `--kb-border`, `--kb-surface`, `--kb-card`, `--kb-dday-urgent`, `--kb-dday-soon`, `--kb-warn-*`, `--kb-fg-on-banner` 등). v1.4.2 이후 다크 모드 제거 — 단일 light 팔레트만 유지.
 
 ### NodeDetailModal (v1.2+ 통합 상세 모달)
 
@@ -321,9 +330,12 @@ instagram_dm_sent     — 발송 이력 (campaign_id + commenter_ig_id UNIQUE)
 
 ### Header (`components/layout/Header.tsx`)
 
-- 배경 솔리드 `#ffffff`. 좌측 BOSS 로고, 중앙 검색 버튼 (`⌘K`), 우측 `Schedule` / `Activity` / Light-Dark 토글 / `Logout`.
+- **배경 transparent · 경계선 없음** (v1.4.2) — `.bento-shell header { background: transparent; border: none }`.
+- **그리드 정렬** (v1.4.2) — 외곽 `px-4 md:px-6`(페이지 컨테이너의 `p-4 md:p-6`와 동일) + 내부 wrapper `mx-auto w-full max-w-[1400px]`. 사용처별 `sidebar?: boolean` prop — `true`(dashboard) 면 ≥1500px 에서 `ProfileMemorySidebar` 와 동일 치수(`min-w-[220px] max-w-[320px] flex-1 basis-0`) 의 로고 슬롯이 좌측에 렌더되어 그리드 오프셋을 흉내냄. 그리드 칼럼의 예비 로고는 `invisible` 로 공간만 유지해 Logout 이 1400 박스 오른쪽 모서리에 고정. `false`(DomainPage) 면 사이드바 없이 중앙 max-w-1400 정렬.
+- **검색바**: 헤더 루트(`relative`) 기준 `absolute left-1/2 -translate-x-1/2` — 뷰포트 정중앙.
+- **글자만** (v1.4.2) — 버튼 아이콘(CalendarClock/History/MessageSquare/Send/LogOut/Search) 전부 제거, 텍스트와 `⌘K` 키캡만 남김.
+- **다크 모드 제거** (v1.4.2) — `darkBg` 상태·`toggleBg`·Sun/Moon 버튼·`localStorage.boss2:bg-dark`·`data-bg="dark"` CSS 전부 삭제.
 - **영어 UI** — 라벨/aria-label/tooltip 전부 영어.
-- v0.9 까지 있던 `정렬(Layout)` 버튼은 v1.0 에서 제거.
 
 ### Custom Events (frontend 전역)
 

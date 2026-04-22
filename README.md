@@ -2,7 +2,7 @@
 
 ![Dashboard](./docs/dashboard-layout.png)
 
-![version](https://img.shields.io/badge/version-1.4.0-blue)
+![version](https://img.shields.io/badge/version-1.4.2-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. Planner 기반 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -39,6 +39,7 @@ Celery Beat (60s tick) → 실행 / D-7·D-3·D-1·D-0 알림
 
 ## Key Features
 
+- **Auth / 헤더 / 대시보드 UI 리프레시 v1.4.2** — `/signup` 페이지 신설(이메일+비밀번호 Supabase Auth, proxy PUBLIC_PATHS 포함). Sign in 레이아웃을 Sign up 과 동일 쉘(`max-w-1440`, 12-col bento, 5×6 t-form)로 정렬. 두 auth 페이지 브랜드를 `/boss-logo.png` 이미지로 통일, 타일 모서리 `--radius: 5px`, 다크 테마 토글·변수 전면 삭제. `Header` 재구조화 — 로고는 ≥1500px 에서 `ProfileMemorySidebar` 칸, 그 이하에선 1400 박스 좌측. 검색바는 헤더 루트 기준 정중앙. 아이콘·경계선·배경 제거, 글자만 남김. `sidebar` prop 으로 dashboard/DomainPage 분기. 대시보드 다크 모드(`data-bg="dark"`) 완전 제거. 색상 팔레트 재정렬 — shell `#f5f1ea` · ChatCenter `#ffffff` · 도메인 `#f1d9c7/#f4dbd9/#cfd9cc/#d9d4e6` · 하단·사이드바 5+3카드를 `#eee3c4/#c6dad1` 포함 6색 팔레트로 재배치.
 - **정부 지원사업 시스템 v1.4** — `subsidy_programs` 테이블 + `search_subsidy_programs` RRF RPC 로 공고 저장·검색. 계정별 프로필 맞춤 추천을 `subsidy_cache` 에 24h 캐싱 — 로그인 시 자동 계산, 프로필 변경 시 즉시 재계산. `SubsidyMatchCard` (Bento — 3초 폴링 스피너 → 항목 클릭 시 카드 안 상세 뷰) + `SubsidyModal` (전체 검색/필터/아코디언). 추천 공고 마감일은 CHOICES(`마감 일정 추가 / 아니요`) 확인 후 artifact `due_date` 로 등록.
 - **Planner CHOICES 오라우팅 수정 v1.4** — `_dispatch_via_planner` 에서 `_last_assistant_unresolved_choices(history)` 감지 → `plan()` 에 `choices_context` 주입. 직전 CHOICES 가 있는 상태에서 사용자 단답(예: "마감 일정 추가")이 엉뚱한 도메인으로 라우팅되는 버그 근본 수정.
 - **프로필 UI 전면 개선 v1.4** — `ProfileMemorySidebar` : 7개 core 필드 항상 표시(빈 칸도 "—"), 영문 라벨, `boss:artifacts-changed` 실시간 갱신. `ProfileModal` : Nickname·Business Name·Industry·Location·Stage·Staff·Channel·Goal 전체 편집 폼, 저장 시 subsidy 캐시 자동 invalidate. `OnboardingFormCard` : `[[ONBOARDING_FORM]]` 마커로 채팅 안에서 최초 프로필 입력.
@@ -73,6 +74,7 @@ BOSS-2/
 ├── frontend/                      # Next.js App
 │   ├── app/
 │   │   ├── (auth)/login/          # 이메일+비밀번호 로그인
+│   │   ├── (auth)/signup/         # 이메일+비밀번호 회원가입 (v1.4.2)
 │   │   ├── dashboard/             # Bento Grid 대시보드
 │   │   ├── activity/              # Activity 라우트
 │   │   ├── recruitment/           # Kanban (/[domain] 실체)

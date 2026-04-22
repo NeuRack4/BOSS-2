@@ -132,18 +132,14 @@
   animation: glow-pulse 1.6s ease-in-out infinite;
 }
 
-/* ─── Bento dashboard shell — warm off-white (default) / black (data-bg="dark") ─── */
+/* ─── Bento dashboard shell — warm off-white ─── */
 .bento-shell {
-  background: #f4f1ed;
+  background: #f5f1ea;
   color: #030303;
 }
-html[data-bg="dark"] .bento-shell {
-  background: #030303;
-  color: #fcfcfc;
-}
 .bento-shell header {
-  background: #ffffff;
-  border-color: rgba(3, 3, 3, 0.08);
+  background: transparent;
+  border: none;
   color: #030303;
 }
 .bento-shell header a,
@@ -177,24 +173,4 @@ html[data-bg="dark"] .bento-shell {
   --kb-warn-fg: #7a5210;
   --kb-dday-urgent: #c7422f;
   --kb-dday-soon: #a6730a;
-}
-html[data-bg="dark"] .bento-shell {
-  --kb-fg: rgba(255, 255, 255, 0.95);
-  --kb-fg-strong: rgba(255, 255, 255, 0.9);
-  --kb-fg-muted: rgba(255, 255, 255, 0.55);
-  --kb-fg-subtle: rgba(255, 255, 255, 0.4);
-  --kb-fg-faint: rgba(255, 255, 255, 0.3);
-  --kb-border: rgba(255, 255, 255, 0.08);
-  --kb-border-strong: rgba(255, 255, 255, 0.3);
-  --kb-surface: rgba(255, 255, 255, 0.02);
-  --kb-surface-hover: rgba(255, 255, 255, 0.06);
-  --kb-card: rgba(255, 255, 255, 0.035);
-  --kb-card-hover: rgba(255, 255, 255, 0.06);
-  --kb-icon-bg: rgba(255, 255, 255, 0.04);
-  --kb-status-archived: rgba(255, 255, 255, 0.2);
-  --kb-warn-border: rgba(252, 211, 77, 0.25);
-  --kb-warn-bg: rgba(252, 211, 77, 0.06);
-  --kb-warn-fg: rgba(253, 224, 120, 0.85);
-  --kb-dday-urgent: #ff8577;
-  --kb-dday-soon: #ffc86b;
 }

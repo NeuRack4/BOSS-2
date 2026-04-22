@@ -232,7 +232,7 @@ const ProfileCard = ({
   return (
     <CardButton
       title="Profile"
-      bg="#f9e0e2"
+      bg="#f1d9c7"
       onClick={() =>
         window.dispatchEvent(new CustomEvent("boss:open-profile-modal"))
       }
@@ -288,7 +288,7 @@ const LongMemoryCard = ({
   return (
     <CardButton
       title="Long-term Memory"
-      bg="#f8eaec"
+      bg="#eee3c4"
       onClick={() =>
         window.dispatchEvent(new CustomEvent("boss:open-longmem-modal"))
       }
@@ -336,7 +336,7 @@ const MemosCard = ({
   return (
     <CardButton
       title="Memos"
-      bg="#f7ddd9"
+      bg="#c6dad1"
       onClick={() =>
         window.dispatchEvent(new CustomEvent("boss:open-memos-modal"))
       }

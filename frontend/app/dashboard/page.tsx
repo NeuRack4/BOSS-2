@@ -18,7 +18,7 @@ export default function DashboardPage() {
   return (
     <ChatProvider>
       <div className="bento-shell flex h-screen flex-col overflow-hidden">
-        <Header />
+        <Header sidebar />
         <main className="flex-1 overflow-auto">
           {userId ? (
             <BentoGrid accountId={userId} />
