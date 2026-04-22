@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] — feature/sales-langsmith (Sales 에이전트 LangSmith 트레이싱 + 터미널 로그)
+
+### Added — Sales LangSmith 트레이싱
+
+- **`backend/app/agents/sales.py`** — `langsmith.traceable` import (`try/except ImportError` fallback 포함). `LANGSMITH_API_KEY` 환경변수 존재 시 `os.environ.setdefault`로 `LANGSMITH_TRACING` / `LANGSMITH_PROJECT` 자동 주입. 핸들러 10개(`run_revenue_entry` · `run_sales_report` · `run_price_strategy` · `run_customer_script` · `run_promotion` · `run_sales_checklist` · `run_cost_entry` · `run_parse_receipt` · `run_save_revenue` · `run_save_costs`) + `run` 함수에 `@_traceable` 데코레이터 적용. 각 핸들러 진입 시 `log.info("[SALES] ...")` 터미널 로그 추가.
+- **`backend/app/agents/_sales/_revenue.py`** — `@_traceable(name="sales._revenue.dispatch_save_revenue")` 적용.
+- **`backend/app/agents/_sales/_costs.py`** — `@_traceable(name="sales._costs.dispatch_save_costs")` 적용.
+- **`backend/app/agents/_sales/_ocr.py`** — `@_traceable(name="sales._ocr.parse_receipt_from_bytes")` 적용.
+- **`backend/.env`** (gitignore) — `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 추가 (신규 키 이름 `LANGSMITH_*` 사용, 구버전 `LANGCHAIN_*` deprecated).
+
+### Fixed
+
+- **`backend/app/agents/sales.py`** — dev 머지 충돌 해결: 팀장 추가분 `@traceable` → `@_traceable` 로 통일 (fallback import 별칭과 일치).
+
 ## [1.3.0] — feature-marketing (YouTube Shorts AI 자동화 + Instagram Reels 업로드 + 댓글 자동 관리)
 
 ### Added — YouTube Shorts AI 자동화

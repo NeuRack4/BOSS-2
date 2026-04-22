@@ -18,6 +18,14 @@ import logging
 from datetime import date as _date
 from typing import Any
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:
+    def _traceable(**_kw):
+        def _decorator(fn):
+            return fn
+        return _decorator
+
 from app.core.llm import client as _openai_client
 from app.core.supabase import get_supabase
 
@@ -39,6 +47,7 @@ _RECEIPT_PROMPT = (
 )
 
 
+@_traceable(name="sales._ocr.parse_receipt_from_bytes")
 async def parse_receipt_from_bytes(
     file_bytes: bytes,
     mime_type: str = "image/jpeg",

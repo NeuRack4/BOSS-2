@@ -15,7 +15,17 @@ import logging
 import re
 from datetime import date
 
-from langsmith import traceable
+import os
+try:
+    from langsmith import traceable as _traceable
+    if os.getenv("LANGSMITH_API_KEY"):
+        os.environ.setdefault("LANGSMITH_TRACING", "true")
+        os.environ.setdefault("LANGSMITH_PROJECT", os.getenv("LANGSMITH_PROJECT", "boss2-sales"))
+except ImportError:
+    def _traceable(**_kw):
+        def _decorator(fn):
+            return fn
+        return _decorator
 
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
@@ -434,6 +444,7 @@ def strip_action_marker(text: str) -> tuple[str, dict | None]:
 # ──────────────────────────────────────────────────────────────────────────
 # Capability 인터페이스 (function-calling 라우팅용, v0.9.1~)
 # ──────────────────────────────────────────────────────────────────────────
+@_traceable(name="sales.run_revenue_entry")
 async def run_revenue_entry(
     *,
     account_id: str,
@@ -448,10 +459,12 @@ async def run_revenue_entry(
     raw_text 가 주어지면 그걸 기준으로, 아니면 사용자 메시지를 그대로 legacy run() 에 넘김
     (기존 `_parse_sales_from_message` + `[ACTION:OPEN_SALES_TABLE]` 파이프라인 재사용).
     """
+    log.info("[SALES] run_revenue_entry 진입 | account=%s", account_id)
     text = (raw_text or "").strip() or message
     return await run(text, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_sales_report")
 async def run_sales_report(
     *,
     account_id: str,
@@ -463,6 +476,7 @@ async def run_sales_report(
     target: str | None = None,
     kpi: list[str] | None = None,
 ) -> str:
+    log.info("[SALES] run_sales_report 진입 | account=%s period=%s", account_id, period)
     lines = [f"[분석 기간] {period}"]
     if target:
         lines.append(f"[대상] {target}")
@@ -476,6 +490,7 @@ async def run_sales_report(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_price_strategy")
 async def run_price_strategy(
     *,
     account_id: str,
@@ -488,6 +503,7 @@ async def run_price_strategy(
     benchmark: str | None = None,
     goal: str | None = None,
 ) -> str:
+    log.info("[SALES] run_price_strategy 진입 | account=%s target=%s", account_id, target)
     lines = [f"[대상] {target}"]
     if current_price:
         lines.append(f"[현재 가격] {current_price}")
@@ -503,6 +519,7 @@ async def run_price_strategy(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_customer_script")
 async def run_customer_script(
     *,
     account_id: str,
@@ -514,6 +531,7 @@ async def run_customer_script(
     tone: str | None = None,
     channel: str | None = None,
 ) -> str:
+    log.info("[SALES] run_customer_script 진입 | account=%s situation=%s", account_id, situation)
     lines = [f"[응대 상황] {situation}"]
     if tone:
         lines.append(f"[톤] {tone}")
@@ -527,6 +545,7 @@ async def run_customer_script(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_promotion")
 async def run_promotion(
     *,
     account_id: str,
@@ -540,6 +559,7 @@ async def run_promotion(
     benefit: str,
     target: str | None = None,
 ) -> str:
+    log.info("[SALES] run_promotion 진입 | account=%s title=%s", account_id, title)
     lines = [
         f"[프로모션명] {title}",
         f"[기간] {start_date} ~ {end_date}",
@@ -556,6 +576,7 @@ async def run_promotion(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_sales_checklist")
 async def run_sales_checklist(
     *,
     account_id: str,
@@ -565,6 +586,7 @@ async def run_sales_checklist(
     rag_context: str = "",
     topic: str,
 ) -> str:
+    log.info("[SALES] run_sales_checklist 진입 | account=%s topic=%s", account_id, topic)
     synthetic = (
         f"'{topic}' 주제로 매출/운영 체크리스트(checklist) 를 작성해주세요. [ARTIFACT] 블록(type=checklist) 으로 저장.\n\n"
         f"원본 사용자 요청: {message}"
@@ -572,6 +594,7 @@ async def run_sales_checklist(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@_traceable(name="sales.run_cost_entry")
 async def run_cost_entry(
     *,
     account_id: str,
@@ -581,6 +604,7 @@ async def run_cost_entry(
     rag_context: str = "",
 ) -> str:
     """비용 입력 의도 → vague_cost 로직 직접 실행 (GPT 우회)."""
+    log.info("[SALES] run_cost_entry 진입 | account=%s", account_id)
     if re.search(r"글로\s*(입력|쓸|작성)", message):
         return "비용 내역을 알려주세요! 예: '식재료비 50,000원, 포장재 12,000원'"
 
@@ -649,6 +673,7 @@ async def run_cost_entry(
         )
 
 
+@_traceable(name="sales.run_parse_receipt")
 async def run_parse_receipt(
     *,
     account_id: str,
@@ -662,6 +687,7 @@ async def run_parse_receipt(
     contextvar `pending_receipt` 가 있을 때만 호출됨 (`describe` 가 advertise 함).
     OCR 결과의 type 이 'cost' 면 CostInputTable, 아니면 SalesInputTable 을 연다.
     """
+    log.info("[SALES] run_parse_receipt 진입 | account=%s", account_id)
     from app.agents._sales_context import get_pending_receipt
     from app.agents._sales._ocr import parse_receipt_from_storage
 
@@ -692,6 +718,7 @@ async def run_parse_receipt(
     return "\n".join(summary_lines)
 
 
+@_traceable(name="sales.run_save_revenue")
 async def run_save_revenue(
     *,
     account_id: str,
@@ -704,6 +731,7 @@ async def run_save_revenue(
 
     contextvar `pending_save.kind == 'revenue'` 일 때 describe() 가 노출.
     """
+    log.info("[SALES] run_save_revenue 진입 | account=%s", account_id)
     from app.agents._sales_context import get_pending_save
     from app.agents._sales._revenue import dispatch_save_revenue
 
@@ -733,6 +761,7 @@ async def run_save_revenue(
     return f"매출 **{saved}건** 저장됐어요. 총 **{total:,}원**."
 
 
+@_traceable(name="sales.run_save_costs")
 async def run_save_costs(
     *,
     account_id: str,
@@ -742,6 +771,7 @@ async def run_save_costs(
     rag_context: str = "",
 ) -> str:
     """CostInputTable 의 Save 버튼 경로. pending_save.kind == 'cost'."""
+    log.info("[SALES] run_save_costs 진입 | account=%s", account_id)
     from app.agents._sales_context import get_pending_save
     from app.agents._sales._costs import dispatch_save_costs
 
@@ -939,7 +969,7 @@ def _last_message_was_cost_prompt(history: list[dict]) -> bool:
 
 # ── 메인 run ─────────────────────────────────────────────────────────────────
 
-@traceable(name="sales.run", run_type="chain")
+@_traceable(name="sales.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,
