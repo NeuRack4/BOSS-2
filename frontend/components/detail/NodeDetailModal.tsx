@@ -1177,7 +1177,9 @@ export const NodeDetailModal = () => {
                       ) : artifact.type === "sales_report" &&
                         artifact.metadata?.menu_chart ? (
                         <MenuAnalysisCard
-                          payload={artifact.metadata.menu_chart as MenuAnalysisPayload}
+                          payload={
+                            artifact.metadata.menu_chart as MenuAnalysisPayload
+                          }
                         />
                       ) : artifact.content ? (
                         <MarkdownMessage

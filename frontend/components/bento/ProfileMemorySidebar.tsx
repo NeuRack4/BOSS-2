@@ -210,24 +210,24 @@ const ProfileCard = ({
   profile: ProfileRow | null;
   loading: boolean;
 }) => {
-  const rows: Array<{ label: string; value: string }> = [];
-  if (profile) {
-    const push = (label: string, k: keyof ProfileRow) => {
-      const v = formatProfileField(k, profile[k] as string | null);
-      if (v) rows.push({ label, value: v });
-    };
-    push("업종", "business_type");
-    push("단계", "business_stage");
-    push("직원", "employees_count");
-    push("지역", "location");
-    push("채널", "channels");
-    push("목표", "primary_goal");
-  }
+  const FIELDS: Array<{ label: string; key: keyof ProfileRow }> = [
+    { label: "Business", key: "business_name" },
+    { label: "Industry", key: "business_type" },
+    { label: "Stage", key: "business_stage" },
+    { label: "Staff", key: "employees_count" },
+    { label: "Location", key: "location" },
+    { label: "Channel", key: "channels" },
+    { label: "Goal", key: "primary_goal" },
+  ];
+  const rows = FIELDS.map(({ label, key }) => ({
+    label,
+    value: formatProfileField(key, (profile?.[key] as string | null) ?? null),
+  }));
 
   const name =
     profile?.display_name?.trim() ||
     profile?.business_name?.trim() ||
-    "프로필 미설정";
+    "Not set";
 
   return (
     <CardButton
@@ -244,6 +244,9 @@ const ProfileCard = ({
       ) : (
         <div className="space-y-1.5">
           <div className="rounded-[5px] bg-[#fcfcfc]/60 px-3 py-2">
+            <div className="mb-0.5 font-mono text-[11px] uppercase tracking-wider text-[#030303]/50">
+              Nickname
+            </div>
             <div className="truncate text-[14px] font-semibold text-[#030303]">
               {name}
             </div>
@@ -253,25 +256,21 @@ const ProfileCard = ({
               </div>
             )}
           </div>
-          {rows.length === 0 ? (
-            <div className="rounded-[5px] bg-[#fcfcfc]/40 px-3 py-2 text-[12.5px] text-[#030303]/55">
-              Fill in your profile as you chat.
-            </div>
-          ) : (
-            rows.slice(0, 4).map((r) => (
-              <div
-                key={r.label}
-                className="flex items-baseline justify-between gap-2 rounded-[5px] bg-[#fcfcfc]/40 px-3 py-1.5"
+          {rows.map((r) => (
+            <div
+              key={r.label}
+              className="flex items-baseline justify-between gap-2 rounded-[5px] bg-[#fcfcfc]/40 px-3 py-1.5"
+            >
+              <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-[#030303]/50">
+                {r.label}
+              </span>
+              <span
+                className={`truncate text-right text-[12.5px] ${r.value ? "text-[#030303]" : "text-[#030303]/30"}`}
               >
-                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-[#030303]/50">
-                  {r.label}
-                </span>
-                <span className="truncate text-right text-[12.5px] text-[#030303]">
-                  {r.value}
-                </span>
-              </div>
-            ))
-          )}
+                {r.value ?? "—"}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </CardButton>

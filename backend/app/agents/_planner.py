@@ -282,6 +282,7 @@ async def plan(
     nick_ctx: str,
     memos_context: str,
     tools_catalog: list[dict],
+    choices_context: str | None = None,
 ) -> PlanResult:
     """Planner 호출 — 실패 시 `{"mode": "error", "reason": ...}` 반환 (상위가 폴백)."""
     system_parts = [
@@ -295,6 +296,15 @@ async def plan(
         system_parts.append(memos_context.strip())
     if rag_context.strip():
         system_parts.append(rag_context.strip())
+    if choices_context:
+        system_parts.append(
+            "[직전 CHOICES 컨텍스트 — 최우선 라우팅 힌트]\n"
+            "직전 assistant 응답에 아래 [CHOICES] 블록이 있었으며, "
+            "사용자의 현재 메시지는 이 선택지에 대한 답변입니다.\n"
+            "반드시 이 선택지를 생성한 도메인/capability 에 맞게 라우팅하세요. "
+            "다른 도메인으로 오라우팅하거나 chitchat/refuse 로 보내지 마세요.\n\n"
+            f"{choices_context}"
+        )
     system_parts.append("[capability 카탈로그]\n" + _format_capability_catalog(tools_catalog))
 
     system = "\n\n".join(p for p in system_parts if p)

@@ -24,6 +24,7 @@ import { LongTermMemoryModal } from "@/components/layout/LongTermMemoryModal";
 import { MemosModal } from "@/components/layout/MemosModal";
 import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
 import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
+import { SubsidyModal } from "@/components/layout/SubsidyModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 
 export const Header = () => {
@@ -37,6 +38,7 @@ export const Header = () => {
   const [memosOpen, setMemosOpen] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [dmCampaignOpen, setDmCampaignOpen] = useState(false);
+  const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [darkBg, setDarkBg] = useState(false);
 
@@ -76,6 +78,7 @@ export const Header = () => {
     const onOpenMemos = () => setMemosOpen(true);
     const onOpenComment = () => setCommentOpen(true);
     const onOpenDmCampaign = () => setDmCampaignOpen(true);
+    const onOpenSubsidy = () => setSubsidyOpen(true);
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
     window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);
@@ -84,6 +87,7 @@ export const Header = () => {
     window.addEventListener("boss:open-memos-modal", onOpenMemos);
     window.addEventListener("boss:open-comment-modal", onOpenComment);
     window.addEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
+    window.addEventListener("boss:open-subsidy-modal", onOpenSubsidy);
     return () => {
       window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
       window.removeEventListener("boss:open-activity-modal", onOpenActivity);
@@ -95,7 +99,11 @@ export const Header = () => {
       window.removeEventListener("boss:open-longmem-modal", onOpenLongMem);
       window.removeEventListener("boss:open-memos-modal", onOpenMemos);
       window.removeEventListener("boss:open-comment-modal", onOpenComment);
-      window.removeEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
+      window.removeEventListener(
+        "boss:open-dm-campaign-modal",
+        onOpenDmCampaign,
+      );
+      window.removeEventListener("boss:open-subsidy-modal", onOpenSubsidy);
     };
   }, []);
 
@@ -229,6 +237,7 @@ export const Header = () => {
         open={dmCampaignOpen}
         onClose={() => setDmCampaignOpen(false)}
       />
+      <SubsidyModal open={subsidyOpen} onClose={() => setSubsidyOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );

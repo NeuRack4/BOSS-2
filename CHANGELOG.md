@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — feature-documents (정부 지원사업 시스템 + 프로필 UI 개선 + 오케스트레이터 CHOICES 라우팅 강화)
+
+### Added — 정부 지원사업 시스템
+
+- **`supabase/migrations/026_subsidy_forms.sql`** — `subsidy_programs` 테이블: id·title·organization·region·program_kind·sub_kind·target·start_date·end_date·period_raw·is_ongoing·description·detail_url·external_url·form_files(jsonb)·hashtags(text[]). RLS + 인덱스.
+- **`supabase/migrations/027_search_subsidy_programs.sql`** — `search_subsidy_programs(query_embedding, query_text, match_count)` RPC — pgvector 코사인 유사도 + FTS BM25 RRF 하이브리드 검색.
+- **`supabase/migrations/028_subsidy_cache.sql`** — `subsidy_cache(account_id PK, results jsonb, computed_at, is_computing)` — 계정별 맞춤 추천 24h 캐시 테이블.
+- **`backend/app/crawlers/`** — 지원사업 크롤러 패키지. 공공 API/웹 크롤링 → `subsidy_programs` 저장.
+- **`backend/scripts/crawl_subsidies.py`** — 크롤러 CLI 실행 스크립트.
+- **`backend/app/agents/_subsidy_cache.py`** — 신규. `get_cache(account_id)` · `maybe_refresh(account_id)` (24h TTL + 10분 stuck 타임아웃) · `invalidate_and_recompute(account_id)` · `_compute(account_id)` (프로필 + 장기기억 + RRF 검색 → `subsidy_cache` upsert).
+- **`backend/app/routers/subsidies.py`** — `GET /api/subsidies/search` (전체 검색 + 필터) · `GET /api/subsidies/cache` (캐시 결과 + `is_computing` 플래그) · `POST /api/subsidies/cache/invalidate` (캐시 무효화 + 재계산 트리거).
+- **`backend/app/routers/auth.py`** — 로그인 세션 touch 시 `await maybe_refresh(account_id)` 호출 — 캐시 만료 시 백그라운드 재계산.
+- **`frontend/components/bento/SubsidyMatchCard.tsx`** — 신규 Bento 카드. `/api/subsidies/cache` 폴링(3초) — `is_computing` 동안 스피너. 항목 클릭 시 카드 안에서 상세 뷰 전환(설명·지역·대상·해시태그·다운로드/신청 버튼). 전체 모달은 `boss:open-subsidy-modal` 이벤트.
+- **`frontend/components/layout/SubsidyModal.tsx`** — 신규 모달. 검색 + 카테고리 필터 + 아코디언 확장(D-Day 배지·대상·설명·해시태그·서식 파일 다운로드·Apply 버튼). `boss:open-subsidy-modal` 이벤트로 열림.
+- **`frontend/components/layout/Header.tsx`** — `SubsidyModal` + `DMCampaignModal` 동시 마운트, `boss:open-subsidy-modal` 이벤트 수신 추가.
+- **`frontend/components/bento/BentoGrid.tsx`** — `SubsidyMatchCard` 추가.
+
+### Added — 프로필 UI 개선
+
+- **`frontend/components/bento/ProfileMemorySidebar.tsx`** — 7개 core 필드 항상 표시(비어있으면 "—"), 전부 영문 라벨. Nickname 별도 섹션. `boss:artifacts-changed` 이벤트로 실시간 갱신.
+- **`frontend/components/layout/ProfileModal.tsx`** — 전면 재작성. 전체 필드 편집 폼: Nickname·Business Name·Industry·Location·Stage·Staff·Channel·Goal 전부 영문. 저장 시 `boss:artifacts-changed` + subsidy 캐시 invalidate.
+- **`frontend/components/chat/OnboardingFormCard.tsx`** — 신규. `[[ONBOARDING_FORM]]` 마커로 렌더. 업종·지역 필수 + 호칭·목표 선택 입력 → `profiles` 저장 + subsidy 캐시 invalidate.
+
+### Added — InlineChat 빈 상태 도메인 capability grid
+
+- **`frontend/components/chat/InlineChat.tsx`** — 빈 상태 UI 전면 교체. 하드코딩 랜덤 질문 대신 Sales·Recruitment·Marketing·Documents 4개 도메인별 capability 목록을 세로 섹션으로 나열. 항목 클릭 시 해당 프롬프트 자동 전송.
+
+### Fixed — 오케스트레이터 CHOICES 오라우팅
+
+- **`backend/app/agents/_planner.py`** — `plan()` 에 `choices_context: str | None = None` 파라미터 추가. 값이 있으면 `[직전 CHOICES 컨텍스트 — 최우선 라우팅 힌트]` 블록을 시스템 프롬프트에 주입 — 사용자 단답이 직전 CHOICES 선택지임을 플래너가 인식하도록 강제.
+- **`backend/app/agents/orchestrator.py`** — `_dispatch_via_planner` 에서 `_last_assistant_unresolved_choices(history)` 감지 → `plan()` 에 전달. 직전 CHOICES 가 있는 상태에서 "마감 일정 추가" 같은 단답이 `mkt_campaign_plan` 으로 오라우팅되는 버그 수정.
+- **`backend/app/agents/documents.py`** — `run_subsidy_recommend` 에 `confirm_deadline: bool = False` 파라미터 추가. 추천 성공 시 `due_date` 자동 저장 대신 `candidate_deadline` 임시 저장 + CHOICES(`마감 일정 추가 / 아니요`) 표시. 사용자 확인 후 `confirm_deadline=True` 재호출 시 `due_date` 로 승격. 결과 없을 때 이유 설명 + 개선 안내 추가.
+
+---
+
 ## [1.3.4] — feature/sales-menu-analysis (Sales 메뉴별 수익성 분석 + 차트 시각화)
 
 ### Added — 메뉴별 수익성 분석 기능

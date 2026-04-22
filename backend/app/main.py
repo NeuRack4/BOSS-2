@@ -45,6 +45,7 @@ from app.routers import (
     schedules,
     stats,
     search,
+    subsidies,
     summary,
     uploads,
 )
@@ -79,6 +80,7 @@ app.include_router(uploads.router)
 app.include_router(reviews.router)
 app.include_router(costs.router)
 app.include_router(sales.router)
+app.include_router(subsidies.router)
 app.include_router(stats.router)
 
 

@@ -44,8 +44,8 @@ VALID_TYPES: tuple[str, ...] = (
     "notice",
     "checklist",
     "guide",
-    # Step 3-B — Operations 신규 2종
-    "subsidy_application",
+    # Step 3-B — Operations
+    "subsidy_recommendation",
     "admin_application",
     # Step 3-A — Tax&HR 신규 3종
     "hr_evaluation",
@@ -58,8 +58,8 @@ _TYPE_TO_SUBHUB: dict[str, str] = {
     "proposal":            "Review",
     "estimate":            "Operations",
     "notice":              "Operations",
-    "subsidy_application": "Operations",
-    "admin_application":   "Operations",
+    "subsidy_recommendation": "Operations",
+    "admin_application":      "Operations",
     "checklist":           "Tax&HR",
     "guide":               "Tax&HR",
     "hr_evaluation":       "Tax&HR",
@@ -906,60 +906,256 @@ async def run_checklist_guide(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Step 3-B — Operations 신규 2종
+# Step 3-B — Operations: 지원사업 추천
 # ──────────────────────────────────────────────────────────────────────────
 
-async def run_subsidy_application(
+async def run_subsidy_recommend(
     *,
     account_id: str,
     message: str,
     history: list[dict],
     long_term_context: str = "",
     rag_context: str = "",
-    subsidy_name: str | None = None,
-    scope: str | None = None,
-    extra_note: str | None = None,
+    count: int = 1,
+    confirm_deadline: bool = False,
+    **kw,
 ) -> str:
-    """국가 지원사업 신청서 초안.
+    """사용자 프로필+메모리 기반 지원사업 추천.
 
-    subsidy_name 이 확정됐으면 바로 초안. 미확정이면 `search_subsidy_programs`
-    RAG 로 후보 3~5개 주입 → 에이전트가 CHOICES 로 되묻는다 (agent 성 핵심).
+    subsidy_programs DB 를 RRF 검색 → 활성 공고만 필터 → LLM 이
+    각 공고에 대해 10점 만점 점수 + 매칭 이유 생성 → subsidy_recommendation artifact 저장.
     """
-    extra_ctx = ""
-    if not subsidy_name:
-        import asyncio
-        from app.agents._marketing_knowledge import search_subsidy_programs
-        try:
-            rows = await asyncio.to_thread(search_subsidy_programs, message, 5)
-        except Exception:
-            rows = []
-        if rows:
-            lines = ["[지원사업 후보 — RAG 검색 결과]"]
-            for i, r in enumerate(rows, 1):
-                snippet = (r.get("content") or "").strip().replace("\n", " ")[:200]
-                lines.append(f"{i}. {snippet}")
-            lines.append(
-                "\n위 후보 중 사용자 요청에 맞는 것이 있으면 [CHOICES] 로 한 번에 물어보세요. "
-                "후보가 명백히 요청과 맞지 않으면 사용자에게 구체적 지원사업명을 되묻세요."
-            )
-            extra_ctx = "\n".join(lines)
+    import asyncio
+    from datetime import date, timedelta
+    from app.core.supabase import get_supabase
+    from app.core.embedder import embed_text
 
-    lines: list[str] = []
-    if subsidy_name:
-        lines.append(f"[지원사업명] {subsidy_name}")
-    if scope:
-        lines.append(f"[신청 범위] {scope}")
-    if extra_note:
-        lines.append(f"[특이사항] {extra_note}")
-    synthetic = (
-        "국가 지원사업 신청서 초안을 작성해주세요. "
-        "[ARTIFACT] 블록(type=subsidy_application, sub_domain=Operations) 포함. "
-        "subsidy_name 이 확정됐으면 즉시 초안 작성, 아니면 후보를 CHOICES 로 먼저 확인.\n"
-        + (extra_ctx + "\n\n" if extra_ctx else "")
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    sb = get_supabase()
+
+    # 마감 일정 추가 확인 경로
+    if confirm_deadline:
+        try:
+            row = (
+                sb.table("artifacts")
+                .select("id,metadata")
+                .eq("account_id", account_id)
+                .eq("type", "subsidy_recommendation")
+                .order("created_at", desc=True)
+                .limit(1)
+                .maybe_single()
+                .execute()
+            )
+            artifact = row.data
+        except Exception:
+            artifact = None
+
+        if artifact:
+            meta = artifact.get("metadata") or {}
+            candidate = meta.get("candidate_deadline")
+            if candidate:
+                try:
+                    sb.table("artifacts").update(
+                        {"metadata": {**meta, "due_date": candidate, "due_label": "지원사업 신청 마감"}}
+                    ).eq("id", artifact["id"]).execute()
+                except Exception:
+                    pass
+                return f"📅 신청 마감일 **{candidate}**을 일정에 추가했어요. 스케줄 카드에서 확인하실 수 있어요."
+        return "일정에 추가할 마감일 정보를 찾지 못했어요. 지원사업 추천을 다시 요청해 보세요."
+
+    # 프로필 조회
+    try:
+        profile_row = (
+            sb.table("profiles")
+            .select("business_type,location,business_stage,employees_count,primary_goal")
+            .eq("id", account_id)
+            .maybe_single()
+            .execute()
+        )
+        profile = profile_row.data or {}
+    except Exception:
+        profile = {}
+
+    # 프로필 핵심 필드 부족 시 폼 유도
+    missing = [k for k in ("business_type", "location") if not profile.get(k)]
+    if missing:
+        return (
+            "맞춤 추천을 위해 업종과 지역 정보가 필요해요. "
+            "아래 폼을 채워주시면 바로 찾아드릴게요!\n\n"
+            "[[ONBOARDING_FORM]]"
+        )
+
+    # 검색 쿼리: 메시지 + 프로필 + 장기 기억 일부
+    query_parts = [message]
+    if profile.get("business_type"):
+        query_parts.append(profile["business_type"])
+    if profile.get("location"):
+        query_parts.append(profile["location"])
+    if profile.get("business_stage"):
+        query_parts.append(profile["business_stage"])
+    if long_term_context:
+        query_parts.append(long_term_context[:300])
+    query = " ".join(p for p in query_parts if p)
+
+    # search_subsidy_programs RPC (vector+FTS RRF)
+    def _rpc_search(q: str, n: int) -> list[dict]:
+        emb = embed_text(q)
+        try:
+            return (
+                sb.rpc(
+                    "search_subsidy_programs",
+                    {"query_embedding": emb, "query_text": q, "match_count": n},
+                )
+                .execute()
+                .data or []
+            )
+        except Exception:
+            return []
+
+    try:
+        raw_rows = await asyncio.to_thread(_rpc_search, query, count * 6)
+    except Exception:
+        raw_rows = []
+
+    today = date.today()
+    cutoff = today + timedelta(days=7)
+
+    def _visible(p: dict) -> bool:
+        if p.get("is_ongoing"):
+            return True
+        end = p.get("end_date")
+        if end:
+            try:
+                if date.fromisoformat(end) < today:
+                    return False
+            except ValueError:
+                pass
+        start = p.get("start_date")
+        if start:
+            try:
+                if date.fromisoformat(start) > cutoff:
+                    return False
+            except ValueError:
+                pass
+        return True
+
+    programs: list[dict] = []
+    if raw_rows:
+        row_ids = [r["row_id"] for r in raw_rows]
+        score_map = {r["row_id"]: r.get("score", 0.0) for r in raw_rows}
+        try:
+            detail_result = (
+                sb.table("subsidy_programs")
+                .select(
+                    "id,title,organization,region,program_kind,"
+                    "start_date,end_date,period_raw,is_ongoing,"
+                    "description,detail_url,form_files"
+                )
+                .in_("id", row_ids)
+                .execute()
+            )
+            details = detail_result.data or []
+        except Exception:
+            details = []
+
+        for d in details:
+            d["_score"] = score_map.get(d["id"], 0.0)
+        details.sort(key=lambda x: x["_score"], reverse=True)
+        programs = [p for p in details if _visible(p)][:20]  # LLM에 최대 20개 후보 전달
+
+    if not programs:
+        return (
+            "현재 조건에 맞는 활성 지원사업을 찾지 못했어요. "
+            "지원사업 모달에서 직접 검색해보시거나, 업종·지역 프로필을 설정하시면 더 정확한 추천이 가능해요."
+        )
+
+    # 공고 후보 블록 조립
+    prog_blocks: list[str] = []
+    for i, p in enumerate(programs, 1):
+        if p.get("is_ongoing"):
+            period = "상시 모집"
+        elif p.get("start_date") and p.get("end_date"):
+            period = f"{p['start_date']} ~ {p['end_date']}"
+        elif p.get("end_date"):
+            period = f"~ {p['end_date']}"
+        else:
+            period = p.get("period_raw") or "기간 미정"
+
+        url = p.get("external_url") or p.get("detail_url") or ""
+        prog_blocks.append(
+            f"[후보 {i}]\n"
+            f"  공고명: {p['title']}\n"
+            f"  주관기관: {p.get('organization') or '미상'}\n"
+            f"  지역: {p.get('region') or '전국'}\n"
+            f"  지원기간: {period}\n"
+            f"  내용: {(p.get('description') or '')[:300]}\n"
+            f"  공고URL: {url or '없음'}"
+        )
+
+    profile_block = (
+        f"업종: {profile.get('business_type') or '미상'} | "
+        f"지역: {profile.get('location') or '미상'} | "
+        f"단계: {profile.get('business_stage') or '미상'} | "
+        f"직원: {profile.get('employees_count') or '미상'}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    system_prompt = (
+        "당신은 소상공인 전문 어시스턴트입니다.\n"
+        "아래 후보 공고들 중 사용자 프로필에 실제로 적합한 것만 골라 추천하세요.\n\n"
+        "규칙:\n"
+        "- 업종·지역·사업 단계와 무관한 공고는 절대 포함하지 말고 무시하세요.\n"
+        "- 적합한 공고가 없으면 왜 맞는 공고가 없는지 이유를 1~2문장으로 친절하게 설명하고, "
+        "어떤 조건이 갖춰지면 추천이 가능한지 간단히 안내하세요. 이 경우 [ARTIFACT] 블록을 절대 포함하지 마세요.\n"
+        "- 가장 적합한 공고 1개만 추천하세요.\n"
+        "- 각 추천 항목 형식:\n"
+        "  **공고명**\n"
+        "  주관기관 | 신청기간\n"
+        "  추천 이유: (업종·지역 연결 1~2문장)\n"
+        "  공고URL이 있으면 반드시 마지막에 [공고 보러 가기](URL) 형식으로 링크를 포함하세요.\n\n"
+        "- 점수, 등급, 수치 평가는 절대 쓰지 마세요.\n"
+        "- [ARTIFACT] 블록에 start_date/end_date/due_date 를 포함하지 마세요.\n"
+        "- 응답 마지막에 반드시 아래 [ARTIFACT] 블록을 추가하세요:\n"
+        "[ARTIFACT]\ntype: subsidy_recommendation\ntitle: 지원사업 추천\n"
+        "content: <추천된 공고명 요약>\n[/ARTIFACT]\n\n"
+        f"[사용자 프로필]\n{profile_block}\n\n"
+        f"[후보 공고 목록]\n" + "\n\n".join(prog_blocks)
+    )
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ],
+        model="gpt-4o",
+    )
+    reply = resp.choices[0].message.content or ""
+    artifact_id = await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title="지원사업 추천",
+        valid_types=tuple(VALID_TYPES),
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+
+    # 추천 성공 시 마감일을 candidate_deadline 으로 저장 (사용자 확인 후 due_date 로 이동)
+    actually_recommended = "[ARTIFACT]" in reply and "찾지 못" not in reply and "없습니다" not in reply[:200]
+    if actually_recommended and artifact_id:
+        deadline = next(
+            (p.get("end_date") for p in programs if p.get("end_date") and not p.get("is_ongoing")),
+            None,
+        )
+        if deadline:
+            try:
+                sb.table("artifacts").update(
+                    {"metadata": {"candidate_deadline": deadline}}
+                ).eq("id", artifact_id).execute()
+            except Exception:
+                pass
+            reply += (
+                f"\n\n📅 신청 마감일은 **{deadline}**이에요. 일정에 추가할까요?\n"
+                "[CHOICES]\n마감 일정 추가\n아니요\n[/CHOICES]"
+            )
+    return reply
 
 
 async def run_admin_application(
@@ -1233,21 +1429,21 @@ def describe(account_id: str) -> list[dict]:
         # Step 3-B — Operations 신규 2종
         # ──────────────────────────────────────────────────────
         {
-            "name": "doc_subsidy_application",
+            "name": "doc_subsidy_recommend",
             "description": (
-                "국가 지원사업 신청서 초안 작성 — 소상공인 지원·정부 보조금·창업 지원금·고용 지원금 등. "
-                "'지원사업 신청서 써줘', '보조금 신청', '창업 지원금 지원하고 싶어' 요청이면 이 tool. "
-                "subsidy_name 이 파라미터로 안 넘어오면 내부에서 search_subsidy_programs 로 "
-                "후보 3~5개를 조회해 에이전트가 CHOICES 로 되묻는 흐름. "
-                "[카테고리: Operations — 국가 지원사업·행정 업무]"
+                "사용자 업종·지역·사업 단계에 맞는 정부 지원사업을 검색·추천. "
+                "'지원사업 뭐가 있어', '보조금 받을 수 있어', '정부 지원 받고 싶어', "
+                "'어떤 지원사업이 잘 맞을까', '지원사업 추천해줘', '보조금 추천' 같은 맥락이면 이 tool. "
+                "각 공고에 대해 10점 만점 점수 + 매칭 이유 제공. 기본 1개, 요청 시 N개. "
+                "추천 후 [CHOICES]에서 '마감 일정 추가'를 선택한 경우 confirm_deadline=true 로 재호출. "
+                "[카테고리: Operations — 지원사업 추천]"
             ),
-            "handler": run_subsidy_application,
+            "handler": run_subsidy_recommend,
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "subsidy_name": {"type": "string", "description": "지원사업 공식명 (확정된 경우만)"},
-                    "scope":        {"type": "string", "description": "신청 범위·사업 내용"},
-                    "extra_note":   {"type": "string"},
+                    "count": {"type": "integer", "description": "추천 개수 (기본 1)", "default": 1},
+                    "confirm_deadline": {"type": "boolean", "description": "마감 일정 추가 확인 (사용자가 CHOICES에서 '마감 일정 추가'를 선택한 경우 true)", "default": False},
                 },
             },
         },

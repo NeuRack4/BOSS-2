@@ -51,6 +51,7 @@ import {
   type MenuAnalysisPayload,
 } from "./MenuAnalysisCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
+import { OnboardingFormCard } from "./OnboardingFormCard";
 
 type UploadCategory =
   | "documents"
@@ -138,55 +139,93 @@ const NON_DOC_HINT: Partial<Record<UploadCategory, string>> = {
     "사업용 문서 분류에 해당하지 않아 저장만 해뒀어요. 필요하면 위 드롭다운에서 타입을 지정해 다시 올려주세요.",
 };
 
+const DOMAIN_CAPABILITIES: Array<{
+  label: string;
+  accent: string;
+  bg: string;
+  items: Array<{ name: string; prompt: string }>;
+}> = [
+  {
+    label: "Sales",
+    accent: "#7ba8a4",
+    bg: "#c4dbd9",
+    items: [
+      { name: "매출 입력", prompt: "오늘 매출 입력하기" },
+      { name: "비용 입력", prompt: "오늘 비용 입력하기" },
+      { name: "매출 리포트", prompt: "이번 달 매출 요약 정리해줘" },
+      { name: "비용 분석", prompt: "비용 지출 분석해줘" },
+      { name: "가격 전략", prompt: "가격 전략 추천해줘" },
+      { name: "고객 스크립트", prompt: "고객 응대 스크립트 만들어줘" },
+      { name: "고객 분석", prompt: "고객 분석 리포트 만들어줘" },
+      { name: "프로모션", prompt: "프로모션 기획해줘" },
+    ],
+  },
+  {
+    label: "Recruitment",
+    accent: "#d4a588",
+    bg: "#f7e6da",
+    items: [
+      { name: "채용 공고 작성", prompt: "채용 공고 초안 작성해줘" },
+      {
+        name: "3개 플랫폼 동시 공고",
+        prompt: "3개 플랫폼에 채용 공고 동시에 올려줘",
+      },
+      { name: "채용 공고 포스터", prompt: "채용 공고 포스터 이미지 만들어줘" },
+      { name: "면접 질문", prompt: "면접 질문 5개 뽑아줘" },
+      {
+        name: "온보딩 체크리스트",
+        prompt: "신규 직원 온보딩 체크리스트 만들어줘",
+      },
+      { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
+      { name: "채용 가이드", prompt: "직원 근태 관리 가이드 만들어줘" },
+      { name: "인건비 계산", prompt: "주휴수당 포함 월 인건비 계산해줘" },
+    ],
+  },
+  {
+    label: "Marketing",
+    accent: "#c78897",
+    bg: "#f0d7df",
+    items: [
+      { name: "SNS 포스트", prompt: "인스타 포스트 3개 기획해줘" },
+      { name: "블로그 포스트", prompt: "블로그 포스트 작성해줘" },
+      { name: "광고 카피", prompt: "광고 카피 3가지 버전 만들어줘" },
+      { name: "마케팅 플랜", prompt: "마케팅 플랜 짜줘" },
+      { name: "이벤트 기획", prompt: "프로모션 이벤트 기획해줘" },
+      { name: "캠페인 전략", prompt: "캠페인 전략 세워줘" },
+      { name: "리뷰 답글", prompt: "리뷰 답글 작성해줘" },
+      { name: "공지사항", prompt: "공지사항 작성해줘" },
+      { name: "상품 포스트", prompt: "신상품 포스트 만들어줘" },
+      { name: "YouTube Shorts", prompt: "유튜브 Shorts 영상 만들어줘" },
+    ],
+  },
+  {
+    label: "Documents",
+    accent: "#7977a0",
+    bg: "#c8c7d6",
+    items: [
+      { name: "근로계약서", prompt: "근로계약서 초안 작성해줘" },
+      { name: "임대차 계약서", prompt: "임대차 계약서 작성해줘" },
+      { name: "용역 계약서", prompt: "용역 계약서 작성해줘" },
+      { name: "NDA", prompt: "NDA 계약서 작성해줘" },
+      { name: "견적서", prompt: "견적서 만들어줘" },
+      { name: "제안서", prompt: "제안서 작성해줘" },
+      { name: "공지문", prompt: "공지문 작성해줘" },
+      { name: "계약서 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
+      { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
+      { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
+      { name: "인사평가서", prompt: "인사평가서 만들어줘" },
+      { name: "급여명세서", prompt: "급여명세서 만들어줘" },
+      { name: "세무 캘린더", prompt: "세무 캘린더 만들어줘" },
+      { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
+    ],
+  },
+];
+
 const SUGGESTED_POOL: Record<string, string[]> = {
-  recruitment: [
-    "이번 주 알바 채용 공고 초안 작성해줘",
-    "카페 파트타이머 면접 질문 5개 뽑아줘",
-    "신규 직원 온보딩 체크리스트 만들어줘",
-    "주휴수당 포함해서 월 인건비 계산해줘",
-    "3개 플랫폼에 채용 공고 동시에 올려줘",
-    "채용 공고 포스터 이미지 만들어줘",
-    "수습 기간 설정 가이드 알려줘",
-    "면접 평가표 양식 만들어줘",
-    "직원 근태 관리 체크리스트 추천해줘",
-    "최저임금 기준 시급 계산해줘",
-  ],
-  marketing: [
-    "이번 주 인스타 포스트 3개 기획해줘",
-    "네이버 리뷰에 답글 작성해줘",
-    "주말 프로모션 캠페인 아이디어 줘",
-    "블로그 포스트 제목 10개 뽑아줘",
-    "신메뉴 런칭 마케팅 플랜 짜줘",
-    "SNS 해시태그 추천해줘",
-    "단골 고객 이벤트 기획해줘",
-    "광고 카피 3가지 버전 만들어줘",
-    "카카오맵 리뷰 관리 전략 알려줘",
-    "오픈 1주년 이벤트 준비해줘",
-  ],
-  sales: [
-    "이번 달 매출 요약 정리해줘",
-    "지난주 대비 매출 변화 알려줘",
-    "오늘 매출 입력하기",
-    "이번 달 비용 지출 분석해줘",
-    "고마진 상품 TOP 5 알려줘",
-    "단가 인상 영향 분석해줘",
-    "주간 매출 리포트 만들어줘",
-    "고정비 세부 내역 정리해줘",
-    "분기별 매출 추이 보여줘",
-    "손익분기점 계산해줘",
-  ],
-  documents: [
-    "근로계약서 초안 작성해줘",
-    "어제 업로드한 계약서 공정성 분석해줘",
-    "임대차 계약 체크리스트 만들어줘",
-    "견적서 템플릿 만들어줘",
-    "영업 중단 공지문 작성해줘",
-    "NDA 계약서 초안 작성해줘",
-    "식품위생법 관련 체크리스트 줘",
-    "사업자 등록 준비물 가이드 만들어줘",
-    "가맹 계약서 주의사항 알려줘",
-    "프리랜서 용역 계약서 작성해줘",
-  ],
+  recruitment: ["채용 공고 초안 작성해줘"],
+  marketing: ["인스타 포스트 3개 기획해줘"],
+  sales: ["이번 달 매출 요약 정리해줘"],
+  documents: ["근로계약서 초안 작성해줘"],
 };
 
 const DOMAIN_ORDER = [
@@ -368,6 +407,7 @@ export const InlineChat = () => {
     }
   }, []);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendRef = useRef<
@@ -384,7 +424,10 @@ export const InlineChat = () => {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = scrollViewportRef.current;
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    }
   }, [messages]);
 
   const fetchSessions = useCallback(async () => {
@@ -1157,26 +1200,39 @@ export const InlineChat = () => {
       )}
       <div className="flex h-full min-h-0 flex-col">
         {messages.length === 0 && !loading ? (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6">
+          <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
             <div className="mb-4 text-center font-mono text-lg font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
               Ask the chatbot.
             </div>
-            <div className="flex w-full max-w-xs flex-col gap-1.5">
-              {initialSuggestions.map((choice, idx) => (
-                <Button
-                  key={idx}
-                  variant="outline"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => send(choice)}
-                  className={cn(
-                    "h-auto justify-center whitespace-normal rounded-[5px] py-1.5 px-2.5 text-center text-[12px] font-normal leading-snug",
-                    "border-[#030303]/10 bg-[#fcfcfc] text-[#030303] hover:bg-[#030303]/[0.05] hover:text-[#030303]",
-                  )}
-                >
-                  {choice}
-                </Button>
-              ))}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto flex max-w-md flex-col gap-4 pb-2">
+                {DOMAIN_CAPABILITIES.map((domain) => (
+                  <div key={domain.label}>
+                    <div
+                      className="mb-2 inline-block rounded-[4px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
+                      style={{
+                        backgroundColor: domain.bg,
+                        color: domain.accent,
+                      }}
+                    >
+                      {domain.label}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {domain.items.map((item) => (
+                        <button
+                          key={item.name}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => send(item.prompt)}
+                          className="rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : null}
@@ -1185,6 +1241,7 @@ export const InlineChat = () => {
             "min-h-0 flex-1 px-3 py-2",
             messages.length === 0 && !loading && "hidden",
           )}
+          viewportRef={scrollViewportRef}
         >
           <div className="space-y-2.5">
             {messages.map((msg, i) => {
@@ -1196,6 +1253,15 @@ export const InlineChat = () => {
                 msg.reviewReply ?? null;
               let menuChartPayload: MenuAnalysisPayload | null =
                 msg.menuChart ?? null;
+
+              const isOnboardingForm =
+                msg.role === "assistant" &&
+                (displayText || "").includes("[[ONBOARDING_FORM]]");
+              if (isOnboardingForm) {
+                displayText = (displayText || "")
+                  .replace("[[ONBOARDING_FORM]]", "")
+                  .trim();
+              }
 
               if (msg.role === "assistant") {
                 const rrExtracted = extractReviewReplyPayload(
@@ -1292,6 +1358,22 @@ export const InlineChat = () => {
                   {reviewReplyPayload && msg.role === "assistant" && (
                     <div className="ml-8 max-w-[85%]">
                       <ReviewReplyCard payload={reviewReplyPayload} />
+                    </div>
+                  )}
+                  {isOnboardingForm && userId && (
+                    <div className="ml-8">
+                      <OnboardingFormCard
+                        accountId={userId}
+                        onComplete={(summary) => {
+                          setMessages((prev) => [
+                            ...prev,
+                            {
+                              role: "assistant" as const,
+                              content: `프로필이 저장됐어요! (${summary})\n\n이제 맞춤 도움을 드릴 수 있어요. 무엇부터 시작할까요?`,
+                            },
+                          ]);
+                        }}
+                      />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.shortsWizard && (

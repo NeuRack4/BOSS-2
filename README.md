@@ -2,7 +2,7 @@
 
 ![Dashboard](./docs/dashboard-layout.png)
 
-![version](https://img.shields.io/badge/version-1.2.0-blue)
+![version](https://img.shields.io/badge/version-1.4.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. Planner 기반 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -39,6 +39,10 @@ Celery Beat (60s tick) → 실행 / D-7·D-3·D-1·D-0 알림
 
 ## Key Features
 
+- **정부 지원사업 시스템 v1.4** — `subsidy_programs` 테이블 + `search_subsidy_programs` RRF RPC 로 공고 저장·검색. 계정별 프로필 맞춤 추천을 `subsidy_cache` 에 24h 캐싱 — 로그인 시 자동 계산, 프로필 변경 시 즉시 재계산. `SubsidyMatchCard` (Bento — 3초 폴링 스피너 → 항목 클릭 시 카드 안 상세 뷰) + `SubsidyModal` (전체 검색/필터/아코디언). 추천 공고 마감일은 CHOICES(`마감 일정 추가 / 아니요`) 확인 후 artifact `due_date` 로 등록.
+- **Planner CHOICES 오라우팅 수정 v1.4** — `_dispatch_via_planner` 에서 `_last_assistant_unresolved_choices(history)` 감지 → `plan()` 에 `choices_context` 주입. 직전 CHOICES 가 있는 상태에서 사용자 단답(예: "마감 일정 추가")이 엉뚱한 도메인으로 라우팅되는 버그 근본 수정.
+- **프로필 UI 전면 개선 v1.4** — `ProfileMemorySidebar` : 7개 core 필드 항상 표시(빈 칸도 "—"), 영문 라벨, `boss:artifacts-changed` 실시간 갱신. `ProfileModal` : Nickname·Business Name·Industry·Location·Stage·Staff·Channel·Goal 전체 편집 폼, 저장 시 subsidy 캐시 자동 invalidate. `OnboardingFormCard` : `[[ONBOARDING_FORM]]` 마커로 채팅 안에서 최초 프로필 입력.
+- **InlineChat 빈 상태 capability grid v1.4** — 하드코딩 랜덤 질문 대신 Sales·Recruitment·Marketing·Documents 도메인별 capability 목록을 세로 섹션으로 나열. 클릭 시 해당 프롬프트 자동 전송.
 - **Planner 기반 오케스트레이터 v1.1+ → v1.2** — `_planner.py` 가 `response_format=json_schema` 강제로 매 턴 `{mode, opening, brief, steps[], question, choices, profile_updates}` 구조화 JSON 을 생성. `dispatch` 모드는 도메인 capability 들을 `depends_on` 관계에 따라 `asyncio.gather` 로 병렬 실행. 실패 시 legacy `classify_intent` → `_call_domain_with_shortcut` 으로 자동 폴백하는 2단 세이프티넷.
 - **4개 도메인 통합 Capability 라우팅 v1.2** — `_capability.V2_DOMAINS` 에 sales 가 합류해 **채용·마케팅·매출·서류 4개 도메인 전부** function-calling 으로 통일. 각 도메인이 `describe(account_id) -> list[Capability]` 를 export 하면 오케스트레이터가 OpenAI tools 스펙 + dispatch map 을 한 번에 조립.
 - **Speaker 추적 v1.2** — assistant 메시지마다 어떤 에이전트(들)이 생성했는지 `chat_messages.speaker text[]` 에 기록 + `ChatResponse.data.speaker` 로 노출. 프론트 `SpeakerBadge` 가 도메인 색상 pill 로 렌더해 사용자가 "누구의 답변인지" 바로 알 수 있음.

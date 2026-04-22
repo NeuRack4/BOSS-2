@@ -69,9 +69,9 @@ TYPE_SPEC: dict[str, dict] = {
         "default_due_label": None,
     },
     # Step 3-B — Operations 신규 2종
-    "subsidy_application": {
-        "label": "국가 지원사업 신청서",
-        "required": ("subsidy_name", "신청 범위·사업 개요"),
+    "subsidy_recommendation": {
+        "label": "지원사업 추천",
+        "required": ("business_type", "location"),
         "default_due_label": "신청 마감",
     },
     "admin_application": {
@@ -440,8 +440,8 @@ A: {{서명}}    B: {{서명}}
     # ──────────────────────────────────────────────────────────────
     # Step 3-B — Operations 신규 스켈레톤
     # ──────────────────────────────────────────────────────────────
-    "subsidy_application": """\
-# 국가 지원사업 신청서 — {{subsidy_name}}
+    "subsidy_recommendation": """\
+# 지원사업 추천 결과
 
 **신청자**: {{대표자 / 법인명 / 사업자등록번호}}
 **사업장**: {{주소 / 업종}}
@@ -708,7 +708,7 @@ def detect_doc_intent(message: str) -> tuple[str | None, str | None]:
         "checklist": ("체크리스트", "점검표"),
         "guide": ("가이드", "매뉴얼"),
         # Step 3-B — Operations 신규
-        "subsidy_application": ("지원사업 신청", "지원금 신청", "보조금 신청", "창업 지원금"),
+        "subsidy_recommendation": ("지원사업 추천", "지원사업 알려줘", "보조금 추천", "지원사업 뭐가 있", "어떤 지원사업", "정부 지원 받고", "지원금 받을 수 있"),
         "admin_application":   ("사업자등록 신청", "영업허가", "영업신고", "인허가 신청", "민원 신청서"),
         # Step 3-A — Tax&HR 신규
         "hr_evaluation": ("인사평가서", "평가서 양식", "직원 평가", "근무 평가", "성과 평가"),
@@ -732,7 +732,7 @@ TYPE_TO_CATEGORY: dict[str, str] = {
     "proposal":            "review",
     "estimate":            "operations",
     "notice":              "operations",
-    "subsidy_application": "operations",   # Step 3-B
+    "subsidy_recommendation": "operations", # Step 3-B
     "admin_application":   "operations",   # Step 3-B
     "checklist":           "tax_hr",
     "guide":               "tax_hr",
