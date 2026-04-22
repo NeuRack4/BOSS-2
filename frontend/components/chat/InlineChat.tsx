@@ -40,6 +40,11 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 import { CostInputTable, type CostActionData } from "./CostInputTable";
+import {
+  ShortsWizardCard,
+  extractShortsWizardPayload,
+  type ShortsWizardPayload,
+} from "./ShortsWizardCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type UploadCategory =
@@ -74,6 +79,7 @@ type Message = {
   confirm?: ConfirmPayload;
   salesAction?: SalesActionData;
   costAction?: CostActionData;
+  shortsWizard?: ShortsWizardPayload;
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -908,8 +914,10 @@ export const InlineChat = () => {
         const rawReply = data?.data?.reply ?? "응답을 받지 못했습니다.";
         const { clean: afterSales, action: salesAction } =
           parseSalesAction(rawReply);
-        const { clean: cleanReply, action: costAction } =
+        const { clean: afterCost, action: costAction } =
           parseCostAction(afterSales);
+        const { cleaned: cleanReply, payload: shortsWizard } =
+          extractShortsWizardPayload(afterCost);
         setMessages((prev) => [
           ...prev,
           {
@@ -920,6 +928,7 @@ export const InlineChat = () => {
               : undefined,
             salesAction,
             costAction,
+            shortsWizard: shortsWizard ?? undefined,
           },
         ]);
         const sp = data?.data?.speaker;
@@ -1268,6 +1277,11 @@ export const InlineChat = () => {
                   {reviewReplyPayload && msg.role === "assistant" && (
                     <div className="ml-8 max-w-[85%]">
                       <ReviewReplyCard payload={reviewReplyPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.shortsWizard && (
+                    <div className="ml-8">
+                      <ShortsWizardCard payload={msg.shortsWizard} />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.choices && (

@@ -71,6 +71,49 @@ async def generate_subtitles_for_images(
     return subtitles
 
 
+async def generate_video_metadata(
+    context: str,
+    subtitles: list[str],
+) -> dict:
+    """자막·컨텍스트를 기반으로 YouTube 제목·설명·태그 자동 생성."""
+    from app.core.llm import client as openai_client
+    from app.core.config import settings
+
+    subtitle_text = "\n".join(f"- {s}" for s in subtitles if s)
+    system = (
+        "당신은 YouTube Shorts SEO 전문가입니다.\n"
+        "아래 정보를 바탕으로 YouTube Shorts 메타데이터를 JSON으로 작성하세요.\n"
+        "규칙:\n"
+        "- title: 60자 이내, 클릭을 유도하는 한국어 제목, 이모지 1~2개 포함\n"
+        "- description: 150자 이내, 핵심 내용 요약 + 관련 해시태그 3~5개 포함\n"
+        "- tags: 5~8개의 한국어 검색 키워드 배열\n"
+        '출력 형식: {"title": "...", "description": "...", "tags": ["태그1", ...]}'
+    )
+    user_text = f"주제: {context}\n\n슬라이드 자막:\n{subtitle_text}" if context else f"슬라이드 자막:\n{subtitle_text}"
+
+    try:
+        resp = await asyncio.to_thread(
+            openai_client.chat.completions.create,
+            model=settings.openai_chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_text},
+            ],
+            max_tokens=300,
+            temperature=0.7,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content.strip())
+        return {
+            "title": str(data.get("title", ""))[:100],
+            "description": str(data.get("description", "")),
+            "tags": [str(t) for t in data.get("tags", [])],
+        }
+    except Exception as e:
+        log.warning("[shorts] metadata generation failed: %s", e)
+        return {"title": context[:100] if context else "", "description": "", "tags": []}
+
+
 # ── FFmpeg 영상 합성 ──────────────────────────────────────────────────────────
 
 def _build_ffmpeg_cmd(
@@ -133,7 +176,7 @@ def _build_ffmpeg_cmd(
     else:
         prev = "v0"
         for i in range(1, n):
-            offset = round(i * duration - 0.4, 2)
+            offset = round(i * (duration - 0.4), 2)
             nxt = "out" if i == n - 1 else f"x{i}"
             filters.append(
                 f"[{prev}][v{i}]xfade=transition=fade:duration=0.4:offset={offset}[{nxt}]"

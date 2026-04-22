@@ -42,4 +42,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.scheduler.tasks.tick",
         "schedule": celery_schedule(run_every=settings.scheduler_tick_seconds),
     },
+    "comment-scan": {
+        "task": "app.scheduler.tasks.scan_comments",
+        "schedule": celery_schedule(run_every=3600),  # 1시간마다
+    },
 }

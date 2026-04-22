@@ -139,7 +139,7 @@ export const ProfileMemorySidebar = () => {
       <div className="min-h-0 flex-1 basis-0">
         <LongMemoryCard items={longMem} loading={loading} />
       </div>
-      <div className="min-h-0 flex-1 basis-0">
+      <div className="min-h-0 flex-[0.75] basis-0">
         <MemosCard items={memos} loading={loading} />
       </div>
     </aside>

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — feature-marketing (YouTube Shorts AI 자동화 + Instagram Reels 업로드 + 댓글 자동 관리)
+
+### Added — YouTube Shorts AI 자동화
+
+- **`backend/app/services/shorts_gen.py`** — `generate_video_metadata(context, subtitles)` 신규 추가. GPT-4o가 쇼츠 영상 제목(60자·이모지), 설명(150자·해시태그), 태그(5-8개)를 자동 생성. `response_format=json_object` 강제.
+- **`backend/app/routers/marketing.py`** — `preview-subtitles` 엔드포인트가 자막과 함께 `title / description / tags` 반환. `ShortsGenerateResponse`에 `reels_url / reels_error` 필드 추가. `upload_to_reels: bool = Form(False)` 파라미터로 Reels 동시 업로드 지원.
+- **`frontend/components/chat/ShortsWizardCard.tsx`** — Step 1 버튼 "AI 자막·제목 생성"으로 변경. Step 3 각 필드에 "AI 추천" 배지 + 자동 채움 배너 표시. Step 4 "Instagram Reels에도 업로드" 토글 추가. 완료 시 Reels URL 링크 표시.
+
+### Added — Instagram Reels 동시 업로드
+
+- **`backend/app/services/instagram.py`** — `_create_reels_container()` + `publish_reels(video_url, caption, hashtags, share_to_feed)` 신규 추가. `media_type=REELS` Meta Graph API v19.0 사용. 컨테이너 준비 대기 `max_retries=20, interval=5.0`(최대 100초).
+- **`backend/app/services/youtube.py`** — `_SCOPES`에 `youtube.force-ssl`(댓글 작성) + `youtube.readonly`(채널/영상 조회) 추가.
+
+### Added — 댓글 자동 관리
+
+- **`backend/app/services/comment_manager.py`** — 신규. YouTube/Instagram 댓글 수집 + AI 답글 초안 생성(GPT-4o) + 플랫폼 게시. YouTube는 채널 최근 10개 영상 × 20댓글, Instagram은 최근 10개 미디어 × 20댓글. `comment_id` 기반 중복 방지.
+- **`backend/app/routers/comments.py`** — 신규. `GET /api/comments/` (status 필터) · `POST /scan` · `POST /{id}/post` · `POST /{id}/ignore` · `PATCH /{id}/reply`.
+- **`backend/app/scheduler/tasks.py`** — `scan_comments` Celery 태스크 추가. `youtube_oauth_tokens` 보유 계정 전체 자동 스캔.
+- **`backend/app/scheduler/celery_app.py`** — `comment-scan` beat 스케줄 3600s 간격 등록.
+- **`supabase/migrations/024_comment_queue.sql`** — 신규. `comment_queue(id, account_id, platform, media_id, media_title, comment_id, commenter_name, comment_text, ai_reply, status, created_at, posted_at)` + RLS + `UNIQUE(account_id, platform, comment_id)` + 인덱스.
+- **`frontend/components/bento/CommentQueueCard.tsx`** — 신규. 대기 댓글 수 배지 + 플랫폼 배지 + 작성자/댓글 미리보기. 클릭 시 CommentManagerModal 오픈. `boss:comments-changed` 리스너.
+- **`frontend/components/layout/CommentManagerModal.tsx`** — 신규. 720×560 대시보드 모달. 상태 필터(대기 중/게시됨/무시됨/전체) + 댓글별 AI 답글 초안 인라인 편집 + 게시/수정/무시 액션.
+- **`frontend/components/layout/Header.tsx`** — "Comments" 버튼 + `boss:open-comment-modal` 이벤트 리스너 + `<CommentManagerModal>` 마운트 추가.
+
+### Changed — Bento Grid 레이아웃
+
+- **`frontend/components/bento/BentoGrid.tsx`** — 하단 영역을 3×2 그리드(col 1-4 / 5-8 / 9-12, rows 5-8)로 재편. Chat History(4행), Upcoming Schedule·Comment Queue(각 2행), Recent Activity·Placeholder(각 2행). `CommentQueueCard` 추가.
+- **`frontend/components/bento/ProfileMemorySidebar.tsx`** — Memos 카드 높이 `flex-1` → `flex-[0.75]` 소폭 축소.
+
 ## [1.2.2] — fix/kanban-column-scroll (Kanban 컬럼 고정 너비 제거 + 가로 스크롤 해소)
 
 ### Fixed — Frontend

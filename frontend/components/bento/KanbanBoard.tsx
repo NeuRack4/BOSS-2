@@ -176,7 +176,8 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
         </div>
       )}
 
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      <div className="w-full overflow-x-auto pb-4">
+      <div className="flex gap-3" style={{ minWidth: "max-content" }}>
         {board.unassigned.length > 0 && (
           <KanbanColumn
             title="미분류"
@@ -204,6 +205,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
             onCardClick={handleCardClick}
           />
         ))}
+      </div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { X, Trash2, CheckCircle2, Loader2, ImagePlus } from "lucide-react";
+import { X, Trash2, CheckCircle2, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Photo = {
@@ -14,8 +14,8 @@ type Photo = {
 };
 
 type Props = {
-  aiImageUrl: string; // DALL-E 생성 이미지 (기본 선택)
-  onSelect: (url: string) => void;
+  aiImageUrl: string;
+  onSelect: (urls: string[]) => void;
   onClose: () => void;
 };
 
@@ -24,7 +24,9 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [selectedUrl, setSelectedUrl] = useState(aiImageUrl);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(
+    new Set(aiImageUrl ? [aiImageUrl] : []),
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -48,6 +50,22 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
     fetchPhotos();
   }, [fetchPhotos]);
 
+  const toggleSelect = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) {
+        next.delete(url);
+      } else {
+        if (next.size >= 10) {
+          alert("Instagram 캐러셀은 최대 10장까지 선택 가능합니다.");
+          return prev;
+        }
+        next.add(url);
+      }
+      return next;
+    });
+  };
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -64,8 +82,7 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       await fetchPhotos();
-      // 방금 업로드한 사진 자동 선택
-      setSelectedUrl(json.data.public_url);
+      setSelectedUrls((prev) => new Set([...prev, json.data.public_url]));
     } catch (err) {
       alert(err instanceof Error ? err.message : "업로드 실패");
     } finally {
@@ -83,21 +100,32 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
         `${apiBase}/api/marketing/photos/${photo.id}?account_id=${accountId}`,
         { method: "DELETE" },
       );
-      if (selectedUrl === photo.public_url) setSelectedUrl(aiImageUrl);
+      setSelectedUrls((prev) => {
+        const next = new Set(prev);
+        next.delete(photo.public_url);
+        return next;
+      });
       setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
     } finally {
       setDeletingId(null);
     }
   };
 
+  const count = selectedUrls.size;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex w-full max-w-xl flex-col rounded-2xl bg-[#fbf6eb] shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#ddd0b4] px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-[#2e2719]">
-            사진 라이브러리
-          </h2>
+          <div>
+            <h2 className="text-[15px] font-semibold text-[#2e2719]">
+              사진 라이브러리
+            </h2>
+            <p className="mt-0.5 text-[11px] text-[#8c7e66]">
+              여러 장 선택 시 캐러셀로 게시됩니다 (최대 10장)
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -123,9 +151,9 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setSelectedUrl(aiImageUrl)}
+                    onClick={() => toggleSelect(aiImageUrl)}
                     className={`relative w-full overflow-hidden rounded-xl transition-all ${
-                      selectedUrl === aiImageUrl
+                      selectedUrls.has(aiImageUrl)
                         ? "ring-4 ring-[#3b7aba] ring-offset-2"
                         : "ring-2 ring-transparent hover:ring-[#3b7aba]/40 hover:ring-offset-1"
                     }`}
@@ -139,12 +167,18 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                         unoptimized
                       />
                     </div>
-                    {selectedUrl === aiImageUrl && (
+                    {selectedUrls.has(aiImageUrl) && (
                       <div className="absolute right-2 top-2 rounded-full bg-[#3b7aba] p-1 shadow-md">
                         <CheckCircle2
                           className="h-5 w-5 text-white"
                           strokeWidth={2.5}
                         />
+                      </div>
+                    )}
+                    {/* 순서 뱃지 */}
+                    {selectedUrls.has(aiImageUrl) && (
+                      <div className="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#3b7aba] text-[11px] font-bold text-white shadow">
+                        {[...selectedUrls].indexOf(aiImageUrl) + 1}
                       </div>
                     )}
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 py-1 text-center text-[11px] font-medium text-white">
@@ -159,9 +193,9 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                 <div key={photo.id} className="relative">
                   <button
                     type="button"
-                    onClick={() => setSelectedUrl(photo.public_url)}
+                    onClick={() => toggleSelect(photo.public_url)}
                     className={`relative w-full overflow-hidden rounded-xl transition-all ${
-                      selectedUrl === photo.public_url
+                      selectedUrls.has(photo.public_url)
                         ? "ring-4 ring-[#3b7aba] ring-offset-2"
                         : "ring-2 ring-transparent hover:ring-[#3b7aba]/40 hover:ring-offset-1"
                     }`}
@@ -175,12 +209,18 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                         unoptimized
                       />
                     </div>
-                    {selectedUrl === photo.public_url && (
+                    {selectedUrls.has(photo.public_url) && (
                       <div className="absolute right-2 top-2 rounded-full bg-[#3b7aba] p-1 shadow-md">
                         <CheckCircle2
                           className="h-5 w-5 text-white"
                           strokeWidth={2.5}
                         />
+                      </div>
+                    )}
+                    {/* 순서 뱃지 */}
+                    {selectedUrls.has(photo.public_url) && (
+                      <div className="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#3b7aba] text-[11px] font-bold text-white shadow">
+                        {[...selectedUrls].indexOf(photo.public_url) + 1}
                       </div>
                     )}
                   </button>
@@ -200,7 +240,7 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
                 </div>
               ))}
 
-              {/* 마지막 칸: + 추가 버튼 */}
+              {/* + 추가 버튼 */}
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
@@ -222,7 +262,6 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
 
         {/* Footer */}
         <div className="flex items-center gap-2 border-t border-[#ddd0b4] px-5 py-4">
-          {/* 업로드 버튼 */}
           <input
             ref={fileRef}
             type="file"
@@ -230,13 +269,19 @@ export const PhotoLibraryModal = ({ aiImageUrl, onSelect, onClose }: Props) => {
             className="hidden"
             onChange={handleUpload}
           />
+          {count > 0 && (
+            <span className="text-[12px] text-[#8c7e66]">
+              {count}장 선택됨
+              {count > 1 && " · 캐러셀"}
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => onSelect(selectedUrl)}
-            disabled={!selectedUrl}
+            onClick={() => onSelect([...selectedUrls])}
+            disabled={count === 0}
             className="ml-auto flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#bc1888] px-4 py-2 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
-            이 사진으로 게시
+            {count > 1 ? `${count}장으로 게시` : "이 사진으로 게시"}
           </button>
         </div>
       </div>
