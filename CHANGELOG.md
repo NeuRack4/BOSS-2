@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] — feature/sales-csv-import (Sales CSV/Excel 매출 일괄 업로드)
+
+### Added — Sales CSV/Excel 파일 파싱
+
+- **`backend/app/agents/_sales/_csv_parser.py`** — 신규. CSV(`csv` 내장 + `utf-8-sig`/`cp949` 인코딩 자동 감지) / Excel(`.xlsx`, `openpyxl`) 파싱. GPT-4o-mini 로 컬럼명 자동 매핑(날짜·메뉴명·수량·단가·금액·카테고리). xlsx 파싱 실패 시 CSV 폴백 처리(이름만 `.xlsx`로 바꾼 파일 대응). `parse_sales_file(storage_path, bucket, mime_type, original_name)` 단일 진입점.
+- **`backend/app/agents/sales.py`** — `run_parse_csv` 핸들러 추가(`@_traceable` 포함). `describe()` 조건부 capability 분기 개선: `pending_receipt` 의 `mime_type` / `original_name` 확장자로 CSV·Excel 여부 판별 → `sales_parse_csv` 또는 `sales_parse_receipt` 중 하나만 advertise. 날짜 컬럼 미인식 시 오늘 날짜 일괄 처리 + 안내 메시지 포함.
+
 ## [1.3.1] — feature/sales-langsmith (Sales 에이전트 LangSmith 트레이싱 + 터미널 로그)
 
 ### Added — Sales LangSmith 트레이싱
