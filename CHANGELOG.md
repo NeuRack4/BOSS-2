@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] — feature/sales-stats-chart (Revenue 상세 모달 통계 패널 + 데이터 부족 UX 안내)
+
+### Added — Sales 통계 패널
+
+- **`frontend/components/sales/RevenueStatsPanel.tsx`** — 신규. `revenue_entry` artifact 상세 모달에 마운트되는 당월 통계 패널. `/api/stats/overview` + `/api/stats/daily` 2개 API 병렬 호출. 매출·비용·순이익 3카드(전월 대비 변화율 pill) + 일별 바 차트(ResizeObserver 기반 반응형 SVG, 오늘 날짜 강조). 데이터 없음 상태(빈 계정)는 챗봇 입력 가이드 문구 노출. 데이터 5일 미만 시 "데이터가 쌓일수록 분석이 정확해져요" 배너 표시.
+- **`frontend/components/detail/NodeDetailModal.tsx`** — `revenue_entry` 타입 artifact 상세 모달 상단에 `RevenueStatsPanel` 조건부 렌더 추가 (`artifact.type === "revenue_entry" && accountId`).
+
 ## [1.4.0] — feature-documents (정부 지원사업 시스템 + 프로필 UI 개선 + 오케스트레이터 CHOICES 라우팅 강화)
 
 ### Added — 정부 지원사업 시스템
