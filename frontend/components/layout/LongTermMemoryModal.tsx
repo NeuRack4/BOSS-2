@@ -118,6 +118,7 @@ export const LongTermMemoryModal = ({ open, onClose }: Props) => {
       );
       setEditingId(null);
       setEditText("");
+      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
     } finally {
       setSavingId(null);
     }
@@ -139,6 +140,7 @@ export const LongTermMemoryModal = ({ open, onClose }: Props) => {
         method: "DELETE",
       });
       setItems((prev) => prev.filter((m) => m.id !== id));
+      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
     } finally {
       setDeletingId(null);
     }

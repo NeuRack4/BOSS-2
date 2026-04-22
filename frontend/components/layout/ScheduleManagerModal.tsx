@@ -255,6 +255,8 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
               r.id === item.id ? { ...r, metadata: item.metadata } : r,
             ),
           );
+        } else {
+          window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
         }
       } else {
         const current = item.status;
@@ -270,6 +272,8 @@ export const ScheduleManagerModal = ({ open, onClose }: Props) => {
           setRows((prev) =>
             prev.map((r) => (r.id === item.id ? { ...r, status: current } : r)),
           );
+        } else {
+          window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
         }
       }
     } finally {

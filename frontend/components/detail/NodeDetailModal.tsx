@@ -825,6 +825,7 @@ export const NodeDetailModal = () => {
       await loadRecords();
       setEditingRecordId(null);
       setEditBuf({});
+      notifyArtifactsChanged();
     } catch (e) {
       setRecordsError(e instanceof Error ? e.message : "수정 실패");
     } finally {
@@ -844,6 +845,7 @@ export const NodeDetailModal = () => {
       const res = await fetch(endpoint, { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await loadRecords();
+      notifyArtifactsChanged();
     } catch (e) {
       setRecordsError(e instanceof Error ? e.message : "삭제 실패");
     } finally {
@@ -951,6 +953,7 @@ export const NodeDetailModal = () => {
       });
       setNewMemo("");
       await reload();
+      notifyArtifactsChanged();
     } finally {
       setSavingMemo(false);
     }
@@ -962,6 +965,7 @@ export const NodeDetailModal = () => {
       method: "DELETE",
     });
     await reload();
+    notifyArtifactsChanged();
   };
 
   // -- Feedback --------------------------------------------------------------
@@ -977,6 +981,7 @@ export const NodeDetailModal = () => {
       }),
     });
     await reload();
+    notifyArtifactsChanged();
   };
 
   // -- Memory Boost ----------------------------------------------------------
@@ -996,6 +1001,7 @@ export const NodeDetailModal = () => {
       });
       setBoostDone(true);
       setBoostNote("");
+      notifyArtifactsChanged();
     } finally {
       setBoosting(false);
     }
