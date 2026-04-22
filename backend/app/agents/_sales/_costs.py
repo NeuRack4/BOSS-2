@@ -11,6 +11,14 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:
+    def _traceable(**_kw):
+        def _decorator(fn):
+            return fn
+        return _decorator
+
 from app.core.supabase import get_supabase
 from app.rag.embedder import index_artifact
 
@@ -37,6 +45,7 @@ def _record_to_text(record: dict) -> str:
     )
 
 
+@_traceable(name="sales._costs.dispatch_save_costs")
 async def dispatch_save_costs(
     *,
     account_id: str,
