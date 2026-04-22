@@ -47,7 +47,7 @@ VALID_TYPES: tuple[str, ...] = (
 
 # 타입 → 서브허브 매핑 (sub_domain 필드에 자동 주입)
 _TYPE_TO_SUBHUB: dict[str, str] = {
-    "revenue_entry":     "Reports",
+    "revenue_entry":     "Revenue",
     "cost_report":       "Costs",
     "price_strategy":    "Pricing",
     "customer_script":   "Customers",

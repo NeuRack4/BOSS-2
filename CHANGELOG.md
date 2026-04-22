@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] — fix/sales-input-error (Sales revenue_entry 서브허브 오분류 수정)
+
+### Fixed — Sales
+
+- **`backend/app/agents/sales.py`** — `_TYPE_TO_SUBHUB` 에서 `revenue_entry` 가 `"Reports"` 로 잘못 매핑되던 버그 수정 → `"Revenue"` 로 정정. 매출 입력 artifact 가 Reports 서브허브가 아닌 Revenue 서브허브에 정상 저장됨.
+- **`backend/app/agents/_sales/_revenue.py`** — `dispatch_save_revenue()` 내 서브허브 조회 쿼리에서 `ilike("%Reports%")` → `ilike("%Revenue%")` 로 수정. revenue_entry artifact 생성 시 Revenue 서브허브에 `contains` 엣지가 올바르게 연결됨.
+
 ## [1.2.0] — feature-documents (Planner-driven orchestrator + Sales v2 + Node 통합 상세 + 캔버스 제거)
 
 v1.0.0 이후 `feature/sales-analytics` / `feature/sales-ocr` / `feature-documents` 세 브랜치 작업을 하나의 릴리스로 묶음. 오케스트레이터를 **JSON-schema 플래너 주 경로**로 재설계하고, **캔버스(React Flow)를 완전 제거**했으며, Sales 도메인을 서브패키지로 재구성하고 매출/비용 실 데이터 테이블(`sales_records` / `cost_records`) 을 도입했다.
