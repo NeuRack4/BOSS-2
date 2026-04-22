@@ -32,6 +32,10 @@ import {
   type ReviewPayload,
 } from "@/components/chat/ReviewResultCard";
 import { ReviewReplyCard } from "@/components/chat/ReviewReplyCard";
+import {
+  MenuAnalysisCard,
+  type MenuAnalysisPayload,
+} from "@/components/chat/MenuAnalysisCard";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -1170,6 +1174,11 @@ export const NodeDetailModal = () => {
                             );
                           return null;
                         })()
+                      ) : artifact.type === "sales_report" &&
+                        artifact.metadata?.menu_chart ? (
+                        <MenuAnalysisCard
+                          payload={artifact.metadata.menu_chart as MenuAnalysisPayload}
+                        />
                       ) : artifact.content ? (
                         <MarkdownMessage
                           content={artifact.content}

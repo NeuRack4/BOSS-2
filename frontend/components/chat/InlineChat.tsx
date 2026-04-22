@@ -45,6 +45,11 @@ import {
   extractShortsWizardPayload,
   type ShortsWizardPayload,
 } from "./ShortsWizardCard";
+import {
+  MenuAnalysisCard,
+  extractMenuChartPayload,
+  type MenuAnalysisPayload,
+} from "./MenuAnalysisCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 type UploadCategory =
@@ -80,6 +85,7 @@ type Message = {
   salesAction?: SalesActionData;
   costAction?: CostActionData;
   shortsWizard?: ShortsWizardPayload;
+  menuChart?: MenuAnalysisPayload;
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -916,8 +922,10 @@ export const InlineChat = () => {
           parseSalesAction(rawReply);
         const { clean: afterCost, action: costAction } =
           parseCostAction(afterSales);
-        const { cleaned: cleanReply, payload: shortsWizard } =
+        const { cleaned: afterShorts, payload: shortsWizard } =
           extractShortsWizardPayload(afterCost);
+        const { cleaned: cleanReply, payload: menuChart } =
+          extractMenuChartPayload(afterShorts);
         setMessages((prev) => [
           ...prev,
           {
@@ -929,6 +937,7 @@ export const InlineChat = () => {
             salesAction,
             costAction,
             shortsWizard: shortsWizard ?? undefined,
+            menuChart: menuChart ?? undefined,
           },
         ]);
         const sp = data?.data?.speaker;
@@ -1185,6 +1194,8 @@ export const InlineChat = () => {
                 msg.instagram ?? null;
               let reviewReplyPayload: ReviewReplyPayload | null =
                 msg.reviewReply ?? null;
+              let menuChartPayload: MenuAnalysisPayload | null =
+                msg.menuChart ?? null;
 
               if (msg.role === "assistant") {
                 const rrExtracted = extractReviewReplyPayload(
@@ -1201,6 +1212,10 @@ export const InlineChat = () => {
                 const rvExtracted = extractReviewPayload(displayText || "");
                 displayText = rvExtracted.cleaned;
                 if (rvExtracted.payload) reviewPayload = rvExtracted.payload;
+
+                const mcExtracted = extractMenuChartPayload(displayText || "");
+                displayText = mcExtracted.cleaned;
+                if (mcExtracted.payload) menuChartPayload = mcExtracted.payload;
               }
 
               return (
@@ -1282,6 +1297,11 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && msg.shortsWizard && (
                     <div className="ml-8">
                       <ShortsWizardCard payload={msg.shortsWizard} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && menuChartPayload && (
+                    <div className="ml-8 max-w-[85%]">
+                      <MenuAnalysisCard payload={menuChartPayload} />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.choices && (
