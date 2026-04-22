@@ -10,6 +10,7 @@ import {
   CalendarClock,
   History,
   LogOut,
+  MessageSquare,
   Moon,
   Search,
   Sun,
@@ -20,6 +21,7 @@ import { ChatHistoryModal } from "@/components/layout/ChatHistoryModal";
 import { ProfileModal } from "@/components/layout/ProfileModal";
 import { LongTermMemoryModal } from "@/components/layout/LongTermMemoryModal";
 import { MemosModal } from "@/components/layout/MemosModal";
+import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 
 export const Header = () => {
@@ -31,6 +33,7 @@ export const Header = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [longMemOpen, setLongMemOpen] = useState(false);
   const [memosOpen, setMemosOpen] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [darkBg, setDarkBg] = useState(false);
 
@@ -68,12 +71,14 @@ export const Header = () => {
     const onOpenProfile = () => setProfileOpen(true);
     const onOpenLongMem = () => setLongMemOpen(true);
     const onOpenMemos = () => setMemosOpen(true);
+    const onOpenComment = () => setCommentOpen(true);
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
     window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);
     window.addEventListener("boss:open-profile-modal", onOpenProfile);
     window.addEventListener("boss:open-longmem-modal", onOpenLongMem);
     window.addEventListener("boss:open-memos-modal", onOpenMemos);
+    window.addEventListener("boss:open-comment-modal", onOpenComment);
     return () => {
       window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
       window.removeEventListener("boss:open-activity-modal", onOpenActivity);
@@ -84,6 +89,7 @@ export const Header = () => {
       window.removeEventListener("boss:open-profile-modal", onOpenProfile);
       window.removeEventListener("boss:open-longmem-modal", onOpenLongMem);
       window.removeEventListener("boss:open-memos-modal", onOpenMemos);
+      window.removeEventListener("boss:open-comment-modal", onOpenComment);
     };
   }, []);
 
@@ -149,6 +155,16 @@ export const Header = () => {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setCommentOpen(true)}
+          title="Comments"
+          className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+        >
+          <MessageSquare className="h-4 w-4 mr-1.5" />
+          Comments
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={toggleBg}
           title={darkBg ? "Switch to light" : "Switch to dark"}
           className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
@@ -189,6 +205,7 @@ export const Header = () => {
         onClose={() => setLongMemOpen(false)}
       />
       <MemosModal open={memosOpen} onClose={() => setMemosOpen(false)} />
+      <CommentManagerModal open={commentOpen} onClose={() => setCommentOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );

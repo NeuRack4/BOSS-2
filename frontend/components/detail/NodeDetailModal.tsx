@@ -295,7 +295,8 @@ const SnsPreview = ({
   const finalBestTime = bestTime || metaBestTime;
 
   return (
-    <div className="overflow-hidden rounded-[6px] border border-[#ddd0b4] bg-white">
+    <div className="flex justify-center">
+    <div className="w-[260px] overflow-hidden rounded-[6px] border border-[#ddd0b4] bg-white">
       <div className="flex items-center gap-2.5 border-b border-[#ddd0b4]/60 px-3 py-2">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-[11px] font-bold text-white">
           IG
@@ -309,7 +310,7 @@ const SnsPreview = ({
           </div>
         </div>
       </div>
-      <div className="relative aspect-square w-full bg-[#f0ece4]">
+      <div className="relative aspect-[4/5] w-full bg-[#f0ece4]">
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -346,6 +347,7 @@ const SnsPreview = ({
           {finalBestTime}
         </div>
       )}
+    </div>
     </div>
   );
 };

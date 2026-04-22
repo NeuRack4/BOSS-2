@@ -215,7 +215,7 @@ async def analyze_review_image(file: UploadFile = File(...)):
 
 class InstagramPublishRequest(BaseModel):
     account_id: str
-    image_url: str
+    image_urls: list[str]  # 1~10장 (1장: 단일, 2~10장: 캐러셀)
     caption: str
     hashtags: list[str] = []
 
@@ -244,7 +244,7 @@ async def publish_instagram(req: InstagramPublishRequest):
         from app.services.instagram import publish_post
         post_url = await publish_post(
             account_id=req.account_id,
-            image_url=req.image_url,
+            image_urls=req.image_urls,
             caption=req.caption,
             hashtags=req.hashtags,
         )
@@ -371,19 +371,30 @@ async def preview_subtitles(
     context: str = Form(""),
     images: List[UploadFile] = File(...),
 ):
-    """이미지들에 대한 AI 자막 미리보기 (FFmpeg 없이 빠른 응답)."""
-    from app.services.shorts_gen import generate_subtitles_for_images
+    """이미지들에 대한 AI 자막 + 제목·설명·태그 자동 생성 (FFmpeg 없이 빠른 응답)."""
+    from app.services.shorts_gen import generate_subtitles_for_images, generate_video_metadata
     if not (2 <= len(images) <= 10):
         raise HTTPException(status_code=400, detail="이미지는 2~10장이어야 합니다.")
     image_bytes_list = [await img.read() for img in images]
     subtitles = await generate_subtitles_for_images(image_bytes_list, context)
-    return {"data": {"subtitles": subtitles}, "error": None}
+    metadata = await generate_video_metadata(context, subtitles)
+    return {
+        "data": {
+            "subtitles": subtitles,
+            "title": metadata["title"],
+            "description": metadata["description"],
+            "tags": metadata["tags"],
+        },
+        "error": None,
+    }
 
 
 class ShortsGenerateResponse(BaseModel):
     success: bool
     youtube_url: str = ""
     storage_url: str = ""
+    reels_url: str = ""
+    reels_error: str = ""
     error: str = ""
 
 
@@ -396,6 +407,7 @@ async def generate_shorts(
     subtitles: str = Form("[]"),          # JSON list — 사용자가 편집한 자막
     duration_per_slide: float = Form(3.0),
     privacy_status: str = Form("private"),
+    upload_to_reels: bool = Form(False),  # Instagram Reels 동시 업로드 여부
     images: List[UploadFile] = File(...),
 ):
     """이미지 슬라이드 → MP4 → YouTube Shorts 업로드."""
@@ -448,6 +460,19 @@ async def generate_shorts(
         os.unlink(tmp_path)
     except Exception as e:
         log.exception("youtube upload failed")
+        reels_url = ""
+        reels_error = ""
+        if upload_to_reels:
+            try:
+                from app.services.instagram import publish_reels
+                reels_url = await publish_reels(
+                    video_url=storage_url,
+                    caption=description or title,
+                    hashtags=tag_list,
+                )
+            except Exception as re:
+                log.exception("instagram reels upload failed")
+                reels_error = str(re)[:300]
         _persist_shorts_artifact(
             account_id=account_id,
             title=title,
@@ -456,11 +481,33 @@ async def generate_shorts(
             subtitles=subtitle_list[:n],
             youtube_url="",
             storage_url=storage_url,
+            reels_url=reels_url,
             duration_per_slide=duration_per_slide,
             privacy_status=privacy_status,
             slide_count=n,
         )
-        return ShortsGenerateResponse(success=True, storage_url=storage_url, error=f"YouTube 업로드 실패: {str(e)[:200]}")
+        return ShortsGenerateResponse(
+            success=True,
+            storage_url=storage_url,
+            reels_url=reels_url,
+            reels_error=reels_error,
+            error=f"YouTube 업로드 실패: {str(e)[:200]}",
+        )
+
+    # Instagram Reels 업로드 (선택)
+    reels_url = ""
+    reels_error = ""
+    if upload_to_reels:
+        try:
+            from app.services.instagram import publish_reels
+            reels_url = await publish_reels(
+                video_url=storage_url,
+                caption=description or title,
+                hashtags=tag_list,
+            )
+        except Exception as e:
+            log.exception("instagram reels upload failed")
+            reels_error = str(e)[:300]
 
     _persist_shorts_artifact(
         account_id=account_id,
@@ -470,12 +517,19 @@ async def generate_shorts(
         subtitles=subtitle_list[:n],
         youtube_url=youtube_url,
         storage_url=storage_url,
+        reels_url=reels_url,
         duration_per_slide=duration_per_slide,
         privacy_status=privacy_status,
         slide_count=n,
     )
 
-    return ShortsGenerateResponse(success=True, youtube_url=youtube_url, storage_url=storage_url)
+    return ShortsGenerateResponse(
+        success=True,
+        youtube_url=youtube_url,
+        storage_url=storage_url,
+        reels_url=reels_url,
+        reels_error=reels_error,
+    )
 
 
 def _persist_shorts_artifact(
@@ -487,6 +541,7 @@ def _persist_shorts_artifact(
     subtitles: list[str],
     youtube_url: str,
     storage_url: str,
+    reels_url: str = "",
     duration_per_slide: float,
     privacy_status: str,
     slide_count: int,
@@ -509,6 +564,7 @@ def _persist_shorts_artifact(
         metadata = {
             "youtube_url": youtube_url,
             "storage_url": storage_url,
+            "reels_url": reels_url,
             "tags": tags,
             "subtitles": subtitles,
             "duration_per_slide": duration_per_slide,

@@ -12,6 +12,8 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -36,7 +38,6 @@ const IG_COMPONENTS: Components = {
     <strong className="font-semibold">{children}</strong>
   ),
   em: ({ children }) => <em className="italic">{children}</em>,
-  // 인스타 캡션에 제목/코드블록/표는 없으므로 그냥 텍스트로
   h1: ({ children }) => <span className="font-bold">{children}</span>,
   h2: ({ children }) => <span className="font-bold">{children}</span>,
   h3: ({ children }) => <span className="font-semibold">{children}</span>,
@@ -75,12 +76,18 @@ export const InstagramPostCard = ({
   const [publishUrl, setPublishUrl] = useState("");
   const [publishError, setPublishError] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewUrls, setPreviewUrls] = useState<string[]>(
+    payload.image_url ? [payload.image_url] : [],
+  );
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
-  const handlePublishWithImage = async (imageUrl: string) => {
+  const handlePublishWithImages = async (imageUrls: string[]) => {
     setShowLibrary(false);
-    if (publishState === "uploading") return;
+    if (publishState === "uploading" || imageUrls.length === 0) return;
+    setPreviewUrls(imageUrls);
+    setPreviewIndex(0);
     setPublishState("uploading");
     setPublishError("");
 
@@ -94,7 +101,7 @@ export const InstagramPostCard = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account_id: accountId,
-          image_url: imageUrl,
+          image_urls: imageUrls,
           caption: payload.caption,
           hashtags: payload.hashtags,
         }),
@@ -115,16 +122,19 @@ export const InstagramPostCard = ({
   const displayCaption =
     captionExpanded || !isLongCaption ? caption : caption.slice(0, 90) + "…";
 
+  const isCarousel = previewUrls.length > 1;
+  const currentImage = previewUrls[previewIndex] ?? payload.image_url;
+
   return (
     <>
       {showLibrary && (
         <PhotoLibraryModal
           aiImageUrl={payload.image_url}
-          onSelect={handlePublishWithImage}
+          onSelect={handlePublishWithImages}
           onClose={() => setShowLibrary(false)}
         />
       )}
-      <div className="w-[320px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
+      <div className="w-[260px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-xs font-bold text-white">
@@ -139,11 +149,11 @@ export const InstagramPostCard = ({
           <MoreHorizontal className="h-4 w-4 text-[#8c8c8c]" />
         </div>
 
-        {/* Image */}
-        <div className="relative aspect-square w-full bg-[#f0ece4]">
-          {payload.image_url ? (
+        {/* Image (캐러셀 슬라이더) */}
+        <div className="relative aspect-[4/5] w-full bg-[#f0ece4]">
+          {currentImage ? (
             <Image
-              src={payload.image_url}
+              src={currentImage}
               alt={payload.title || "SNS 포스트 이미지"}
               fill
               className="object-cover"
@@ -153,6 +163,45 @@ export const InstagramPostCard = ({
             <div className="flex h-full w-full items-center justify-center">
               <span className="text-4xl opacity-30">🖼️</span>
             </div>
+          )}
+
+          {/* 캐러셀 좌우 버튼 */}
+          {isCarousel && (
+            <>
+              {previewIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewIndex((i) => i - 1)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 hover:bg-black/60"
+                >
+                  <ChevronLeft className="h-4 w-4 text-white" />
+                </button>
+              )}
+              {previewIndex < previewUrls.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewIndex((i) => i + 1)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 hover:bg-black/60"
+                >
+                  <ChevronRight className="h-4 w-4 text-white" />
+                </button>
+              )}
+              {/* 점 인디케이터 */}
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
+                {previewUrls.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setPreviewIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      idx === previewIndex
+                        ? "w-4 bg-white"
+                        : "w-1.5 bg-white/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -242,7 +291,7 @@ export const InstagramPostCard = ({
           {publishState === "done" ? (
             <div className="flex items-center gap-1.5 text-[12px] text-[#3b6a4a]">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <span>게시 완료!</span>
+              <span>게시 완료{isCarousel ? ` (${previewUrls.length}장 캐러셀)` : ""}!</span>
               {publishUrl && (
                 <a
                   href={publishUrl}

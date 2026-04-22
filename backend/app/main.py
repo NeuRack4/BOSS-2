@@ -24,6 +24,7 @@ from app.routers import (
     artifacts,
     auth,
     chat,
+    comments,
     costs,
     dashboard,
     evaluations,
@@ -53,6 +54,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(comments.router)
 app.include_router(activity.router)
 app.include_router(evaluations.router)
 app.include_router(schedules.router)

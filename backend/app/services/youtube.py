@@ -18,7 +18,11 @@ log = logging.getLogger(__name__)
 _GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _YT_UPLOAD_URL    = "https://www.googleapis.com/upload/youtube/v3/videos"
-_SCOPES           = "https://www.googleapis.com/auth/youtube.upload"
+_SCOPES           = " ".join([
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/youtube.readonly",
+])
 
 
 # ── OAuth URL 생성 ────────────────────────────────────────────────────────────
