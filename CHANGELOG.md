@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] — feature-marketing (Instagram DM 자동 발송 캠페인)
+
+### Added — Instagram DM Campaign
+
+- **`supabase/migrations/026_instagram_dm_campaigns.sql`** — 신규. `instagram_dm_campaigns(id, account_id, post_id, post_url, post_thumbnail, trigger_keyword, dm_template, is_active, sent_count)` + `instagram_dm_sent(id, campaign_id, commenter_ig_id, commenter_name, sent_at)`. UNIQUE `(campaign_id, commenter_ig_id)` 중복 방지. RLS + 인덱스 + `updated_at` 트리거.
+- **`backend/app/services/instagram_dm.py`** — 신규. 댓글 트리거 기반 자동 DM 서비스. `_fetch_comments(media_id, fb_token)` — `graph.facebook.com/v19.0` 댓글 폴링 (페이지네이션 포함). `_send_dm(ig_user_id, recipient_ig_id, message, ig_token)` — `graph.instagram.com/v25.0/me/messages` Bearer 헤더 DM 발송. `scan_and_send(account_id)` — 활성 캠페인 스캔 → 트리거 키워드 감지 → 중복 방지 → 병렬 발송.
+- **`backend/app/routers/dm_campaigns.py`** — 신규. `GET/POST /api/dm-campaigns/` (목록·생성) · `PATCH/DELETE /api/dm-campaigns/{id}` (수정·삭제) · `POST /api/dm-campaigns/scan` (수동 스캔) · `GET /api/dm-campaigns/{id}/sent` (발송 이력).
+- **`frontend/components/layout/DMCampaignModal.tsx`** — 신규. 720×560 대시보드 모달. 캠페인 생성 폼(게시물 ID·URL·트리거 키워드·DM 내용) + 활성화 토글 + 발송 이력 펼치기 + 수동 스캔 버튼.
+- **`backend/app/main.py`** — `dm_campaigns` 라우터 마운트.
+- **`frontend/components/layout/Header.tsx`** — "DM" 버튼 + `DMCampaignModal` 연결. `boss:open-dm-campaign-modal` 이벤트 수신.
+- **`backend/app/core/config.py`** — `meta_ig_access_token: str = ""` 추가 (IGAA 토큰 — `graph.instagram.com` DM 발송용). 기존 `meta_access_token`은 EAA 토큰(댓글 조회)으로 역할 분리.
+
+### Notes
+
+- 댓글 조회: `graph.facebook.com/v19.0` + EAA 토큰 (`META_ACCESS_TOKEN`)
+- DM 발송: `graph.instagram.com/v25.0/me/messages` + IGAA 토큰 (`META_IG_ACCESS_TOKEN`)
+- 실제 DM 발송은 `instagram_manage_messages` Meta App Review 통과 후 Live 모드에서 동작
+
 ## [1.3.2] — feature/sales-csv-import (Sales CSV/Excel 매출 일괄 업로드)
 
 ### Added — Sales CSV/Excel 파일 파싱
