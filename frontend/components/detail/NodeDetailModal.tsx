@@ -36,6 +36,7 @@ import {
   MenuAnalysisCard,
   type MenuAnalysisPayload,
 } from "@/components/chat/MenuAnalysisCard";
+import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -640,6 +641,7 @@ export const NodeDetailModal = () => {
   }, []);
 
   const reload = useCallback(async () => {
+    console.log("[Modal reload]", { currentId, accountId });
     if (!currentId || !accountId) return;
     setLoading(true);
     setError(null);
@@ -1088,6 +1090,13 @@ export const NodeDetailModal = () => {
 
             <ScrollArea className="min-h-0 flex-1 pr-1">
               <div className="flex flex-col gap-2">
+                {/* REVENUE 통계 패널 — revenue_entry 카드 상세에서 표시 */}
+                {artifact.type === "revenue_entry" && accountId && (
+                  <Section>
+                    <RevenueStatsPanel accountId={accountId} />
+                  </Section>
+                )}
+
                 {/* CONTENT */}
                 <Section>
                   <SectionHeader
