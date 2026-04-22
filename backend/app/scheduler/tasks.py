@@ -90,6 +90,33 @@ def tick() -> dict:
     return {"dispatched": len(due), "notifications": notif_count, "ts": now.isoformat()}
 
 
+@celery_app.task(name="app.scheduler.tasks.scan_comments")
+def scan_comments() -> dict:
+    """1시간마다 YouTube 댓글 자동 수집."""
+    from app.core.supabase import get_supabase
+
+    sb = get_supabase()
+    # YouTube 연결된 모든 계정 조회
+    res = sb.table("youtube_oauth_tokens").select("account_id").execute()
+    accounts = [row["account_id"] for row in (res.data or [])]
+
+    total_new = 0
+    for account_id in accounts:
+        try:
+            result = asyncio.run(
+                __import__(
+                    "app.services.comment_manager",
+                    fromlist=["scan_and_store"],
+                ).scan_and_store(account_id, ["youtube"])
+            )
+            total_new += result.get("new", 0)
+            log.info("[comment-scan] account=%s new=%d", account_id, result.get("new", 0))
+        except Exception as e:
+            log.warning("[comment-scan] account=%s error: %s", account_id, e)
+
+    return {"accounts": len(accounts), "new_comments": total_new}
+
+
 @celery_app.task(name="app.scheduler.tasks.run_schedule_artifact", bind=True, max_retries=3)
 def run_schedule_artifact(self, artifact_id: str) -> dict:
     """단일 schedule artifact 실행."""

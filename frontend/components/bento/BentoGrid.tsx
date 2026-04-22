@@ -7,6 +7,7 @@ import { ScheduleCard } from "./ScheduleCard";
 import { ActivityCard } from "./ActivityCard";
 import { PreviousChatCard } from "./PreviousChatCard";
 import { ProfileMemorySidebar } from "./ProfileMemorySidebar";
+import { CommentQueueCard } from "./CommentQueueCard";
 import type { DashboardSummary, DomainStats, DomainKey } from "./types";
 
 const EMPTY_STATS: DomainStats = {
@@ -83,19 +84,31 @@ export const BentoGrid = ({ accountId }: Props) => {
             </div>
           </div>
 
-          {/* Bottom row — 2.5 : 2.5 : 5 width ratio (3 : 3 : 6 in 12-col grid) */}
-          <div className="order-6 md:col-span-3 md:row-span-2 md:col-start-1 md:row-start-5 h-[220px] md:h-auto">
+          {/* Bottom section — 3×2 grid: col 1-4 / 5-8 / 9-12, rows 5-8 */}
+          {/* Chat History: col 1-4, spans 4 rows */}
+          <div className="order-6 md:col-span-4 md:row-span-4 md:col-start-1 md:row-start-5 h-[568px] md:h-auto">
             <PreviousChatCard />
           </div>
 
-          <div className="order-7 md:col-span-3 md:row-span-2 md:col-start-4 md:row-start-5 h-[220px] md:h-auto">
+          {/* Upcoming Schedule: col 5-8, rows 5-6 */}
+          <div className="order-7 md:col-span-4 md:row-span-2 md:col-start-5 md:row-start-5 h-[284px] md:h-auto">
             <ScheduleCard items={summary?.upcoming ?? []} />
           </div>
 
-          <div className="order-8 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-5 h-[220px] md:h-auto">
+          {/* Recent Activity: col 9-12, rows 5-6 */}
+          <div className="order-8 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-5 h-[284px] md:h-auto">
             <ActivityCard items={summary?.recent_activity ?? []} />
           </div>
-          {/* end bottom row */}
+
+          {/* Comment Queue: col 5-8, rows 7-8 */}
+          <div className="order-9 md:col-span-4 md:row-span-2 md:col-start-5 md:row-start-7 h-[284px] md:h-auto">
+            <CommentQueueCard accountId={accountId} />
+          </div>
+
+          {/* Placeholder: col 9-12, rows 7-8 */}
+          <div className="order-10 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-7 h-[284px] md:h-auto">
+            <div className="h-full w-full rounded-[5px] bg-[#f0eaf8] shadow-lg" />
+          </div>
         </div>
       </div>
       {loading && !summary && (

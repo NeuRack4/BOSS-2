@@ -73,6 +73,7 @@ export const ShortsWizardCard = ({
   const [title, setTitle] = useState(payload.topic);
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [aiMetaFilled, setAiMetaFilled] = useState(false);
   const [duration, setDuration] = useState(payload.duration ?? 3);
   const [privacy, setPrivacy] = useState<"private" | "unlisted" | "public">(
     "private",
@@ -85,7 +86,10 @@ export const ShortsWizardCard = ({
   const [genState, setGenState] = useState<GenState>("idle");
   const [youtubeUrl, setVideoUrl] = useState("");
   const [storageUrl, setStorageUrl] = useState("");
+  const [reelsUrl, setReelsUrl] = useState("");
+  const [reelsError, setReelsError] = useState("");
   const [genError, setGenError] = useState("");
+  const [uploadToReels, setUploadToReels] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -154,7 +158,7 @@ export const ShortsWizardCard = ({
     setDragOverIndex(null);
   };
 
-  // 자막 AI 생성
+  // 자막 + 제목/설명/태그 AI 생성
   const handleGenerateSubtitles = async () => {
     if (slides.length < 2) return;
     setLoadingSubtitles(true);
@@ -176,6 +180,11 @@ export const ShortsWizardCard = ({
       setSlides((prev) =>
         prev.map((s, i) => ({ ...s, subtitle: subs[i] ?? s.subtitle })),
       );
+      // AI 추천 제목·설명·태그 자동 적용
+      if (json.data?.title) setTitle(json.data.title);
+      if (json.data?.description) setDescription(json.data.description);
+      if (json.data?.tags?.length) setTags((json.data.tags as string[]).join(", "));
+      if (json.data?.title || json.data?.description) setAiMetaFilled(true);
       goToStep("subtitles");
     } catch (err) {
       alert(err instanceof Error ? err.message : "자막 생성 실패");
@@ -236,6 +245,7 @@ export const ShortsWizardCard = ({
       form.append("subtitles", JSON.stringify(slides.map((s) => s.subtitle)));
       form.append("duration_per_slide", String(duration));
       form.append("privacy_status", privacy);
+      form.append("upload_to_reels", String(uploadToReels));
       slides.forEach((s) => form.append("images", s.file));
 
       setGenState("uploading");
@@ -251,6 +261,8 @@ export const ShortsWizardCard = ({
         throw new Error(json.error || "생성 실패");
       setVideoUrl(json.youtube_url ?? "");
       setStorageUrl(json.storage_url ?? "");
+      setReelsUrl(json.reels_url ?? "");
+      setReelsError(json.reels_error ?? "");
       setGenError(json.error ?? "");
       setGenState("done");
     } catch (e) {
@@ -380,11 +392,11 @@ export const ShortsWizardCard = ({
               {loadingSubtitles ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  자막 생성 중...
+                  AI 분석 중...
                 </>
               ) : (
                 <>
-                  AI 자막 생성 <ChevronRight className="h-4 w-4" />
+                  AI 자막·제목 생성 <ChevronRight className="h-4 w-4" />
                 </>
               )}
             </button>
@@ -448,9 +460,19 @@ export const ShortsWizardCard = ({
         {/* ── Step 3: 설정 ── */}
         {step === "settings" && (
           <div className="space-y-3">
+            {aiMetaFilled && (
+              <div className="rounded-lg bg-[#fff8e6] px-3 py-1.5 text-[11px] text-[#7a5c00]">
+                ✨ 제목·설명·태그를 AI가 자동으로 작성했어요. 자유롭게 수정하세요.
+              </div>
+            )}
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[#5a5040]">
                 제목
+                {aiMetaFilled && (
+                  <span className="rounded bg-[#ff0000]/10 px-1 py-0.5 text-[10px] text-[#ff0000]">
+                    AI 추천
+                  </span>
+                )}
               </label>
               <input
                 type="text"
@@ -461,8 +483,13 @@ export const ShortsWizardCard = ({
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
-                설명 (선택)
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[#5a5040]">
+                설명
+                {aiMetaFilled && (
+                  <span className="rounded bg-[#ff0000]/10 px-1 py-0.5 text-[10px] text-[#ff0000]">
+                    AI 추천
+                  </span>
+                )}
               </label>
               <textarea
                 value={description}
@@ -472,8 +499,13 @@ export const ShortsWizardCard = ({
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-[#5a5040]">
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[#5a5040]">
                 태그 (쉼표 구분)
+                {aiMetaFilled && (
+                  <span className="rounded bg-[#ff0000]/10 px-1 py-0.5 text-[10px] text-[#ff0000]">
+                    AI 추천
+                  </span>
+                )}
               </label>
               <input
                 type="text"
@@ -573,6 +605,29 @@ export const ShortsWizardCard = ({
               </div>
             </div>
 
+            {/* Instagram Reels 업로드 토글 */}
+            <button
+              type="button"
+              onClick={() => setUploadToReels((v) => !v)}
+              className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-[12px] transition-colors ${
+                uploadToReels
+                  ? "border-[#e1306c]/40 bg-[#fff0f6] text-[#b5264f]"
+                  : "border-[#ddd0b4] bg-white text-[#5a5040] hover:bg-[#f0ece4]"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="text-[14px]">📸</span>
+                Instagram Reels에도 업로드
+              </span>
+              <span
+                className={`h-4 w-7 rounded-full transition-colors ${uploadToReels ? "bg-[#e1306c]" : "bg-[#ddd0b4]"}`}
+              >
+                <span
+                  className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${uploadToReels ? "translate-x-3" : "translate-x-0"}`}
+                />
+              </span>
+            </button>
+
             {genState === "done" ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-[12px] text-[#276749]">
@@ -589,6 +644,16 @@ export const ShortsWizardCard = ({
                     <Link className="h-3.5 w-3.5" /> YouTube에서 보기
                   </a>
                 )}
+                {reelsUrl && (
+                  <a
+                    href={reelsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#e1306c] to-[#f77737] px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90"
+                  >
+                    <Link className="h-3.5 w-3.5" /> Instagram Reels에서 보기
+                  </a>
+                )}
                 {storageUrl && !youtubeUrl && (
                   <a
                     href={storageUrl}
@@ -598,6 +663,9 @@ export const ShortsWizardCard = ({
                   >
                     <Link className="h-3.5 w-3.5" /> 영상 다운로드
                   </a>
+                )}
+                {reelsError && (
+                  <p className="text-[11px] text-[#8a3a28]">📸 Reels 업로드 실패: {reelsError}</p>
                 )}
                 {genError && (
                   <p className="text-[11px] text-[#8a3a28]">{genError}</p>

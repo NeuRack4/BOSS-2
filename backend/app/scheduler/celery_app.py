@@ -43,6 +43,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.scheduler.tasks.tick",
         "schedule": celery_schedule(run_every=settings.scheduler_tick_seconds),
     },
+    # YouTube 댓글 1시간마다 자동 수집 (dev)
+    "comment-scan": {
+        "task":     "app.scheduler.tasks.scan_comments",
+        "schedule": celery_schedule(run_every=3600),
+    },
     # v1.3: memory_long 7일 이전 row 매일 00:00 KST 청소.
     "cleanup-old-memories": {
         "task":     "app.scheduler.tasks.cleanup_old_memories",
