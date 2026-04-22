@@ -306,7 +306,10 @@ async def save_artifact_from_reply(
 
         try:
             from app.memory.long_term import log_artifact_to_memory
-            await log_artifact_to_memory(account_id, domain, artifact_type, title)
+            await log_artifact_to_memory(
+                account_id, domain, artifact_type, title,
+                content=content, metadata=metadata,
+            )
         except Exception:
             pass
 

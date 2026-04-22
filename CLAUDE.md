@@ -100,8 +100,17 @@
 
 - 계정 = Supabase Auth `auth.uid()` (이메일 + 비밀번호).
 - `memory_short` (Upstash Redis) + `memory_long` (Supabase pgvector) — 계정별 독립.
-- 대화 턴 20 초과 시 자동 context 압축 (GPT-4o-mini 요약, `memory/compressor.py`).
-- 장기 기억은 RAG 하이브리드 서치로 recall.
+- 대화 턴 20 초과 시 자동 context 압축 (GPT-4o-mini 요약, `memory/compressor.py`) → 요약은 `memory_long` 에 도메인 null 상태로 저장.
+- **Long-term memory 저장 (v1.3, 025 마이그레이션)**:
+  - **도메인 × 일자(KST) digest 단위** — 한 계정의 같은 도메인·같은 날짜 이벤트는 하나의 row 에 누적. `(account_id, domain, digest_date)` partial unique index.
+  - `log_artifact_to_memory(account_id, domain, artifact_type, title, content, metadata)` — artifact 생성 시 호출. `gpt-4o-mini` 로 2~3문장 요약 → 기존 digest 에 `- [HH:MM] {type} '{title}' — {요약}` 한 줄 append → 전체 재임베딩 후 `upsert_memory_long` RPC.
+  - 시각은 모두 **KST (`ZoneInfo("Asia/Seoul")`)** 로 표기 (DB `created_at` 는 UTC 유지).
+  - `importance` 기본값: artifact digest 2.0 · compressor 요약 1.5 · 사용자 Boost 0.2~1.0 · 피드백 0.6/0.85.
+- **Long-term memory recall (v1.3)**:
+  - `memory_search(p_account_id, p_embedding, p_query_text, p_limit)` — vector RRF + FTS RRF 합산에 `importance` 곱셈.
+  - **7일 recency 필터** — `where created_at > now() - interval '7 days'` 내장.
+  - 최대 N건(`chat.py:78` 은 `limit=3`) 을 `long_term_context` 로 각 도메인 에이전트 system prompt 에 주입.
+- **Retention** — Celery Beat 매일 00:00 KST `app.scheduler.tasks.cleanup_old_memories` 실행 → 7일 이전 row DELETE.
 - **Chat sessions** — `chat_sessions` + `chat_messages` 에 세션/메시지 저장. `chat_messages.speaker` (text[], 023 마이그레이션) 로 assistant 메시지의 화자 기록. 첫 user 메시지가 들어오면 `sessions.generate_title` 이 백그라운드로 제목 생성.
 
 ### RAG / 하이브리드 서치
@@ -147,7 +156,10 @@ artifact_edges        — parent_id, child_id, relation(contains|derives_from|re
 evaluations           — artifact_id, account_id, rating(up|down), feedback
 embeddings            — account_id, source_type, source_id, embedding(vector 1024), fts, content
 memory_short          — account_id, session_id, messages(jsonb), turn_count
-memory_long           — account_id, content, embedding(vector 1024), importance
+memory_long           — account_id, content, embedding(vector 1024), importance,
+                        domain (recruitment|marketing|sales|documents|null),
+                        digest_date (KST date, nullable), fts(tsvector)
+                        (025: 도메인×일자 digest + RRF + 7일 TTL)
 activity_logs         — account_id, type, domain, title, description, metadata(jsonb)
                         type 허용값: artifact_created | agent_run | schedule_run | schedule_notify
 schedules             — (DEPRECATED — 020 마이그레이션 이후 신규 인서트 없음, 기존 행만 남음 가능)
@@ -399,6 +411,8 @@ supabase/migrations/
   023_chat_messages_speaker.sql       # chat_messages.speaker text[]
   024_rename_contracts_to_review.sql  # Documents 서브허브 Contracts → Review 재명명
                                       # + ensure_standard_sub_hubs 재정의
+  025_memory_long_rrf_digest.sql      # memory_long 도메인×일자 digest + RRF + FTS + 7일 TTL
+                                      # upsert_memory_long / memory_search(query_text) 재작성
 ```
 
 > 두 파일이 같은 020 프리픽스를 갖지만 Supabase MCP 는 파일명 알파벳 순서로 실행한다 (`020_legal_annual_values.sql` → `020_schedule_to_metadata.sql`). 운영상 충돌 없음.

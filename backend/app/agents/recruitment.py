@@ -335,7 +335,11 @@ async def _save_posting_set(account_id: str, parsed: dict) -> str | None:
 
     try:
         from app.memory.long_term import log_artifact_to_memory
-        await log_artifact_to_memory(account_id, "recruitment", "job_posting_set", title)
+        await log_artifact_to_memory(
+            account_id, "recruitment", "job_posting_set", title,
+            content=parent_payload.get("content"),
+            metadata=metadata,
+        )
     except Exception:
         pass
 

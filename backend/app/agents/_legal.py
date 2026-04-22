@@ -540,7 +540,11 @@ async def _save_legal_advice(
 
     try:
         from app.memory.long_term import log_artifact_to_memory
-        await log_artifact_to_memory(account_id, "documents", "legal_advice", title)
+        await log_artifact_to_memory(
+            account_id, "documents", "legal_advice", title,
+            content=answer_body,
+            metadata={"topic": topic, "source_refs_count": len(source_refs)},
+        )
     except Exception:
         pass
 

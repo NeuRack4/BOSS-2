@@ -478,7 +478,11 @@ async def dispatch_review(
 
     try:
         from app.memory.long_term import log_artifact_to_memory
-        await log_artifact_to_memory(account_id, "documents", "analysis", title)
+        await log_artifact_to_memory(
+            account_id, "documents", "analysis", title,
+            content=result.summary,
+            metadata=analysis_meta,
+        )
     except Exception:
         pass
 

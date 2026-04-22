@@ -227,7 +227,11 @@ async def generate_job_posting_poster(
 
     try:
         from app.memory.long_term import log_artifact_to_memory
-        await log_artifact_to_memory(account_id, "recruitment", "job_posting_poster", poster_title)
+        await log_artifact_to_memory(
+            account_id, "recruitment", "job_posting_poster", poster_title,
+            content=title,
+            metadata={"platform": platform, **(metadata or {})},
+        )
     except Exception:
         pass
 
