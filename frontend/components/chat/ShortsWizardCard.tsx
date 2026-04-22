@@ -183,7 +183,8 @@ export const ShortsWizardCard = ({
       // AI 추천 제목·설명·태그 자동 적용
       if (json.data?.title) setTitle(json.data.title);
       if (json.data?.description) setDescription(json.data.description);
-      if (json.data?.tags?.length) setTags((json.data.tags as string[]).join(", "));
+      if (json.data?.tags?.length)
+        setTags((json.data.tags as string[]).join(", "));
       if (json.data?.title || json.data?.description) setAiMetaFilled(true);
       goToStep("subtitles");
     } catch (err) {
@@ -462,7 +463,8 @@ export const ShortsWizardCard = ({
           <div className="space-y-3">
             {aiMetaFilled && (
               <div className="rounded-lg bg-[#fff8e6] px-3 py-1.5 text-[11px] text-[#7a5c00]">
-                ✨ 제목·설명·태그를 AI가 자동으로 작성했어요. 자유롭게 수정하세요.
+                ✨ 제목·설명·태그를 AI가 자동으로 작성했어요. 자유롭게
+                수정하세요.
               </div>
             )}
             <div>
@@ -665,7 +667,9 @@ export const ShortsWizardCard = ({
                   </a>
                 )}
                 {reelsError && (
-                  <p className="text-[11px] text-[#8a3a28]">📸 Reels 업로드 실패: {reelsError}</p>
+                  <p className="text-[11px] text-[#8a3a28]">
+                    📸 Reels 업로드 실패: {reelsError}
+                  </p>
                 )}
                 {genError && (
                   <p className="text-[11px] text-[#8a3a28]">{genError}</p>

@@ -5,16 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import {
-  Loader2,
-  MessageSquare,
-  RefreshCw,
-  Send,
-  X,
-  Pencil,
-  Check,
-  Play,
-} from "lucide-react";
 
 type CommentItem = {
   id: string;
@@ -35,18 +25,23 @@ type StatusFilter = "pending" | "posted" | "ignored" | "all";
 const PLATFORM_STYLE = {
   youtube: {
     bg: "bg-[#ff0000]/10 text-[#cc0000]",
-    icon: <Play className="h-3.5 w-3.5" />,
     label: "YouTube",
   },
   instagram: {
     bg: "bg-[#e1306c]/10 text-[#b5264f]",
-    icon: <span className="text-[12px]">📸</span>,
     label: "Instagram",
   },
 };
 
+const STATUS_LABEL: Record<StatusFilter, string> = {
+  pending: "Pending",
+  posted: "Posted",
+  ignored: "Ignored",
+  all: "All",
+};
+
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleString("ko-KR", {
+  new Date(iso).toLocaleString("en-US", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -135,7 +130,7 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
       );
       window.dispatchEvent(new CustomEvent("boss:comments-changed"));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "게시 실패");
+      alert(e instanceof Error ? e.message : "Post failed");
     } finally {
       setPostingId(null);
     }
@@ -144,10 +139,9 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
   const handleIgnore = async (item: CommentItem) => {
     const aid = await getAccountId();
     if (!aid) return;
-    await fetch(
-      `${apiBase}/api/comments/${item.id}/ignore?account_id=${aid}`,
-      { method: "POST" },
-    );
+    await fetch(`${apiBase}/api/comments/${item.id}/ignore?account_id=${aid}`, {
+      method: "POST",
+    });
     setItems((prev) =>
       prev.map((c) => (c.id === item.id ? { ...c, status: "ignored" } : c)),
     );
@@ -195,12 +189,8 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                   }`}
                 >
                   {s === "pending"
-                    ? `대기 중${pendingCount > 0 && statusFilter !== "pending" ? ` (${pendingCount})` : ""}`
-                    : s === "posted"
-                      ? "게시됨"
-                      : s === "ignored"
-                        ? "무시됨"
-                        : "전체"}
+                    ? `Pending${pendingCount > 0 && statusFilter !== "pending" ? ` (${pendingCount})` : ""}`
+                    : STATUS_LABEL[s]}
                 </button>
               ),
             )}
@@ -209,29 +199,21 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
             type="button"
             onClick={handleScan}
             disabled={scanning}
-            className="flex items-center gap-1.5 rounded-md bg-[#f0ece4] px-3 py-1.5 text-[12px] font-medium text-[#5a5040] hover:bg-[#e5ddd0] disabled:opacity-50"
+            className="rounded-md bg-[#f0ece4] px-3 py-1.5 text-[12px] font-medium text-[#5a5040] hover:bg-[#e5ddd0] disabled:opacity-50"
           >
-            {scanning ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            {scanning ? "스캔 중…" : "새로고침"}
+            {scanning ? "Scanning…" : "Refresh"}
           </button>
         </div>
 
         {/* List */}
         {loading ? (
           <div className="flex flex-1 items-center justify-center text-sm text-[#030303]/50">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+            Loading…
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-[#030303]/50">
-            <MessageSquare className="h-8 w-8 opacity-30" />
             <p className="text-sm">Nothing here yet</p>
-            <p className="text-[12px]">
-              새로고침 버튼으로 댓글을 수집하세요.
-            </p>
+            <p className="text-[12px]">Click Refresh to fetch comments.</p>
           </div>
         ) : (
           <ScrollArea className="flex-1 pr-1">
@@ -247,9 +229,8 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                       {/* Header row */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
-                          className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${pstyle.bg}`}
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${pstyle.bg}`}
                         >
-                          {pstyle.icon}
                           {pstyle.label}
                         </span>
                         {item.media_title && (
@@ -262,12 +243,12 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                         </span>
                         {item.status === "posted" && (
                           <span className="rounded bg-[#cfe3d0] px-1.5 py-0.5 text-[10px] font-semibold text-[#2e5a3a]">
-                            게시됨
+                            Posted
                           </span>
                         )}
                         {item.status === "ignored" && (
                           <span className="rounded bg-[#f0ece4] px-1.5 py-0.5 text-[10px] text-[#8c7e66]">
-                            무시됨
+                            Ignored
                           </span>
                         )}
                       </div>
@@ -275,7 +256,7 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                       {/* Comment */}
                       <div className="rounded-[5px] bg-[#f8f4ee] px-3 py-2">
                         <div className="text-[11px] font-semibold text-[#5a5040] mb-0.5">
-                          {item.commenter_name || "익명"}
+                          {item.commenter_name || "Anonymous"}
                         </div>
                         <div className="text-[13px] text-[#030303]">
                           {item.comment_text}
@@ -285,7 +266,7 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                       {/* AI Reply */}
                       <div className="rounded-[5px] border border-[#7c4daa]/20 bg-[#f7f0ff] px-3 py-2">
                         <div className="text-[11px] font-semibold text-[#7c4daa] mb-1">
-                          AI 답글 초안
+                          AI Reply Draft
                         </div>
                         {isEditing ? (
                           <textarea
@@ -296,7 +277,7 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                           />
                         ) : (
                           <div className="text-[13px] text-[#030303] whitespace-pre-wrap">
-                            {item.ai_reply || "(답글 없음)"}
+                            {item.ai_reply || "(no reply)"}
                           </div>
                         )}
                       </div>
@@ -309,16 +290,16 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                               <button
                                 type="button"
                                 onClick={() => handleEditSave(item)}
-                                className="flex items-center gap-1 rounded-md bg-[#7c4daa] px-3 py-1.5 text-[12px] font-semibold text-white hover:opacity-90"
+                                className="rounded-md bg-[#7c4daa] px-3 py-1.5 text-[12px] font-semibold text-white hover:opacity-90"
                               >
-                                <Check className="h-3.5 w-3.5" /> 저장
+                                Save
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setEditingId(null)}
-                                className="flex items-center gap-1 rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+                                className="rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
                               >
-                                취소
+                                Cancel
                               </button>
                             </>
                           ) : (
@@ -327,14 +308,9 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                                 type="button"
                                 onClick={() => handlePost(item)}
                                 disabled={isPosting}
-                                className="flex items-center gap-1 rounded-md bg-[#7c4daa] px-3 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                                className="rounded-md bg-[#7c4daa] px-3 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
                               >
-                                {isPosting ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Send className="h-3.5 w-3.5" />
-                                )}
-                                게시
+                                {isPosting ? "Posting…" : "Post"}
                               </button>
                               <button
                                 type="button"
@@ -342,16 +318,16 @@ export const CommentManagerModal = ({ open, onClose }: Props) => {
                                   setEditingId(item.id);
                                   setEditText(item.ai_reply);
                                 }}
-                                className="flex items-center gap-1 rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+                                className="rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
                               >
-                                <Pencil className="h-3.5 w-3.5" /> 수정
+                                Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleIgnore(item)}
-                                className="flex items-center gap-1 rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
+                                className="rounded-md border border-[#ddd0b4] px-3 py-1.5 text-[12px] text-[#5a5040] hover:bg-[#f0ece4]"
                               >
-                                <X className="h-3.5 w-3.5" /> 무시
+                                Ignore
                               </button>
                             </>
                           )}

@@ -205,7 +205,10 @@ export const Header = () => {
         onClose={() => setLongMemOpen(false)}
       />
       <MemosModal open={memosOpen} onClose={() => setMemosOpen(false)} />
-      <CommentManagerModal open={commentOpen} onClose={() => setCommentOpen(false)} />
+      <CommentManagerModal
+        open={commentOpen}
+        onClose={() => setCommentOpen(false)}
+      />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );

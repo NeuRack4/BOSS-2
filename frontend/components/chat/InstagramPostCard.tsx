@@ -291,7 +291,10 @@ export const InstagramPostCard = ({
           {publishState === "done" ? (
             <div className="flex items-center gap-1.5 text-[12px] text-[#3b6a4a]">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <span>게시 완료{isCarousel ? ` (${previewUrls.length}장 캐러셀)` : ""}!</span>
+              <span>
+                게시 완료{isCarousel ? ` (${previewUrls.length}장 캐러셀)` : ""}
+                !
+              </span>
               {publishUrl && (
                 <a
                   href={publishUrl}

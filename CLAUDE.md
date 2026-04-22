@@ -195,12 +195,12 @@ marketing_knowledge_chunks — 마케팅 지식 RAG (015) + hybrid RPC (016)
 
 **Documents 서브허브 역할** (v1.3 재정의, Step 3 에서 capability 5종 추가 완료):
 
-| 서브허브       | 역할 | 담당 타입 |
-| -------------- | ---- | --------- |
-| **Review**     | 공정 중립이 필요한 서류의 **작성·검토**. 계약서·제안서 초안 생성 + 업로드된 기존 서류의 공정성 분석 (갑/을 비율 + 위험 조항). 견적서·제안서 등 비계약 서류도 Step 3-C 에서 분석 가능 (contract_subtype 없이 일반 관행 기반). | `contract` · `proposal` · `analysis` |
-| **Tax&HR**     | 인사평가 관리 + 세무 관련 문서 (채용 제외). Step 3-A 에서 3종 capability 추가 — `doc_hr_evaluation` (인사평가서 5점 척도) · `doc_payroll_doc` (급여명세서·원천징수영수증·4대보험) · `doc_tax_calendar` (부가세·종소세·법인세·원천세·4대보험 연간 캘린더). | `checklist` · `guide` · `hr_evaluation` · `payroll_doc` · `tax_calendar` |
-| **Legal**      | 법률 자문. 법령 RAG + `legal_annual_values` (연도별 최저임금·세율) 기반 조언 + 면책 고지. | `legal_advice` |
-| **Operations** | 서류 초안 작성·행정 업무. 견적서·공지문. Step 3-B 에서 2종 capability 추가 — `doc_subsidy_application` (국가 지원사업 신청서, `search_subsidy_programs` RAG 후보 → CHOICES) · `doc_admin_application` (사업자등록·영업허가·식품영업신고·인허가 갱신 등 행정 신청서). | `estimate` · `notice` · `subsidy_application` · `admin_application` |
+| 서브허브       | 역할                                                                                                                                                                                                                                                                 | 담당 타입                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Review**     | 공정 중립이 필요한 서류의 **작성·검토**. 계약서·제안서 초안 생성 + 업로드된 기존 서류의 공정성 분석 (갑/을 비율 + 위험 조항). 견적서·제안서 등 비계약 서류도 Step 3-C 에서 분석 가능 (contract_subtype 없이 일반 관행 기반).                                         | `contract` · `proposal` · `analysis`                                     |
+| **Tax&HR**     | 인사평가 관리 + 세무 관련 문서 (채용 제외). Step 3-A 에서 3종 capability 추가 — `doc_hr_evaluation` (인사평가서 5점 척도) · `doc_payroll_doc` (급여명세서·원천징수영수증·4대보험) · `doc_tax_calendar` (부가세·종소세·법인세·원천세·4대보험 연간 캘린더).            | `checklist` · `guide` · `hr_evaluation` · `payroll_doc` · `tax_calendar` |
+| **Legal**      | 법률 자문. 법령 RAG + `legal_annual_values` (연도별 최저임금·세율) 기반 조언 + 면책 고지.                                                                                                                                                                            | `legal_advice`                                                           |
+| **Operations** | 서류 초안 작성·행정 업무. 견적서·공지문. Step 3-B 에서 2종 capability 추가 — `doc_subsidy_application` (국가 지원사업 신청서, `search_subsidy_programs` RAG 후보 → CHOICES) · `doc_admin_application` (사업자등록·영업허가·식품영업신고·인허가 갱신 등 행정 신청서). | `estimate` · `notice` · `subsidy_application` · `admin_application`      |
 
 역할 구분 축은 **Planner 가 capability description 의 `[카테고리: …]` 힌트를 읽고 판정** 한다. Agent 내부의 2단 라우터(`detect_doc_intent` + `classify_legal_intent`)는 legacy 세이프티넷에서만 활성화.
 
