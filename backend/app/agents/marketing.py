@@ -26,6 +26,7 @@ from app.agents._artifact import (
     today_context,
 )
 from app.agents._marketing_knowledge import marketing_knowledge_context
+from langsmith import traceable
 import re as _re
 import json as _json
 
@@ -798,6 +799,7 @@ def describe(account_id: str) -> list[dict]:
 # ──────────────────────────────────────────────────────────────────────────
 # 메인 run (legacy fallback 겸 capability wrapper 타겟)
 # ──────────────────────────────────────────────────────────────────────────
+@traceable(name="marketing.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,

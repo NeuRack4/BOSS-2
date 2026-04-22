@@ -503,3 +503,69 @@ def detect_doc_intent(message: str) -> tuple[str | None, str | None]:
                 return t, None
 
     return None, None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# v1.3 — 4카테고리 축 라우팅 (Documents 서브허브와 1:1 대응)
+# ──────────────────────────────────────────────────────────────────────────
+
+TYPE_TO_CATEGORY: dict[str, str] = {
+    "contract":  "review",
+    "proposal":  "review",
+    "estimate":  "operations",
+    "notice":    "operations",
+    "checklist": "tax_hr",
+    "guide":     "tax_hr",
+}
+
+CATEGORY_LABELS: dict[str, str] = {
+    "review":     "계약서·제안서 작성 또는 검토 (Review)",
+    "tax_hr":     "세무·인사평가 (Tax&HR — 채용 제외)",
+    "legal":      "법률 자문 (Legal)",
+    "operations": "견적서·공지문·지원사업·행정 신청서 (Operations)",
+}
+
+# 서브허브 실제 title (DB) 과 매핑 — 저장 시 사용.
+CATEGORY_TO_SUBHUB: dict[str, str] = {
+    "review":     "Review",
+    "tax_hr":     "Tax&HR",
+    "legal":      "Legal",
+    "operations": "Operations",
+}
+
+# type 이 안 잡히는 상황에서만 category 힌트를 쓴다.
+# (type 이 잡히면 TYPE_TO_CATEGORY 로 바로 매핑되므로 중복 키워드는 제거)
+_CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "tax_hr": (
+        "세무", "세금", "부가세", "종소세", "연말정산", "원천징수",
+        "4대보험", "국민연금", "건강보험", "고용보험", "산재보험",
+        "인사평가", "평가서", "급여", "급여명세서", "근태", "휴가", "연차",
+    ),
+    "legal": (
+        "법률 자문", "법적 문의", "법령", "조례", "시행령", "위반", "처벌",
+        "고소", "분쟁", "소송", "변호사 상담",
+        "노동법", "민법", "상법", "공정거래법", "가맹사업법",
+    ),
+    "operations": (
+        "지원사업", "지원금", "보조금", "정부지원", "소상공인 지원",
+        "신청서", "행정 처리", "민원", "증명서 발급", "인허가",
+    ),
+    "review": (
+        "공정성", "검토 의뢰", "계약 검토", "리뷰", "양측 입장",
+    ),
+}
+
+
+def detect_doc_category(message: str) -> str | None:
+    """type 이 잡히지 않았을 때 카테고리 축 힌트를 추출.
+
+    동시 감지 + 타입 우선 정책에서, 호출자는 먼저 `detect_doc_intent` 를 호출하고
+    type 이 None 일 때만 이 함수로 폴백. 여러 카테고리 키워드가 동시 매칭되면
+    가장 먼저 매칭된 카테고리를 반환 (실 사용에선 거의 발생 X).
+    """
+    msg = (message or "").lower()
+    for cat, kws in _CATEGORY_KEYWORDS.items():
+        for kw in kws:
+            if kw in msg:
+                return cat
+    return None

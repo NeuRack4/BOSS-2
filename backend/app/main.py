@@ -1,5 +1,11 @@
 import logging
 
+# .env 를 os.environ 에 주입 — pydantic-settings 는 Settings 필드만 읽으므로
+# LANGCHAIN_* 처럼 Settings 에 없는 외부 라이브러리 환경변수는 명시적 로드 필요.
+# 다른 import 보다 먼저 실행돼야 langsmith.traceable 이 활성 상태로 로드됨.
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings

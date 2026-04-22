@@ -19,6 +19,8 @@ import logging
 from datetime import date
 from typing import Any, TypedDict
 
+from langsmith import traceable
+
 from app.core.config import settings
 from app.core.llm import planner_completion
 
@@ -269,6 +271,7 @@ def _format_capability_catalog(tools: list[dict]) -> str:
     return "\n".join(lines) if lines else "(카탈로그 비어있음)"
 
 
+@traceable(name="planner.plan", run_type="chain")
 async def plan(
     *,
     account_id: str,

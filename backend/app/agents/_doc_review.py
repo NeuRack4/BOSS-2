@@ -394,10 +394,10 @@ async def dispatch_review(
     if attachment:
         analysis_meta["attachment"] = attachment
 
-    # documents 서브허브(Contracts 우선) 연결용 hub_id
+    # documents 서브허브(Review 우선) 연결용 hub_id
     from app.agents._artifact import pick_sub_hub_id, pick_main_hub_id
     hub_id = (
-        pick_sub_hub_id(sb, account_id, "documents", prefer_keywords=("Contracts", "contract"))
+        pick_sub_hub_id(sb, account_id, "documents", prefer_keywords=("Review", "contract"))
         or pick_main_hub_id(sb, account_id, "documents")
     )
 

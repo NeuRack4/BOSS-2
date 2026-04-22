@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import re
 
+from langsmith import traceable
+
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
 from app.agents.orchestrator import (
@@ -787,6 +789,7 @@ def describe(account_id: str) -> list[dict]:
 # ──────────────────────────────────────────────────────────────────────────
 # 메인 run (legacy fallback 겸 capability wrapper 타겟)
 # ──────────────────────────────────────────────────────────────────────────
+@traceable(name="recruitment.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,

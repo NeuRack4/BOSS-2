@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
+from langsmith import traceable
+
 from app.agents._artifact import pick_documents_parent, pick_sub_hub_id, today_context, record_artifact_for_focus
 from app.core.embedder import embed_text
 from app.core.llm import chat_completion
@@ -547,6 +549,7 @@ async def _save_legal_advice(
 
 # ────────────────────── 5. 외부 진입점 ──────────────────────
 
+@traceable(name="legal.handle_question", run_type="chain")
 async def handle_legal_question(
     message: str,
     account_id: str,
