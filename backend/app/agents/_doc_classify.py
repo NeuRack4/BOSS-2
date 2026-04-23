@@ -194,6 +194,18 @@ async def _llm_classify(text_sample: str, filename: str) -> ClassificationResult
 
 async def classify_document(text: str, filename: str) -> ClassificationResult:
     """업로드 문서 분류 진입점 (async — LLM fallback 때문에)."""
+    # 이미지 파일은 sales 에이전트 경로로 라우팅
+    # 이미지 컨텐츠가 영수증인지 메뉴판인지 등의 판단은 sales 에이전트(플래너)가 담당
+    _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic")
+    if (filename or "").lower().endswith(_IMAGE_EXTS):
+        return ClassificationResult(
+            category="receipt",
+            doc_type="이미지",
+            confidence=0.9,
+            reason="이미지 파일 → sales 에이전트 라우팅",
+            source="heuristic",
+        )
+
     text_sample = (text or "")[:3000]
     rows = _score_heuristics(text_sample, filename or "")
 

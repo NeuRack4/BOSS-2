@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] — feature/sales-menu-ocr (메뉴판 이미지 OCR + 이미지 라우팅 구조 개선)
+
+### Added — Backend
+
+- **`backend/app/agents/_sales/_ocr.py`** — `_MENU_PROMPT` + `parse_menu_from_bytes()` 신규 추가. GPT-4o Vision으로 메뉴판 이미지에서 `[{name, category, price}]` 추출.
+- **`backend/app/agents/sales.py`** — `run_menu_ocr` 핸들러 + `sales_menu_ocr` capability 추가. `_sales_context.pending_receipt` + `_upload_context.pending_upload` 두 경로 모두 지원. 이미지 있을 때만 조건부 광고(`[즉시 호출 가능]` + 파일명 포함). 메뉴 일괄 upsert 후 `menu_list` artifact 자동 갱신.
+
+### Changed — Backend
+
+- **`backend/app/agents/_doc_classify.py`** — 이미지 확장자(`.jpg .jpeg .png .gif .webp .bmp .heic`) 파일은 `receipt`로 라우팅. 이미지 컨텐츠 판단(영수증/메뉴판 등)은 sales 에이전트(플래너)가 담당하도록 책임 분리. 공유 분류기에 도메인 지식 추가 없이 라우팅 역할만 수행.
+
 ## [1.7.0] — feature-marketing (마케팅 도메인 확장 — 이벤트 기획·성과 리포트·자동화 스케줄·인스타그램 피드 인라인 렌더)
 
 ### Added — 마케팅 Capability 확장 (`backend/app/agents/marketing.py`)

@@ -903,6 +903,121 @@ async def run_menu_upsert(
     )
 
 
+@_traceable(name="sales.run_menu_ocr")
+async def run_menu_ocr(
+    *,
+    account_id: str,
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    from app.agents._sales_context import get_pending_receipt
+    from app.agents._upload_context import get_pending_upload
+    from app.agents._sales._ocr import parse_menu_from_bytes
+    from app.agents._sales._menu_manager import upsert_menu, upsert_menu_list_artifact, list_menus_with_profit
+    from app.core.supabase import get_supabase
+
+    # _sales_context(영수증 경로) 또는 _upload_context(문서 업로드 경로) 둘 다 확인
+    pending = get_pending_receipt()
+    upload  = get_pending_upload()
+
+    source: dict | None = None
+    if pending and "image" in (pending.get("mime_type") or ""):
+        source = pending
+    elif upload and "image" in (upload.get("mime_type") or ""):
+        source = upload
+
+    if not source:
+        return (
+            "메뉴판 이미지를 먼저 업로드해주세요.\n"
+            "이미지를 올린 뒤 '메뉴 등록해줘'라고 말씀해보세요."
+        )
+
+    # storage에서 이미지 다운로드
+    mime         = source.get("mime_type", "image/jpeg")
+    storage_path = source.get("storage_path", "")
+    bucket       = source.get("bucket", "documents-uploads")
+    file_bytes: bytes | None = None
+
+    if storage_path:
+        sb = get_supabase()
+        try:
+            downloaded = sb.storage.from_(bucket).download(storage_path)
+            if isinstance(downloaded, (bytes, bytearray)):
+                file_bytes = bytes(downloaded)
+            else:
+                data = getattr(downloaded, "data", None)
+                if isinstance(data, (bytes, bytearray)):
+                    file_bytes = bytes(data)
+        except Exception:
+            pass
+
+    if not file_bytes:
+        return "이미지를 불러오지 못했어요. 다시 업로드해서 시도해주세요."
+
+    # GPT-4o Vision으로 메뉴 추출
+    menus = await parse_menu_from_bytes(file_bytes, mime_type=mime)
+    if not menus:
+        return (
+            "메뉴판에서 메뉴를 인식하지 못했어요.\n"
+            "- 이미지가 선명한지 확인해주세요\n"
+            "- 메뉴판이 아닌 다른 이미지일 수 있어요"
+        )
+
+    # 일괄 등록
+    created, updated, skipped = [], [], []
+    for m in menus:
+        name  = (m.get("name") or "").strip()
+        if not name:
+            continue
+        price    = int(m.get("price") or 0)
+        category = (m.get("category") or "기타").strip()
+        try:
+            result = await upsert_menu(
+                account_id=account_id,
+                name=name,
+                category=category,
+                price=price,
+            )
+            if result["action"] == "created":
+                created.append(result["menu"])
+            else:
+                updated.append(result["menu"])
+        except Exception:
+            skipped.append(name)
+
+    # menu_list artifact 갱신
+    try:
+        data = await list_menus_with_profit(account_id=account_id)
+        await upsert_menu_list_artifact(account_id=account_id, menus=data["menus"])
+    except Exception:
+        pass
+
+    # 응답 구성
+    lines = [f"📋 메뉴판에서 **{len(menus)}개** 메뉴를 인식했어요.\n"]
+
+    if created:
+        lines.append(f"✅ 새로 등록 ({len(created)}개)")
+        for m in created:
+            price_str = f"{m['price']:,}원" if m['price'] > 0 else "가격 미확인"
+            lines.append(f"  - {m['name']} ({m['category']}) {price_str}")
+
+    if updated:
+        lines.append(f"\n🔄 기존 메뉴 업데이트 ({len(updated)}개)")
+        for m in updated:
+            lines.append(f"  - {m['name']}")
+
+    if skipped:
+        lines.append(f"\n⚠️ 등록 실패 ({len(skipped)}개): {', '.join(skipped)}")
+
+    if created or updated:
+        lines.append("\n가격이 0원인 메뉴는 '메뉴이름 가격 수정해줘'로 업데이트할 수 있어요.")
+        lines.append("'메뉴 목록 보여줘'로 전체 메뉴판을 확인해보세요.")
+
+    return "\n".join(lines)
+
+
 @_traceable(name="sales.run_menu_delete")
 async def run_menu_delete(
     *,
@@ -1219,6 +1334,31 @@ def describe(account_id: str) -> list[dict]:
     ]
 
     # 조건부 capability — 요청 범위 contextvar 에 따라 advertise.
+
+    # 메뉴판 이미지 OCR — _sales_context 또는 _upload_context 에 이미지가 있을 때
+    from app.agents._upload_context import get_pending_upload
+    _pending_upload = get_pending_upload()
+    _image_source: dict | None = None
+
+    _r = get_pending_receipt()
+    if _r and "image" in (_r.get("mime_type") or ""):
+        _image_source = _r
+    elif _pending_upload and "image" in (_pending_upload.get("mime_type") or ""):
+        _image_source = _pending_upload
+
+    if _image_source:
+        _img_fname = _image_source.get("original_name") or "이미지"
+        caps.append({
+            "name": "sales_menu_ocr",
+            "description": (
+                f"[즉시 호출 가능] 방금 업로드된 '{_img_fname}' 메뉴판 이미지를 OCR해서 "
+                "메뉴명·가격을 자동 추출하고 메뉴를 일괄 등록. "
+                "'메뉴 등록해줘', '메뉴판 읽어줘', '사진으로 추가해줘' 요청 시 즉시 호출. "
+                "영수증과 구분: 이 capability는 메뉴판 이미지 전용."
+            ),
+            "handler": run_menu_ocr,
+            "parameters": {"type": "object", "properties": {}},
+        })
 
     # CSV/Excel 파싱 또는 영수증 OCR (업로드된 파일이 이번 턴에 있을 때만)
     pending_receipt = get_pending_receipt()
