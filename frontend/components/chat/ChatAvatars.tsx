@@ -17,7 +17,7 @@ export const BossAvatar = ({ size = 24 }: AvatarProps) => (
     aria-label="Boss"
   >
     {/* 배경 원 */}
-    <circle cx="12" cy="12" r="12" fill="#3a4a3a" />
+    <circle cx="12" cy="12" r="12" fill="#ffffff" />
 
     {/* 얼굴 */}
     <circle cx="12" cy="10" r="4.5" fill="#d4a87c" />
@@ -78,6 +78,9 @@ export const BossAvatar = ({ size = 24 }: AvatarProps) => (
       strokeLinecap="round"
     />
 
+    {/* 목 */}
+    <rect x="10.5" y="14" width="3" height="3.5" fill="#d4a87c" />
+
     {/* 몸 — 정장 */}
     <path d="M5 22 Q5 17 12 17 Q19 17 19 22Z" fill="#2a3a2a" />
 
@@ -97,7 +100,7 @@ export const EmployeeAvatar = ({ size = 24 }: AvatarProps) => (
     aria-label="Employee"
   >
     {/* 배경 원 */}
-    <circle cx="12" cy="12" r="12" fill="#7a8c6e" />
+    <circle cx="12" cy="12" r="12" fill="#ffffff" />
 
     {/* 얼굴 */}
     <circle cx="12" cy="10" r="4.5" fill="#d4a87c" />
@@ -120,6 +123,9 @@ export const EmployeeAvatar = ({ size = 24 }: AvatarProps) => (
       fill="none"
       strokeLinecap="round"
     />
+
+    {/* 목 */}
+    <rect x="10.5" y="14" width="3" height="3.5" fill="#d4a87c" />
 
     {/* 몸 — 캐주얼 셔츠 */}
     <path d="M5 22 Q5 17 12 17 Q19 17 19 22Z" fill="#4a6a8a" />

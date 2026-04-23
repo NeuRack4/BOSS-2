@@ -225,7 +225,7 @@ export const ProfileModal = ({ open, onClose }: Props) => {
                 <div>
                   <label className={labelCls}>Chat Icon</label>
                   <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#030303]/10 bg-[#f0ede8]">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#030303]/10 bg-white">
                       {avatarPreview ? (
                         <img
                           src={avatarPreview}
