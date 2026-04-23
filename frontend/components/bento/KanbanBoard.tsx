@@ -5,6 +5,7 @@ import { KanbanColumn } from "./KanbanColumn";
 import type { KanbanCardData } from "./KanbanCard";
 import type { DomainKey } from "./types";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
+import { EmployeeManagingPanel } from "@/components/employees/EmployeeManagingPanel";
 
 type SubHub = {
   id: string;
@@ -191,20 +192,37 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
               onCardClick={handleCardClick}
             />
           )}
-          {board.sub_hubs.map((h) => (
-            <KanbanColumn
-              key={h.id}
-              title={h.title}
-              subHubId={h.id}
-              domain={domain}
-              cards={board.cards[h.id] ?? []}
-              draggingId={draggingId}
-              onCardDragStart={onCardDragStart}
-              onCardDragEnd={onCardDragEnd}
-              onCardDrop={onCardDrop}
-              onCardClick={handleCardClick}
-            />
-          ))}
+          {board.sub_hubs.map((h) =>
+            domain === "recruitment" && h.title === "Managing" ? (
+              <div
+                key={h.id}
+                className="flex min-h-[300px] flex-1 min-w-[260px] flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
+              >
+                <div className="flex items-center gap-2 border-b border-[color:var(--kb-border)] px-4 py-3">
+                  <span className="h-2 w-2 rounded-full bg-[#d4a588]" aria-hidden />
+                  <span className="text-[13px] font-semibold tracking-tight text-[color:var(--kb-fg-strong)]">
+                    Managing
+                  </span>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <EmployeeManagingPanel accountId={accountId} />
+                </div>
+              </div>
+            ) : (
+              <KanbanColumn
+                key={h.id}
+                title={h.title}
+                subHubId={h.id}
+                domain={domain}
+                cards={board.cards[h.id] ?? []}
+                draggingId={draggingId}
+                onCardDragStart={onCardDragStart}
+                onCardDragEnd={onCardDragEnd}
+                onCardDrop={onCardDrop}
+                onCardClick={handleCardClick}
+              />
+            ),
+          )}
         </div>
       </div>
     </div>

@@ -1477,6 +1477,205 @@ async def run_payroll_doc(
         return reply
 
     # ── 급여명세서 — Excel 자동생성 경로 ──
+
+    _PAYROLL_CONFIRM_PREFIX = "__PAYROLL_CONFIRM__:"
+
+    # ── Path A: 직원 DB에서 확정된 요청 ──────────────────────
+    if _PAYROLL_CONFIRM_PREFIX in message:
+        import asyncio as _asyncio
+        from app.agents._payroll_excel import generate_payroll_excel as _gen_excel
+
+        try:
+            raw_confirm = message[message.index(_PAYROLL_CONFIRM_PREFIX) + len(_PAYROLL_CONFIRM_PREFIX):]
+            confirm_data = json.loads(raw_confirm.strip())
+            emp_id = confirm_data["employee_id"]
+            confirmed_month = confirm_data.get("pay_month", pay_month)
+        except Exception:
+            return "급여명세서 요청 데이터를 읽을 수 없어요. 다시 시도해 주세요."
+
+        # 직원 정보 조회
+        try:
+            emp_row = sb.table("employees").select("*").eq("id", emp_id).eq("account_id", account_id).maybe_single().execute()
+            emp = emp_row.data or {}
+        except Exception:
+            emp = {}
+
+        if not emp:
+            return "직원 정보를 찾을 수 없어요."
+
+        # 근무 기록 조회
+        try:
+            wr_res = (
+                sb.table("work_records")
+                .select("*")
+                .eq("employee_id", emp_id)
+                .eq("account_id", account_id)
+                .gte("work_date", f"{confirmed_month}-01")
+                .lte("work_date", f"{confirmed_month}-31")
+                .execute()
+            )
+            records = wr_res.data or []
+        except Exception:
+            records = []
+
+        total_hours = sum(float(r.get("hours_worked", 0)) for r in records)
+        total_ot = sum(float(r.get("overtime_hours", 0)) for r in records)
+        total_night = sum(float(r.get("night_hours", 0)) for r in records)
+        total_holiday = sum(float(r.get("holiday_hours", 0)) for r in records)
+
+        emp_type = emp.get("employment_type", "시급제")
+        hourly = int(emp.get("hourly_rate") or 0)
+        monthly = int(emp.get("monthly_salary") or 0)
+        pay_day_num = emp.get("pay_day") or 25
+        emp_name = emp.get("name", target)
+
+        # gpt-4o-mini로 공제 계산 포함 JSON 완성
+        _RATES_BLOCK_CONFIRM = (
+            "[2026년 4대보험 요율 — 근로자 부담]\n"
+            "- 국민연금: 4.5% (상한 590만원)\n"
+            "- 건강보험: 3.545%\n"
+            "- 장기요양보험: 건강보험료 × 12.95%\n"
+            "- 고용보험: 0.9%\n"
+            "- 소득세: 간이세액표 기준 (비과세 식대 월 20만원 공제 후)\n"
+            "- 초단시간(주 15h 미만): 4대보험 미적용, 소득세 3.3%(지방세 포함)\n"
+        )
+        json_system_confirm = (
+            "당신은 급여 계산 전문가입니다. 아래 직원 데이터로 공제액을 계산해 JSON만 반환하세요. 설명 없이 JSON만.\n\n"
+            + _RATES_BLOCK_CONFIRM
+            + 'JSON 스키마:\n'
+            '{"employment_type":"string","has_allowances":bool,'
+            '"name":"string","pay_date":"YYYY-MM-DD",'
+            '"hourly_rate":0,"hours_worked":0.0,"base_pay":0,'
+            '"overtime_hours":0.0,"overtime_pay":0,'
+            '"night_hours":0.0,"night_pay":0,'
+            '"holiday_hours":0.0,"holiday_pay":0,'
+            '"meal_allowance":0,"family_allowance":0,'
+            '"income_tax":0,"national_pension":0,"health_insurance":0,'
+            '"ltc_insurance":0,"employment_insurance":0,'
+            '"total_pay":0,"total_deductions":0,"net_pay":0}'
+        )
+        user_context_confirm = (
+            f"직원명: {emp_name}, 고용형태: {emp_type}, "
+            f"시급: {hourly}원, 월급: {monthly}원, "
+            f"근무시간: {total_hours}h, 연장: {total_ot}h, 야간: {total_night}h, 휴일: {total_holiday}h, "
+            f"지급월: {confirmed_month}, 지급일: {pay_day_num}일"
+        )
+        if extra_note:
+            user_context_confirm += f", 특이사항: {extra_note}"
+
+        json_resp_confirm = await chat_completion(
+            messages=[{"role": "system", "content": json_system_confirm}, {"role": "user", "content": user_context_confirm}],
+            model="gpt-4o-mini",
+            temperature=0,
+        )
+        raw_json_confirm = (json_resp_confirm.choices[0].message.content or "{}").strip()
+        try:
+            if raw_json_confirm.startswith("```"):
+                raw_json_confirm = re.sub(r"^```[a-z]*\n?", "", raw_json_confirm).rstrip("`").strip()
+            payroll_data = json.loads(raw_json_confirm)
+        except Exception:
+            payroll_data = {}
+
+        payroll_data.setdefault("name", emp_name)
+        payroll_data.setdefault("pay_date", f"{confirmed_month[:7]}-{pay_day_num:02d}")
+
+        try:
+            excel_bytes, _ = _gen_excel(payroll_data)
+        except Exception as exc:
+            log.exception("급여명세서 Excel 생성 실패: %s", exc)
+            return (
+                f"{emp_name} 급여명세서 엑셀 생성 중 오류가 발생했어요.\n\n"
+                f"[ARTIFACT]\ntype: payroll_doc\ntitle: {emp_name} 급여명세서 {confirmed_month}\nsub_domain: Tax&HR\n[/ARTIFACT]"
+            )
+
+        _BUCKET = "documents-uploads"
+        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
+
+        def _upload_confirmed():
+            try:
+                sb.storage.from_(_BUCKET).upload(
+                    path=storage_key,
+                    file=excel_bytes,
+                    file_options={
+                        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "upsert": "false",
+                    },
+                )
+                res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
+                if isinstance(res, dict):
+                    return res.get("signedURL") or res.get("signedUrl") or ""
+                return ""
+            except Exception as exc:
+                log.warning("급여명세서 Storage 업로드 실패: %s", exc)
+                return ""
+
+        download_url = await _asyncio.to_thread(_upload_confirmed)
+
+        total_pay = payroll_data.get("total_pay", 0)
+        total_ded = payroll_data.get("total_deductions", 0)
+        net_pay_val = payroll_data.get("net_pay", 0)
+
+        lines_out = [f"**{emp_name}** ({confirmed_month}) 급여명세서를 생성했어요."]
+        lines_out.append(f"- 고용 유형: {emp_type}")
+        if total_hours:
+            lines_out.append(f"- 근무시간: {total_hours}h (연장 {total_ot}h)")
+        if total_pay:
+            lines_out.append(f"- 지급액 합계: {total_pay:,}원")
+        if total_ded:
+            lines_out.append(f"- 공제액 합계: {total_ded:,}원")
+        if net_pay_val:
+            lines_out.append(f"- **실수령액: {net_pay_val:,}원**")
+
+        reply = "\n".join(lines_out)
+        if download_url:
+            reply += f"\n\n[📥 급여명세서 엑셀 다운로드]({download_url})"
+        else:
+            reply += "\n\n(파일 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.)"
+        reply += "\n\n> ⚠️ 4대보험 요율·소득세는 2026년 기준이며, 신고 전 국세청·공단 공식 자료로 재확인하세요."
+        reply += (
+            f"\n\n[ARTIFACT]\ntype: payroll_doc\ntitle: {emp_name} 급여명세서 {confirmed_month}\n"
+            f"sub_domain: Tax&HR\n"
+            + (f"file_url: {download_url}\n" if download_url else "")
+            + "[/ARTIFACT]"
+        )
+        await save_artifact_from_reply(
+            account_id, "documents", reply,
+            default_title=f"{emp_name} 급여명세서 {confirmed_month}",
+            valid_types=VALID_TYPES,
+            extra_meta_keys=("file_url",),
+            type_to_subhub=_TYPE_TO_SUBHUB,
+        )
+        return reply
+
+    # ── Path B: 직원 DB 조회 → 선택 UI 반환 ─────────────────
+    import asyncio as _asyncio
+    from app.agents._payroll_excel import generate_payroll_excel
+
+    try:
+        emp_list_res = (
+            sb.table("employees")
+            .select("id,name,employment_type,hourly_rate,monthly_salary,pay_day,department,position")
+            .eq("account_id", account_id)
+            .eq("status", "active")
+            .order("name")
+            .execute()
+        )
+        employees = emp_list_res.data or []
+    except Exception:
+        employees = []
+
+    if employees:
+        picker_payload = json.dumps(
+            {"employees": employees, "pay_month": pay_month},
+            ensure_ascii=False,
+        )
+        return (
+            f"어떤 직원의 **{pay_month}** 급여명세서를 만들까요? "
+            f"아래에서 직원을 선택해 주세요.\n\n"
+            f"[ACTION:SELECT_EMPLOYEE_FOR_PAYROLL:{picker_payload}]"
+        )
+
+    # ── Path C: 직원 DB 없음 → LLM 추출 폴백 ────────────────
     try:
         profile_row = (
             sb.table("profiles")
@@ -1558,7 +1757,7 @@ async def run_payroll_doc(
 
     # Supabase Storage 업로드
     _BUCKET = "documents-uploads"
-    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{filename}"
+    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
 
     def _upload_excel() -> str:
         try:

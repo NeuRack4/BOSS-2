@@ -52,6 +52,11 @@ import {
 } from "./MenuAnalysisCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
+import {
+  EmployeePickerCard,
+  extractEmployeePickerPayload,
+  type EmployeePickerPayload,
+} from "./EmployeePickerCard";
 
 type UploadCategory =
   | "documents"
@@ -87,6 +92,7 @@ type Message = {
   costAction?: CostActionData;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
+  employeePicker?: EmployeePickerPayload;
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -966,8 +972,10 @@ export const InlineChat = () => {
           parseCostAction(afterSales);
         const { cleaned: afterShorts, payload: shortsWizard } =
           extractShortsWizardPayload(afterCost);
-        const { cleaned: cleanReply, payload: menuChart } =
+        const { cleaned: afterMenu, payload: menuChart } =
           extractMenuChartPayload(afterShorts);
+        const { cleaned: cleanReply, payload: employeePicker } =
+          extractEmployeePickerPayload(afterMenu);
         setMessages((prev) => [
           ...prev,
           {
@@ -980,6 +988,7 @@ export const InlineChat = () => {
             costAction,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
+            employeePicker: employeePicker ?? undefined,
           },
         ]);
         const sp = data?.data?.speaker;
@@ -1372,6 +1381,15 @@ export const InlineChat = () => {
                             },
                           ]);
                         }}
+                      />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.employeePicker && userId && (
+                    <div className="ml-8 max-w-[85%]">
+                      <EmployeePickerCard
+                        payload={msg.employeePicker}
+                        accountId={userId}
+                        onConfirm={(confirmMsg) => send(confirmMsg, i)}
                       />
                     </div>
                   )}
