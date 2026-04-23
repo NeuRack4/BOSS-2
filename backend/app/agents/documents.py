@@ -33,6 +33,13 @@ from app.agents._doc_templates import (
 )
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
 from app.agents._legal import classify_legal_intent, handle_legal_question
+from app.agents._admin_templates import (
+    VALID_ADMIN_TYPES,
+    ADMIN_TYPE_LABELS,
+    ADMIN_TYPE_DUE_DAYS,
+    ADMIN_TYPE_DUE_LABELS,
+    build_admin_context,
+)
 
 log = logging.getLogger(__name__)
 
@@ -371,9 +378,8 @@ _CATEGORY_GUIDANCE: dict[str, str] = {
     "operations": """\
 [카테고리: Operations — 서류 초안·행정 업무]
 이 카테고리는 견적서·공지문·국가 지원사업 신청서·행정 처리 신청서 등 일상 서류 초안 작성을 담당합니다.
-- 현재 지원 타입: estimate(견적서), notice(공지문).
-  지원사업·행정 신청서 capability 는 추후 추가 예정 — 요청이 들어오면 "아직 지원사업 자동 작성은 준비 중입니다.
-  대신 어떤 지원사업인지 알려주시면 일반 서류 형식으로 초안을 잡아드릴 수 있습니다." 로 대응.
+- 현재 지원 타입: estimate(견적서), notice(공지문), subsidy_recommendation(지원사업 추천),
+  admin_application(행정 신청서 — 사업자등록 신청서·통신판매업 신고서·구매안전서비스 비적용 확인서).
 - 마감·게시 일자가 있는 서류는 `due_date` + `due_label` 반드시 포함.
 - type 이 모호하면:
   [CHOICES]
@@ -1166,24 +1172,113 @@ async def run_admin_application(
     long_term_context: str = "",
     rag_context: str = "",
     application_type: str,
-    purpose: str,
+    purpose: str = "",
     extra_note: str | None = None,
 ) -> str:
-    """사업자등록 정정·영업허가 갱신·식품영업신고·인허가 등 행정 신청서 초안."""
-    lines = [
-        f"[신청 종류] {application_type}",
-        f"[신청 목적] {purpose}",
-    ]
+    """행정 신청서 초안 — 프로필 자동 채움 + 양식 모사 마크다운."""
+    from datetime import date
+
+    # application_type 정규화 — enum 외 값이면 사용자 메시지에서 추론
+    if application_type not in VALID_ADMIN_TYPES:
+        msg_lower = (message + " " + application_type).lower()
+        if any(k in msg_lower for k in ("통신판매업", "전자상거래 신고")):
+            application_type = "mail_order_registration"
+        elif any(k in msg_lower for k in ("구매안전", "비적용")):
+            application_type = "purchase_safety_exempt"
+        else:
+            application_type = "business_registration"
+
+    sb = get_supabase()
+
+    # 프로필 조회 (신규 컬럼 포함 전체)
+    try:
+        profile_row = (
+            sb.table("profiles")
+            .select(
+                "display_name,business_name,business_type,location,employees_count,"
+                "business_reg_no,phone_mobile,phone_business,email,"
+                "opening_date,business_form,industry_code,profile_meta"
+            )
+            .eq("id", account_id)
+            .maybe_single()
+            .execute()
+        )
+        profile = profile_row.data or {}
+    except Exception:
+        profile = {}
+
+    profile_meta: dict = profile.pop("profile_meta", None) or {}
+
+    # opening_date: date → str 변환
+    if profile.get("opening_date"):
+        try:
+            od = profile["opening_date"]
+            if hasattr(od, "isoformat"):
+                profile["opening_date"] = od.isoformat()
+        except Exception:
+            pass
+
+    admin_ctx = build_admin_context(application_type, profile, profile_meta)
+    label = ADMIN_TYPE_LABELS.get(application_type, application_type)
+    due_days = ADMIN_TYPE_DUE_DAYS.get(application_type, 7)
+    due_label = ADMIN_TYPE_DUE_LABELS.get(application_type, "행정 처리 기한")
+    due_date = (date.today() + timedelta(days=due_days)).isoformat()
+
+    extra_parts: list[str] = []
+    if purpose:
+        extra_parts.append(f"[신청 목적] {purpose}")
     if extra_note:
-        lines.append(f"[특이사항] {extra_note}")
-    synthetic = (
-        "행정 처리용 신청서 초안을 작성해주세요. "
-        "[ARTIFACT] 블록(type=admin_application, sub_domain=Operations) 포함. "
-        "한국 행정 실무(사업자등록·영업허가·식품영업신고·인허가) 양식에 맞게.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+        extra_parts.append(f"[특이사항] {extra_note}")
+
+    system = (
+        SYSTEM_PROMPT
+        + "\n\n"
+        + _CATEGORY_GUIDANCE["operations"]
+        + f"\n\n[작업 지시]\n"
+        f"아래 양식 지식자산과 프로필 데이터를 사용해 '{label}' 초안을 작성하세요.\n"
+        f"- 양식 구조(표·체크박스·섹션)를 그대로 유지하세요.\n"
+        f"- 프로필 값이 있는 placeholder 는 실제 값으로 교체하세요.\n"
+        f"- 값이 없는 placeholder 는 {{{{...}}}} 형태로 유지하세요.\n"
+        f"- 주민등록번호·법인등록번호는 절대 생성하지 마세요.\n"
+        f"- 응답 마지막에 아래 [ARTIFACT] 블록을 반드시 포함하세요:\n"
+        f"  [ARTIFACT]\n"
+        f"  type: admin_application\n"
+        f"  title: {label}\n"
+        f"  sub_domain: Operations\n"
+        f"  due_date: {due_date}\n"
+        f"  due_label: {due_label}\n"
+        f"  [/ARTIFACT]\n"
+        + "\n\n"
+        + admin_ctx
+        + "\n\n"
+        + today_context()
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+
+    user_content = message
+    if extra_parts:
+        user_content = "\n".join(extra_parts) + f"\n\n원본 요청: {message}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *history,
+            {"role": "user", "content": user_content},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title=label,
+        valid_types=VALID_TYPES,
+        extra_meta_keys=("due_label",),
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return reply
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1450,19 +1545,29 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "doc_admin_application",
             "description": (
-                "행정 처리 신청서 초안 — 사업자등록 정정·영업허가 갱신·식품영업신고·인허가 변경 등. "
-                "'사업자등록 변경 신청서', '영업허가 갱신 서류', '식품영업신고서 작성해줘' 요청이면 이 tool. "
+                "한국 행정 신청서 초안 — 프로필 데이터 자동 채움 + 실제 양식 모사 마크다운 생성. "
+                "현재 지원 양식: 사업자등록 신청서 / 통신판매업 신고서 / 구매안전서비스 비적용대상 확인서. "
+                "'사업자등록 신청서 써줘', '통신판매업 신고서 만들어줘', '구매안전서비스 확인서' 요청이면 이 tool. "
                 "[카테고리: Operations — 행정 업무 신청서]"
             ),
             "handler": run_admin_application,
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "application_type": {"type": "string", "description": "신청 종류 (예: 사업자등록 정정, 영업허가 갱신, 식품영업신고)"},
-                    "purpose":          {"type": "string", "description": "신청 목적·사유"},
-                    "extra_note":       {"type": "string"},
+                    "application_type": {
+                        "type": "string",
+                        "enum": list(VALID_ADMIN_TYPES),
+                        "description": (
+                            "신청서 종류: "
+                            "business_registration=사업자등록 신청서, "
+                            "mail_order_registration=통신판매업 신고서, "
+                            "purchase_safety_exempt=구매안전서비스 비적용대상 확인서"
+                        ),
+                    },
+                    "purpose":    {"type": "string", "description": "신청 목적·사유 (선택)"},
+                    "extra_note": {"type": "string", "description": "특이사항 (선택)"},
                 },
-                "required": ["application_type", "purpose"],
+                "required": ["application_type"],
             },
         },
         # ──────────────────────────────────────────────────────
