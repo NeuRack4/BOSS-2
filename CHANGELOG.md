@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.3.0] — 2026-04-23
 
-### Added
+### Added — Recruitment (feature-doc)
 
 - **채용공고 포스터 iframe 렌더링** — `job_posting_poster` artifact 상세 모달에서 raw HTML 대신 `<iframe srcDoc>` 으로 실제 포스터 렌더링. 플랫폼 뱃지·새 탭 열기 링크 표시.
 - **JPG Download 버튼** — 포스터 상세 모달에서 `html-to-image` 기반 2× 해상도 JPG 다운로드. 편집 버튼과 겹침 방지(`mr-6`).
@@ -16,13 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **포스터 공고 선택 + 복수 플랫폼** — `run_posting_poster` 에 `posting_set_id` / `platforms` 파라미터 추가. 공고 미선택 시 저장된 목록 CHOICES 표시, 플랫폼 미선택 시 3종 복수 선택 안내. `_list_posting_sets` 헬퍼 추가.
 - **Documents 채팅 메뉴 항목 간소화** — Documents 도메인 채팅 진입 메뉴 항목 정리.
 
+### Added — Sales / Square POS (feature/sales-square-pos)
+
+- **`backend/app/agents/_sales/_pos.py`** — Square POS API 클라이언트. `get_locations` · `fetch_orders` · `parse_orders_to_records` (카테고리 자동 추론) · `sync_pos_to_sales` (bulk insert + revenue_entry artifact + activity_log). LangSmith `@traceable`.
+- **`backend/app/routers/pos.py`** — `/api/pos/square/locations` · `/api/pos/square/sync` · `/api/pos/square/oauth/callback` (OAuth 준비 중).
+- **`supabase/migrations/033_sales_records_source_pos.sql`** — `sales_records.source` 허용값에 `pos` 추가.
+
 ### Changed
 
 - **채용공고 단일 카드화** — `job_posting_set` 하나에 3종 플랫폼 내용 통합. 자식 `job_posting` artifact × 3 생성 제거.
 - **채용공고 필수 필드 강화** — `run_posting_set` 필수 검증 항목 확장: `work_days`, `work_start/end`, `start_date`, `end_date` 추가. Capability `required` 스펙 동기화.
-- **포스터 CTA 제거** — `poster_gen` 시스템 프롬프트에 "CTA 버튼·지원 방법 절대 금지" 규칙 추가. 근무 조건·급여·위치 정보만 포스터에 표시.
+- **포스터 CTA 제거** — `poster_gen` 시스템 프롬프트에 "CTA 버튼·지원 방법 절대 금지" 규칙 추가.
 - **`_maybe_dispatch_poster` 복수 플랫폼** — 마커에서 `platforms` 콤마 파싱 후 루프 생성, 결과 목록 응답.
-- **ProfileWidget 실시간 갱신** — `boss:artifacts-changed` 이벤트 리스너 추가. 공고 저장·프로필 업데이트 시 대시보드 프로필 카드 즉시 반영.
+- **ProfileWidget 실시간 갱신** — `boss:artifacts-changed` 이벤트 리스너 추가.
+- **`backend/app/core/config.py`** — `square_app_id` · `square_access_token` · `square_environment` 설정 필드 추가.
+- **`backend/app/main.py`** — `pos` 라우터 등록.
+- **`backend/app/agents/sales.py`** — `run_sync_pos` + `sales_sync_pos` capability 추가.
 
 ### Fixed
 

@@ -852,6 +852,77 @@ async def run_menu_analysis(
     return analysis_text
 
 
+@_traceable(name="sales.run_sync_pos")
+async def run_sync_pos(
+    *,
+    account_id: str,
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
+    from datetime import date as _date
+    from app.agents._sales._pos import get_locations, sync_pos_to_sales
+    from app.core.config import settings
+
+    if not settings.square_access_token:
+        return (
+            "Square POS 연동 설정이 필요해요.\n\n"
+            "관리자에게 Square Access Token 설정을 요청해주세요."
+        )
+
+    # 위치 조회
+    try:
+        locations = await get_locations()
+    except Exception as e:
+        return f"Square 연결에 실패했어요: {e}"
+
+    if not locations:
+        return "Square에 등록된 매장 위치가 없어요. 콘솔에서 위치를 먼저 추가해주세요."
+
+    location = locations[0]  # 첫 번째 위치 사용
+    location_id = location.get("id", "")
+
+    today      = _date.today()
+    start      = _date.fromisoformat(start_date) if start_date else today
+    end        = _date.fromisoformat(end_date)   if end_date   else today
+
+    try:
+        result = await sync_pos_to_sales(
+            account_id=account_id,
+            location_id=location_id,
+            start_date=start,
+            end_date=end,
+        )
+    except Exception as e:
+        return f"동기화 중 오류가 발생했어요: {e}"
+
+    saved  = result.get("saved", 0)
+    orders = result.get("orders", 0)
+    total  = result.get("total_amount", 0)
+
+    if saved == 0:
+        return (
+            f"📡 Square POS 동기화 완료\n\n"
+            f"- 기간: {start} ~ {end}\n"
+            f"- 위치: {location.get('name', location_id)}\n"
+            f"- 조회된 주문: {orders}건\n\n"
+            "해당 기간에 기록된 주문이 없어요."
+        )
+
+    return (
+        f"📡 **Square POS 동기화 완료**\n\n"
+        f"- 기간: {start} ~ {end}\n"
+        f"- 위치: {location.get('name', location_id)}\n"
+        f"- 동기화된 주문: {orders}건\n"
+        f"- 저장된 품목: {saved}개\n"
+        f"- 총 매출: {total:,}원\n\n"
+        "Sales 칸반 Revenue 컬럼에서 확인하실 수 있어요."
+    )
+
+
 @_traceable(name="sales.run_menu_upsert")
 async def run_menu_upsert(
     *,
@@ -1282,6 +1353,22 @@ def describe(account_id: str) -> list[dict]:
                     "target":     {"type": "string"},
                 },
                 "required": ["title", "start_date", "end_date", "benefit"],
+            },
+        },
+        {
+            "name": "sales_sync_pos",
+            "description": (
+                "[카테고리: Revenue] Square POS 포스기 매출 동기화. "
+                "'오늘 포스 매출 불러와', '포스기 연동해줘', '포스 데이터 가져와' 등 POS 동기화 요청 시 호출. "
+                "Square POS API로 주문 데이터를 조회해 sales_records에 자동 저장."
+            ),
+            "handler": run_sync_pos,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "시작일 YYYY-MM-DD (기본 오늘)"},
+                    "end_date":   {"type": "string", "description": "종료일 YYYY-MM-DD (기본 오늘)"},
+                },
             },
         },
         {
