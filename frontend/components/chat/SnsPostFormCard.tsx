@@ -20,13 +20,13 @@ export function SnsPostFormCard({
 
   const toggleTone = (t: string) => {
     setTones((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
     );
   };
 
   const togglePlatform = (p: string) => {
     setPlatforms((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p],
     );
   };
 
@@ -61,7 +61,8 @@ export function SnsPostFormCard({
     "w-full rounded-[4px] border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-[#c13584] transition-colors";
   const labelCls = "block text-[11px] font-medium text-neutral-500 mb-1";
   const pillActive = "bg-[#c13584] text-white border-[#c13584]";
-  const pillIdle = "bg-white text-neutral-600 border-neutral-200 hover:border-[#c13584]";
+  const pillIdle =
+    "bg-white text-neutral-600 border-neutral-200 hover:border-[#c13584]";
 
   return (
     <div className="rounded-[5px] border border-[#f0d0e8] bg-white overflow-hidden w-full max-w-[480px] shadow-sm">
@@ -70,15 +71,35 @@ export function SnsPostFormCard({
         {/* 인스타그램 로고 */}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <defs>
-            <linearGradient id="ig-form-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#f09433"/>
-              <stop offset="50%" stopColor="#e6683c"/>
-              <stop offset="100%" stopColor="#bc1888"/>
+            <linearGradient
+              id="ig-form-grad"
+              x1="0%"
+              y1="100%"
+              x2="100%"
+              y2="0%"
+            >
+              <stop offset="0%" stopColor="#f09433" />
+              <stop offset="50%" stopColor="#e6683c" />
+              <stop offset="100%" stopColor="#bc1888" />
             </linearGradient>
           </defs>
-          <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-form-grad)"/>
-          <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none"/>
-          <circle cx="17.5" cy="6.5" r="1.2" fill="white"/>
+          <rect
+            x="2"
+            y="2"
+            width="20"
+            height="20"
+            rx="6"
+            fill="url(#ig-form-grad)"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="4.5"
+            stroke="white"
+            strokeWidth="1.8"
+            fill="none"
+          />
+          <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
         </svg>
         <span className="text-[11px] font-bold uppercase tracking-wider text-[#8a3070]">
           Instagram 게시물 작성

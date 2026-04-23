@@ -266,7 +266,8 @@ export function MarketingReportCard({
                   {ig?.error || "Instagram 데이터를 불러올 수 없습니다."}
                 </p>
                 <p className="text-[11px] text-neutral-400 text-center">
-                  Instagram 연결은 Meta 비즈니스 계정의 액세스 토큰을<br />
+                  Instagram 연결은 Meta 비즈니스 계정의 액세스 토큰을
+                  <br />
                   관리자 설정에서 등록하면 자동으로 활성화됩니다.
                 </p>
               </div>

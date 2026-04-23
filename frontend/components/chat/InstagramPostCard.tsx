@@ -122,7 +122,8 @@ export const InstagramPostCard = ({
       .split("\n")
       .reduce<string[]>((acc, line) => {
         const trimmed = line.trim();
-        const isEmojiOnly = trimmed.length > 0 && !/[\w가-힣a-zA-Z0-9]/.test(trimmed);
+        const isEmojiOnly =
+          trimmed.length > 0 && !/[\w가-힣a-zA-Z0-9]/.test(trimmed);
         if (isEmojiOnly && acc.length > 0) {
           acc[acc.length - 1] = acc[acc.length - 1].trimEnd() + " " + trimmed;
         } else {
@@ -283,11 +284,16 @@ export const InstagramPostCard = ({
           )}
           {hashtags.length > 0 && (
             <p className="mt-1 text-[11.5px] leading-relaxed text-[#3b7aba]">
-              {hashtags.slice(0, 20).map((t) => `#${t}`).join(" ")}
+              {hashtags
+                .slice(0, 20)
+                .map((t) => `#${t}`)
+                .join(" ")}
             </p>
           )}
           {payload.best_time && (
-            <p className="mt-1 text-[11px] text-[#8c7e66]">{payload.best_time}</p>
+            <p className="mt-1 text-[11px] text-[#8c7e66]">
+              {payload.best_time}
+            </p>
           )}
         </div>
 

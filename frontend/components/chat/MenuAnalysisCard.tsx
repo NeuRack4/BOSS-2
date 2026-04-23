@@ -513,8 +513,12 @@ function ScatterTab({ items }: { items: MenuAnalysisItem[] }) {
 
       {/* 인사이트 */}
       {(() => {
-        const starItems   = items.filter((i) => i.avg_unit_price >= medP && i.total_quantity >= medQ).slice(0, 3);
-        const reviewItems = items.filter((i) => i.avg_unit_price <  medP && i.total_quantity <  medQ).slice(0, 3);
+        const starItems = items
+          .filter((i) => i.avg_unit_price >= medP && i.total_quantity >= medQ)
+          .slice(0, 3);
+        const reviewItems = items
+          .filter((i) => i.avg_unit_price < medP && i.total_quantity < medQ)
+          .slice(0, 3);
         return (
           <div className="flex flex-col gap-2">
             {/* 효자 메뉴 그룹 */}
@@ -522,21 +526,27 @@ function ScatterTab({ items }: { items: MenuAnalysisItem[] }) {
               <div className="rounded-[5px] bg-[#e8edd8] px-3 py-2.5">
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="text-[13px]">⭐</span>
-                  <span className="text-[12px] font-bold text-[#4a5c28]">효자 메뉴 · 집중 육성 추천</span>
+                  <span className="text-[12px] font-bold text-[#4a5c28]">
+                    효자 메뉴 · 집중 육성 추천
+                  </span>
                 </div>
                 <div className="flex flex-col gap-1 mb-2">
                   {starItems.map((i, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <span className="text-[13px] font-bold text-[#2e4a18]">{i.item_name}</span>
+                      <span className="text-[13px] font-bold text-[#2e4a18]">
+                        {i.item_name}
+                      </span>
                       <span className="text-[11px] text-[#6a7843]">
-                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량 {i.total_quantity}개
+                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량{" "}
+                        {i.total_quantity}개
                       </span>
                     </div>
                   ))}
                 </div>
                 <p className="text-[11px] leading-relaxed text-[#5a6a30]">
-                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}원·{Math.round(medQ)}개) 이상이에요.
-                  현재 운영을 유지하며 마케팅을 집중해 더 키워보세요.
+                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}
+                  원·{Math.round(medQ)}개) 이상이에요. 현재 운영을 유지하며
+                  마케팅을 집중해 더 키워보세요.
                 </p>
               </div>
             )}
@@ -546,21 +556,27 @@ function ScatterTab({ items }: { items: MenuAnalysisItem[] }) {
               <div className="rounded-[5px] bg-[#f4e8e0] px-3 py-2.5">
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="text-[13px]">🔻</span>
-                  <span className="text-[12px] font-bold text-[#8a3a28]">가격 인상 또는 메뉴 재검토</span>
+                  <span className="text-[12px] font-bold text-[#8a3a28]">
+                    가격 인상 또는 메뉴 재검토
+                  </span>
                 </div>
                 <div className="flex flex-col gap-1 mb-2">
                   {reviewItems.map((i, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <span className="text-[13px] font-bold text-[#8a3a28]">{i.item_name}</span>
+                      <span className="text-[13px] font-bold text-[#8a3a28]">
+                        {i.item_name}
+                      </span>
                       <span className="text-[11px] text-[#a04030]">
-                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량 {i.total_quantity}개
+                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량{" "}
+                        {i.total_quantity}개
                       </span>
                     </div>
                   ))}
                 </div>
                 <p className="text-[11px] leading-relaxed text-[#6a2a18]">
-                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}원·{Math.round(medQ)}개) 이하예요.
-                  가격을 올려 수익성을 개선하거나, 판매량이 낮은 원인(홍보 부족·위치·계절성)을 파악해
+                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}
+                  원·{Math.round(medQ)}개) 이하예요. 가격을 올려 수익성을
+                  개선하거나, 판매량이 낮은 원인(홍보 부족·위치·계절성)을 파악해
                   메뉴 구성 변경을 검토해보세요.
                 </p>
               </div>

@@ -37,7 +37,13 @@ export const extractNaverBlogPayload = (
 };
 
 /** 마크다운 본문을 섹션별로 렌더링 */
-function BlogBody({ content, expanded }: { content: string; expanded: boolean }) {
+function BlogBody({
+  content,
+  expanded,
+}: {
+  content: string;
+  expanded: boolean;
+}) {
   const lines = content.split("\n");
   const visible = expanded ? lines : lines.slice(0, 10);
 
@@ -46,19 +52,29 @@ function BlogBody({ content, expanded }: { content: string; expanded: boolean })
       {visible.map((line, i) => {
         const t = line.trim();
         if (!t) return <div key={i} className="h-2" />;
-        if (t.startsWith("### ")) return (
-          <p key={i} className="mt-2 font-bold text-[14px] text-[#1a1a1a]">{t.slice(4)}</p>
-        );
-        if (t.startsWith("## ")) return (
-          <p key={i} className="mt-2 font-bold text-[15px] text-[#1a1a1a]">{t.slice(3)}</p>
-        );
+        if (t.startsWith("### "))
+          return (
+            <p key={i} className="mt-2 font-bold text-[14px] text-[#1a1a1a]">
+              {t.slice(4)}
+            </p>
+          );
+        if (t.startsWith("## "))
+          return (
+            <p key={i} className="mt-2 font-bold text-[15px] text-[#1a1a1a]">
+              {t.slice(3)}
+            </p>
+          );
         return <p key={i}>{t}</p>;
       })}
     </div>
   );
 }
 
-export const NaverBlogPostCard = ({ payload }: { payload: NaverBlogPayload }) => {
+export const NaverBlogPostCard = ({
+  payload,
+}: {
+  payload: NaverBlogPayload;
+}) => {
   const [expanded, setExpanded] = useState(false);
   const [imgIdx, setImgIdx] = useState(0);
   const [liked, setLiked] = useState(false);
@@ -68,18 +84,24 @@ export const NaverBlogPostCard = ({ payload }: { payload: NaverBlogPayload }) =>
   const hasImages = images.length > 0;
   const isLong = payload.content.split("\n").length > 10;
   const today = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 
   return (
     <div className="w-[420px] overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white shadow-lg">
-
       {/* ── 상단 네이버 블로그 헤더 바 ── */}
       <div className="flex items-center gap-2.5 bg-[#03C75A] px-4 py-2.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M13.5 12.5L10 7H7v10h3.5V11.5L15 17h3V7h-3.5v5.5z" fill="white"/>
+          <path
+            d="M13.5 12.5L10 7H7v10h3.5V11.5L15 17h3V7h-3.5v5.5z"
+            fill="white"
+          />
         </svg>
-        <span className="text-[12px] font-bold tracking-widest text-white">NAVER Blog</span>
+        <span className="text-[12px] font-bold tracking-widest text-white">
+          NAVER Blog
+        </span>
         <span className="ml-auto rounded-full bg-white/20 px-2 py-0.5 text-[10px] text-white">
           AI 미리보기
         </span>
@@ -187,15 +209,23 @@ export const NaverBlogPostCard = ({ payload }: { payload: NaverBlogPayload }) =>
               stroke={liked ? "#03C75A" : "#aaa"}
               strokeWidth={1.8}
             />
-            <span className={liked ? "text-[#03C75A] font-medium" : "text-[#aaa]"}>
+            <span
+              className={liked ? "text-[#03C75A] font-medium" : "text-[#aaa]"}
+            >
               공감 {liked ? 1 : 0}
             </span>
           </button>
-          <button type="button" className="flex items-center gap-1.5 text-[12.5px] text-[#aaa]">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-[12.5px] text-[#aaa]"
+          >
             <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
             <span>댓글 0</span>
           </button>
-          <button type="button" className="flex items-center gap-1.5 text-[12.5px] text-[#aaa]">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-[12.5px] text-[#aaa]"
+          >
             <Share2 className="h-4 w-4" strokeWidth={1.8} />
             <span>공유</span>
           </button>

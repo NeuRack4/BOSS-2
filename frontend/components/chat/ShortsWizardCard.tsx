@@ -191,7 +191,11 @@ export const ShortsWizardCard = ({
       if (json.data?.title || json.data?.description) setAiMetaFilled(true);
       goToStep("subtitles");
     } catch (err) {
-      setSubtitleError(err instanceof Error ? err.message : "자막 생성에 실패했습니다. 다시 시도해주세요.");
+      setSubtitleError(
+        err instanceof Error
+          ? err.message
+          : "자막 생성에 실패했습니다. 다시 시도해주세요.",
+      );
     } finally {
       setLoadingSubtitles(false);
     }

@@ -81,7 +81,11 @@ export function ReviewReplyFormCard({
                 onClick={() => setStarRating(star === starRating ? 0 : star)}
                 className="text-2xl transition-transform hover:scale-110 active:scale-95"
               >
-                <span className={displayStar >= star ? "text-amber-400" : "text-neutral-200"}>
+                <span
+                  className={
+                    displayStar >= star ? "text-amber-400" : "text-neutral-200"
+                  }
+                >
                   ★
                 </span>
               </button>

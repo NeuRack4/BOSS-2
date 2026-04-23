@@ -5,7 +5,12 @@ import Image from "next/image";
 import { X, ImagePlus, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const DIRECTION_OPTIONS = ["신상품 소개", "이벤트 공지", "일상 스토리", "리뷰·후기"];
+const DIRECTION_OPTIONS = [
+  "신상품 소개",
+  "이벤트 공지",
+  "일상 스토리",
+  "리뷰·후기",
+];
 const TONE_OPTIONS = ["친근한", "전문적인", "감성적인", "정보 전달형"];
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -31,7 +36,9 @@ export function BlogPostFormCard({
 
   const addImages = (files: FileList | null) => {
     if (!files) return;
-    const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const incoming = Array.from(files).filter((f) =>
+      f.type.startsWith("image/"),
+    );
     const remaining = 10 - imageFiles.length;
     const toAdd = incoming.slice(0, remaining);
     setImageFiles((prev) => [...prev, ...toAdd]);
@@ -82,7 +89,8 @@ export function BlogPostFormCard({
       direction && `방향: ${direction}`,
       keywords.trim() && `키워드: ${keywords.trim()}`,
       tone && `톤: ${tone}`,
-      imageUrls.length > 0 && `첨부 이미지 URL (포스트에 활용): ${imageUrls.join(", ")}`,
+      imageUrls.length > 0 &&
+        `첨부 이미지 URL (포스트에 활용): ${imageUrls.join(", ")}`,
       autoUpload && "네이버 블로그 자동 업로드: 예",
       notes.trim() && `추가 요청사항: ${notes.trim()}`,
     ].filter(Boolean) as string[];
@@ -105,13 +113,17 @@ export function BlogPostFormCard({
     "w-full rounded-[4px] border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-[#03C75A] transition-colors";
   const labelCls = "block text-[11px] font-medium text-neutral-500 mb-1";
   const pillActive = "bg-[#03C75A] text-white border-[#03C75A]";
-  const pillIdle = "bg-white text-neutral-600 border-neutral-200 hover:border-[#03C75A]";
+  const pillIdle =
+    "bg-white text-neutral-600 border-neutral-200 hover:border-[#03C75A]";
 
   return (
     <div className="rounded-[5px] border border-[#c8f0d8] bg-white overflow-hidden w-full max-w-[480px] shadow-sm">
       <div className="px-4 py-3 bg-[#f0fff6] border-b border-[#c8f0d8] flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M13.5 12.5L10 7H7v10h3.5V11.5L15 17h3V7h-3.5v5.5z" fill="#03C75A"/>
+          <path
+            d="M13.5 12.5L10 7H7v10h3.5V11.5L15 17h3V7h-3.5v5.5z"
+            fill="#03C75A"
+          />
         </svg>
         <span className="text-[11px] font-bold uppercase tracking-wider text-[#028a3d]">
           네이버 Blog 포스트 작성
@@ -242,8 +254,12 @@ export function BlogPostFormCard({
         {/* 네이버 블로그 자동 업로드 */}
         <div className="flex items-center justify-between py-1">
           <div>
-            <p className="text-[12px] text-neutral-700">네이버 블로그 자동 업로드</p>
-            <p className="text-[11px] text-neutral-400">작성 후 블로그에 바로 게시합니다</p>
+            <p className="text-[12px] text-neutral-700">
+              네이버 블로그 자동 업로드
+            </p>
+            <p className="text-[11px] text-neutral-400">
+              작성 후 블로그에 바로 게시합니다
+            </p>
           </div>
           <button
             type="button"
