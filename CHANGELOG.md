@@ -58,6 +58,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.1] — feature-marketing (네이버 블로그 자동 업로드 버그 수정)
+
+### Fixed — 네이버 블로그 자동 업로드 (`backend/app/services/naver_blog_runner.py`)
+
+- **이미지 중앙정렬** — 파일 업로드 완료 후 SE One 이미지 툴바의 가운데 정렬 버튼을 자동 클릭.
+- **본문 잘림 방지** — `paste_text()` 클립보드 대기 시간 `0.3s → 0.6s`, 붙여넣기 후 대기 `0.4s → 0.6s`. 이미지 업로드 완료 대기 `2.5s → 4.0s`. 세그먼트 간 대기 `120ms → 300ms`. `focus_body_area()` 헬퍼 추가로 이미지 삽입 후 텍스트 커서 복귀 안정화.
+
+### Fixed — 업로드 URL 클릭 불가 (`backend/app/agents/marketing.py`)
+
+- **업로드 결과 분리** — `run_blog_post`에서 `run()` 반환값에 포함된 업로드 결과 텍스트("✅ 네이버 블로그에 업로드했어요!")를 블로그 본문과 분리한 뒤 `[[NAVER_BLOG_POST]]` 카드 마커 생성, 그 후 업로드 결과를 카드 뒤에 붙임. 기존에는 업로드 URL이 `BlogBody`(plain text 렌더) 안에 포함되어 클릭 불가였던 문제 해결.
+- **업로드 URL 마크다운 링크화** — `🔗 {url}` → `[🔗 블로그에서 확인하기]({url})` 형식으로 변경. `MarkdownMessage`가 클릭 가능한 `<a target="_blank">` 링크로 렌더.
+
+---
+
 ## [2.1.0] — feature-marketing (마케팅 UX 개선 — 인스타그램 피드·네이버 블로그 미리보기·자동 업로드 이미지 삽입)
 
 ### Added — 네이버 블로그 미리보기 카드 (`frontend/components/chat/NaverBlogPostCard.tsx`)

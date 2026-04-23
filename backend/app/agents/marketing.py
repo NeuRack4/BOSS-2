@@ -664,10 +664,22 @@ async def run_blog_post(
     )
     reply = await run(synthetic, account_id, history, rag_context, long_term_context, image_urls=image_urls, allow_naver_upload=auto_upload)
 
-    # 네이버 블로그 미리보기 카드 마커 추가
+    # 업로드 결과("✅ 네이버 블로그에 업로드했어요!" 이후)를 분리해 카드 생성에서 제외
+    upload_suffix = ""
+    _upload_marker = "✅ 네이버 블로그에 업로드했어요!"
+    if _upload_marker in reply:
+        _idx = reply.index(_upload_marker)
+        upload_suffix = "\n\n" + reply[_idx:]
+        reply = reply[:_idx].rstrip()
+
+    # 네이버 블로그 미리보기 카드 마커 추가 (블로그 본문만)
     if "[[NAVER_BLOG_POST]]" not in reply:
         preview = await _maybe_naver_blog_preview(reply, image_urls)
         reply += preview
+
+    # 업로드 결과를 카드 마커 뒤에 붙임 → InlineChat에서 MarkdownMessage로 렌더
+    if upload_suffix:
+        reply += upload_suffix
 
     return reply
 
@@ -1594,7 +1606,7 @@ async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> 
             image_urls=image_urls or [],
         )
         if post_url:
-            return f"✅ 네이버 블로그에 업로드했어요!\n🔗 {post_url}"
+            return f"✅ 네이버 블로그에 업로드했어요!\n\n[🔗 블로그에서 확인하기]({post_url})"
         return "✅ 네이버 블로그에 업로드했어요!"
     except ImportError:
         return "⚠️ playwright가 설치되지 않았습니다. `pip install playwright && playwright install chromium`을 실행해 주세요."
