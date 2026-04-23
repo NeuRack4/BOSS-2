@@ -36,7 +36,7 @@ export function EventPlanFormCard({
 
   const toggleChannel = (ch: string) => {
     setChannels((prev) =>
-      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
+      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch],
     );
   };
 
@@ -46,9 +46,13 @@ export function EventPlanFormCard({
     // 채널별 명시적 생성 지시 — 플래너가 체이닝 dispatch 하도록
     const channelInstructions: string[] = [];
     if (channels.includes("인스타그램"))
-      channelInstructions.push("인스타그램 게시물(캡션+해시태그+이미지)도 바로 작성해줘");
+      channelInstructions.push(
+        "인스타그램 게시물(캡션+해시태그+이미지)도 바로 작성해줘",
+      );
     if (channels.includes("네이버 블로그"))
-      channelInstructions.push("네이버 블로그 포스트도 바로 작성해서 업로드해줘");
+      channelInstructions.push(
+        "네이버 블로그 포스트도 바로 작성해서 업로드해줘",
+      );
 
     const lines: string[] = [
       "이벤트 기획해줘.",

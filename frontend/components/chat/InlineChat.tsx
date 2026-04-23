@@ -543,10 +543,25 @@ export const InlineChat = () => {
               status?: "uploading" | "done" | "error";
             } | null;
           }) => {
+            const raw = m.content ?? "";
+            const { clean: afterSales, action: salesAction } =
+              parseSalesAction(raw);
+            const { clean: afterCost, action: costAction } =
+              parseCostAction(afterSales);
+            const { clean: afterWork, action: workAction } =
+              parseWorkTableAction(afterCost);
+            const { cleaned: afterShorts, payload: shortsWizard } =
+              extractShortsWizardPayload(afterWork);
+            const { cleaned: afterMenu, payload: menuChart } =
+              extractMenuChartPayload(afterShorts);
             const { cleaned: afterMktReport, payload: mktReport } =
-              extractMarketingReportPayload(m.content ?? "");
-            const { cleaned: cleanedContent, payload: igPayload } =
+              extractMarketingReportPayload(afterMenu);
+            const { cleaned: afterInstagram, payload: igPayload } =
               extractInstagramPayload(afterMktReport);
+            const { cleaned: afterEventForm, hasForm: eventPlanForm } =
+              extractEventPlanForm(afterInstagram);
+            const { cleaned: cleanedContent, payload: employeePicker } =
+              extractEmployeePickerPayload(afterEventForm);
             return {
               role: m.role === "user" ? "user" : "assistant",
               content: cleanedContent,
@@ -558,11 +573,38 @@ export const InlineChat = () => {
                     sizeKb: m.attachment.size_kb ?? undefined,
                   }
                 : undefined,
+              salesAction,
+              costAction,
+              workAction: workAction ?? undefined,
+              shortsWizard: shortsWizard ?? undefined,
+              menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
               instagram: igPayload ?? undefined,
+              eventPlanForm: eventPlanForm || undefined,
+              employeePicker: employeePicker ?? undefined,
             };
           },
         );
+        // workConfirmed 복원: workAction이 있는 assistant 메시지 뒤에
+        // 매칭되는 __WORK_TABLE_CONFIRMED__ 유저 메시지가 있으면 true 로 표시
+        for (let mi = 0; mi < mapped.length; mi++) {
+          const m = mapped[mi];
+          if (m.role !== "assistant" || !m.workAction) continue;
+          const { employee_id, pay_month } = m.workAction;
+          const prefix = `__WORK_TABLE_CONFIRMED__:`;
+          const confirmed = mapped.slice(mi + 1).some((nm) => {
+            if (nm.role !== "user") return false;
+            const raw2 = msgs[mapped.indexOf(nm)]?.content ?? nm.content ?? "";
+            if (!raw2.startsWith(prefix)) return false;
+            try {
+              const p = JSON.parse(raw2.slice(prefix.length).trim());
+              return p.employee_id === employee_id && p.pay_month === pay_month;
+            } catch {
+              return false;
+            }
+          });
+          if (confirmed) mapped[mi] = { ...m, workConfirmed: true };
+        }
         // 마지막 assistant 메시지의 speaker 로 배지 복원
         const lastAssistant = [...msgs]
           .reverse()
