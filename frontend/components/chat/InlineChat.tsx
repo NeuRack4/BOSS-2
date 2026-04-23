@@ -52,6 +52,11 @@ import {
   type MenuAnalysisPayload,
 } from "./MenuAnalysisCard";
 import {
+  SalesInsightCard,
+  extractInsightPayload,
+  type SalesInsightPayload,
+} from "./SalesInsightCard";
+import {
   MarketingReportCard,
   extractMarketingReportPayload,
   type MarketingReportPayload,
@@ -103,6 +108,7 @@ type Message = {
   costAction?: CostActionData;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
+  salesInsight?: SalesInsightPayload;
   instagram?: InstagramPayload;
   marketingReport?: MarketingReportPayload;
   eventPlanForm?: boolean;
@@ -1016,8 +1022,10 @@ export const InlineChat = () => {
           parseCostAction(afterSales);
         const { cleaned: afterShorts, payload: shortsWizard } =
           extractShortsWizardPayload(afterCost);
+        const { cleaned: afterInsight, payload: salesInsight } =
+          extractInsightPayload(afterShorts);
         const { cleaned: afterMenu, payload: menuChart } =
-          extractMenuChartPayload(afterShorts);
+          extractMenuChartPayload(afterInsight);
         const { cleaned: afterMarketing, payload: marketingReport } =
           extractMarketingReportPayload(afterMenu);
         const { cleaned: afterInstagram, payload: instagram } =
@@ -1038,6 +1046,7 @@ export const InlineChat = () => {
             costAction,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
+            salesInsight: salesInsight ?? undefined,
             marketingReport: marketingReport ?? undefined,
             instagram: instagram ?? undefined,
             eventPlanForm: eventPlanForm || undefined,
@@ -1314,6 +1323,8 @@ export const InlineChat = () => {
                 msg.reviewReply ?? null;
               let menuChartPayload: MenuAnalysisPayload | null =
                 msg.menuChart ?? null;
+              let salesInsightPayload: SalesInsightPayload | null =
+                msg.salesInsight ?? null;
 
               const isOnboardingForm =
                 msg.role === "assistant" &&
@@ -1449,6 +1460,11 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && msg.shortsWizard && (
                     <div className="ml-8">
                       <ShortsWizardCard payload={msg.shortsWizard} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && salesInsightPayload && (
+                    <div className="ml-8 max-w-[85%]">
+                      <SalesInsightCard payload={salesInsightPayload} />
                     </div>
                   )}
                   {msg.role === "assistant" && menuChartPayload && (

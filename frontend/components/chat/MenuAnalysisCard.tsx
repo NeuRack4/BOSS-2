@@ -234,25 +234,30 @@ function PieTab({ items }: { items: MenuAnalysisItem[] }) {
       </div>
 
       {/* 범례 */}
-      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+      <div className="flex flex-col gap-2 min-w-0 flex-1">
         {cats.map((cat, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 cursor-pointer"
+            className="cursor-pointer"
             onMouseEnter={() => setHovered(cat.name)}
             onMouseLeave={() => setHovered(null)}
           >
-            <div
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: cat.color }}
-            />
-            <span className="truncate text-[13px] text-[#2e2719]">
-              {cat.name}
-            </span>
-            <span className="ml-auto shrink-0 font-mono text-[12px] text-[#8c7e66]">
-              {cat.ratio}%
-            </span>
-            <div className="w-16 h-[4px] rounded-full bg-[#e8e3d8] overflow-hidden">
+            <div className="flex items-center gap-1.5 mb-1">
+              <div
+                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                style={{ backgroundColor: cat.color }}
+              />
+              <span className="truncate text-[13px] text-[#2e2719]">
+                {cat.name}
+              </span>
+              <span className="shrink-0 font-mono text-[12px] font-semibold text-[#2e2719]">
+                {cat.ratio}%
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-[#8c7e66]">
+                ({cat.amount.toLocaleString()}원)
+              </span>
+            </div>
+            <div className="h-[5px] w-full rounded-full bg-[#e8e3d8] overflow-hidden">
               <div
                 className="h-full rounded-full"
                 style={{ width: `${cat.ratio}%`, backgroundColor: cat.color }}
@@ -507,34 +512,62 @@ function ScatterTab({ items }: { items: MenuAnalysisItem[] }) {
       </div>
 
       {/* 인사이트 */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {items
-          .filter((i) => i.avg_unit_price >= medP && i.total_quantity >= medQ)
-          .slice(0, 2)
-          .map((i, idx) => (
-            <div key={idx} className="rounded-[4px] bg-[#e8edd8] px-2 py-1.5">
-              <div className="text-[10px] font-semibold text-[#4a5c28]">
-                ⭐ {i.item_name}
+      {(() => {
+        const starItems   = items.filter((i) => i.avg_unit_price >= medP && i.total_quantity >= medQ).slice(0, 3);
+        const reviewItems = items.filter((i) => i.avg_unit_price <  medP && i.total_quantity <  medQ).slice(0, 3);
+        return (
+          <div className="flex flex-col gap-2">
+            {/* 효자 메뉴 그룹 */}
+            {starItems.length > 0 && (
+              <div className="rounded-[5px] bg-[#e8edd8] px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-[13px]">⭐</span>
+                  <span className="text-[12px] font-bold text-[#4a5c28]">효자 메뉴 · 집중 육성 추천</span>
+                </div>
+                <div className="flex flex-col gap-1 mb-2">
+                  {starItems.map((i, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-[13px] font-bold text-[#2e4a18]">{i.item_name}</span>
+                      <span className="text-[11px] text-[#6a7843]">
+                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량 {i.total_quantity}개
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#5a6a30]">
+                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}원·{Math.round(medQ)}개) 이상이에요.
+                  현재 운영을 유지하며 마케팅을 집중해 더 키워보세요.
+                </p>
               </div>
-              <div className="text-[9px] text-[#6a7843]">
-                효자 메뉴 · 집중 육성 추천
+            )}
+
+            {/* 재검토 메뉴 그룹 */}
+            {reviewItems.length > 0 && (
+              <div className="rounded-[5px] bg-[#f4e8e0] px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-[13px]">🔻</span>
+                  <span className="text-[12px] font-bold text-[#8a3a28]">가격 인상 또는 메뉴 재검토</span>
+                </div>
+                <div className="flex flex-col gap-1 mb-2">
+                  {reviewItems.map((i, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-[13px] font-bold text-[#8a3a28]">{i.item_name}</span>
+                      <span className="text-[11px] text-[#a04030]">
+                        단가 {i.avg_unit_price.toLocaleString()}원 · 판매량 {i.total_quantity}개
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#6a2a18]">
+                  단가와 판매량이 모두 평균({Math.round(medP).toLocaleString()}원·{Math.round(medQ)}개) 이하예요.
+                  가격을 올려 수익성을 개선하거나, 판매량이 낮은 원인(홍보 부족·위치·계절성)을 파악해
+                  메뉴 구성 변경을 검토해보세요.
+                </p>
               </div>
-            </div>
-          ))}
-        {items
-          .filter((i) => i.avg_unit_price < medP && i.total_quantity < medQ)
-          .slice(0, 2)
-          .map((i, idx) => (
-            <div key={idx} className="rounded-[4px] bg-[#f4e8e0] px-2 py-1.5">
-              <div className="text-[9px] font-semibold text-[#8a3a28]">
-                🔻 {i.item_name}
-              </div>
-              <div className="text-[9px] text-[#c05a3a]">
-                가격 인상 또는 메뉴 재검토
-              </div>
-            </div>
-          ))}
-      </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
