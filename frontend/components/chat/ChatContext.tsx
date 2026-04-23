@@ -58,6 +58,8 @@ type ChatContextValue = {
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   userId: string | null;
   fetchSessions: () => Promise<void>;
+  avatarUrl: string | null;
+  setAvatarUrl: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -78,6 +80,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<ChatMessageBase[]>([]);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
@@ -93,6 +96,21 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        setAvatarUrl(
+          (data as { avatar_url: string | null } | null)?.avatar_url ?? null,
+        );
+      });
+  }, [userId]);
 
   const fetchSessions = useCallback(async () => {
     if (!userId) return;
@@ -168,6 +186,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setLoading,
       userId,
       fetchSessions,
+      avatarUrl,
+      setAvatarUrl,
     }),
     [
       registerSender,
@@ -188,6 +208,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       loading,
       userId,
       fetchSessions,
+      avatarUrl,
     ],
   );
 

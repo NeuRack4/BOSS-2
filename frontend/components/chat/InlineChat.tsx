@@ -12,13 +12,13 @@ import {
 } from "react";
 import {
   ArrowUpIcon,
-  Bot,
   Camera,
   Loader2,
   Paperclip,
   PlusIcon,
   X,
 } from "lucide-react";
+import { BossAvatar, EmployeeAvatar } from "./ChatAvatars";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -397,6 +397,7 @@ export const InlineChat = () => {
     setLoading,
     userId,
     fetchSessions,
+    avatarUrl,
   } = useChat();
   const messages = _messages as Message[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -878,11 +879,10 @@ export const InlineChat = () => {
         const receiptItems = nonDocs.filter(
           (it) => it.final_category === "receipt",
         );
-        const menuItems = nonDocs.filter(
-          (it) => it.final_category === "menu",
-        );
+        const menuItems = nonDocs.filter((it) => it.final_category === "menu");
         const otherNonDocs = nonDocs.filter(
-          (it) => it.final_category !== "receipt" && it.final_category !== "menu",
+          (it) =>
+            it.final_category !== "receipt" && it.final_category !== "menu",
         );
 
         if (otherNonDocs.length > 0) {
@@ -918,11 +918,11 @@ export const InlineChat = () => {
           // 메뉴판 이미지 — sales agent 의 `sales_menu_ocr` capability 가 수행.
           const latestMenu = menuItems[menuItems.length - 1];
           setPendingReceipt({
-            storage_path:  latestMenu.storage_path  || "",
-            bucket:        latestMenu.bucket        || "documents-uploads",
-            mime_type:     latestMenu.mime_type      || "image/jpeg",
+            storage_path: latestMenu.storage_path || "",
+            bucket: latestMenu.bucket || "documents-uploads",
+            mime_type: latestMenu.mime_type || "image/jpeg",
             original_name: latestMenu.original_name || "",
-            size_bytes:    latestMenu.size_bytes     || 0,
+            size_bytes: latestMenu.size_bytes || 0,
           });
           await sendRef.current?.(
             `방금 업로드한 메뉴판 "${latestMenu.title}" 을 메뉴로 등록해줘.`,
@@ -1443,8 +1443,21 @@ export const InlineChat = () => {
                     )}
                   >
                     {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                        <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                      <div className="mt-0.5 shrink-0 overflow-hidden rounded-full">
+                        <BossAvatar size={24} />
+                      </div>
+                    )}
+                    {msg.role === "user" && (
+                      <div className="order-last mt-0.5 shrink-0 overflow-hidden rounded-full">
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt="me"
+                            className="h-6 w-6 object-cover"
+                          />
+                        ) : (
+                          <EmployeeAvatar size={24} />
+                        )}
                       </div>
                     )}
                     {msg.attachment ? (
@@ -2041,8 +2054,8 @@ export const InlineChat = () => {
             })}
             {loading && (
               <div className="flex justify-start gap-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                  <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                <div className="mt-0.5 shrink-0 overflow-hidden rounded-full">
+                  <BossAvatar size={24} />
                 </div>
                 <div className="rounded-[5px] bg-[#f1ece2] px-3 py-2">
                   <Loader2 className="h-4 w-4 animate-spin text-[#030303]/60" />
