@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Literal, TypedDict
 
 from langgraph.graph import StateGraph, END
@@ -42,6 +45,16 @@ from app.agents._admin_templates import (
 )
 
 log = logging.getLogger(__name__)
+
+_TAX_HR_KNOWLEDGE_DIR = Path(__file__).parent / "_tax_hr_knowledge"
+
+
+@lru_cache(maxsize=None)
+def _load_knowledge(filename: str) -> str:
+    try:
+        return (_TAX_HR_KNOWLEDGE_DIR / filename).read_text(encoding="utf-8")
+    except Exception:
+        return ""
 
 
 VALID_TYPES: tuple[str, ...] = (
@@ -103,7 +116,7 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 5. 법령·관행 근거가 주입되면 그 범위 안에서만 판단하세요. 새 판례 날조 금지.
 6. artifact 저장 시 sub_domain 필드를 반드시 포함하세요. Documents 서브허브는 4종:
    - **Review**      — 공정 중립이 필요한 서류. `contract`, `proposal` 이 여기.
-   - **Tax&HR**      — 인사평가·세무 관련. `checklist`, `guide` 가 여기.
+   - **Tax&HR**      — 세무·급여 관련. `checklist`, `guide`, `payroll_doc`, `tax_calendar` 이 여기.
    - **Legal**       — 법률 자문 (`legal_advice`). 별도 서브브랜치에서 자동 처리.
    - **Operations**  — 서류 초안·행정 업무. `estimate`, `notice`, 국가 지원사업 신청서·행정 처리 신청서가 여기.
 
@@ -362,16 +375,19 @@ _CATEGORY_GUIDANCE: dict[str, str] = {
 - 저장 시 `sub_domain: Review`.
 """,
     "tax_hr": """\
-[카테고리: Tax&HR — 인사평가·세무 (채용 제외)]
-이 카테고리는 세무 신고·4대보험·급여·인사평가·근태 관리 관련 문서를 다룹니다.
-- 현재 지원 타입: checklist(체크리스트), guide(가이드/매뉴얼).
-  인사평가서·급여명세서·세무 캘린더 capability 는 추후 추가 예정.
+[카테고리: Tax&HR — 세무·급여 문서 (채용 제외)]
+이 카테고리는 세무 신고·4대보험·급여 관련 문서를 다룹니다.
+- 지원 타입: checklist(체크리스트), guide(가이드/매뉴얼),
+  payroll_doc(급여명세서·원천징수영수증·4대보험신고서), tax_calendar(세무 캘린더).
+- 급여명세서(payroll_doc)는 엑셀 파일로 자동 생성됩니다.
 - 프로필의 직원 수·업종 정보가 있으면 적극 활용. 없으면 CHOICES 로 좁혀가세요.
 - **채용(모집·공고·면접)은 recruitment 도메인 소관**이므로 이 카테고리에서 다루지 마세요.
 - type 이 모호하면:
   [CHOICES]
   체크리스트 (단계별 확인 항목)
   가이드 (절차·원칙 안내문)
+  급여명세서 (엑셀 자동생성)
+  세무 캘린더
   [/CHOICES]
 - 저장 시 `sub_domain: Tax&HR`.
 """,
@@ -903,12 +919,51 @@ async def run_checklist_guide(
     topic: str,
     kind: str = "checklist",
 ) -> str:
+    """체크리스트·가이드 작성 — 연말정산 특화 지식 주입."""
     artifact_type = "checklist" if kind == "checklist" else "guide"
-    synthetic = (
-        f"'{topic}' 주제로 {kind} 문서를 작성해주세요. [ARTIFACT] 블록(type={artifact_type}) 포함.\n\n"
-        f"원본 사용자 요청: {message}"
+
+    knowledge = ""
+    if any(k in topic for k in ("연말정산", "year-end", "연말 정산")):
+        knowledge = _load_knowledge("year_end_checklist.md")
+
+    sub_hub_list = await list_sub_hub_titles(account_id, "documents")
+    feedback = await feedback_context(account_id, "documents")
+
+    system = (
+        SYSTEM_PROMPT
+        + "\n\n"
+        + _CATEGORY_GUIDANCE["tax_hr"]
+        + f"\n\n[작업 지시]\n"
+        f"'{topic}' 주제로 {kind} 문서를 작성하세요.\n"
+        f"- 실용적·완결된 체크 항목으로 구성\n"
+        f"- 법적 근거 있는 항목은 법조 명시\n"
+        f"- 응답 마지막에 [ARTIFACT](type={artifact_type}, sub_domain=Tax&HR) 포함\n"
+        + (f"\n\n[참조 지식]\n{knowledge}" if knowledge else "")
+        + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
+        + today_context()
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if feedback:
+        system += f"\n\n[피드백]\n{feedback}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *history,
+            {"role": "user", "content": message},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title=f"{topic} {kind}",
+        valid_types=VALID_TYPES,
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return reply
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1297,22 +1352,71 @@ async def run_hr_evaluation(
     metrics: list[str] | None = None,
     evaluation_type: str = "연간",
 ) -> str:
-    """인사평가서 템플릿 생성. 프로필(employees_count, business_type) 자동 활용."""
+    """인사평가서 — 프로필 + 지식 파일 주입, LLM 직접 호출."""
+    sb = get_supabase()
+    try:
+        profile_row = (
+            sb.table("profiles")
+            .select("business_type,employees_count,business_name")
+            .eq("id", account_id)
+            .maybe_single()
+            .execute()
+        )
+        profile = profile_row.data or {}
+    except Exception:
+        profile = {}
+
+    knowledge = _load_knowledge("hr_evaluation_guide.md")
+    sub_hub_list = await list_sub_hub_titles(account_id, "documents")
+    feedback = await feedback_context(account_id, "documents")
+
     metrics_line = ", ".join(metrics) if metrics else "업무 성과·태도·고객 응대·팀워크·성장 의지"
-    lines = [
-        f"[평가 대상] {evaluatee}",
-        f"[평가 기간] {period}",
-        f"[평가 유형] {evaluation_type} (연간/반기/분기/수시)",
-        f"[평가 지표] {metrics_line}",
-    ]
-    synthetic = (
-        "인사평가서를 작성해주세요. "
-        "[ARTIFACT] 블록(type=hr_evaluation, sub_domain=Tax&HR) 포함. "
-        "프로필의 직원 수·업종을 반영한 실용적 지표(5점 척도) + 종합 등급 포함.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    biz_type = profile.get("business_type") or "소매/서비스업"
+    emp_count = profile.get("employees_count")
+
+    system = (
+        SYSTEM_PROMPT
+        + "\n\n"
+        + _CATEGORY_GUIDANCE["tax_hr"]
+        + "\n\n[작업 지시]\n"
+        f"아래 조건으로 인사평가서를 작성하세요.\n"
+        f"- 평가 대상: {evaluatee}\n"
+        f"- 평가 기간: {period} ({evaluation_type})\n"
+        f"- 평가 지표: {metrics_line}\n"
+        f"- 업종: {biz_type}"
+        + (f" | 직원수: {emp_count}명" if emp_count else "")
+        + "\n\n작성 규칙:\n"
+        "1. 지표별 5점 척도 표 (항목 | 점수 | 평가 근거)\n"
+        "2. 종합 등급(S/A/B/C/D) + 코멘트 3~5줄\n"
+        "3. 서명·날짜 란 포함\n"
+        "4. 법적 보관 의무 안내 (3년, 근로기준법 §42)\n"
+        f"5. 응답 마지막에 [ARTIFACT](type=hr_evaluation, sub_domain=Tax&HR, title={evaluatee} 인사평가서 {period}) 포함\n"
+        + (f"\n\n[인사평가 기준 자료]\n{knowledge}" if knowledge else "")
+        + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
+        + today_context()
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if feedback:
+        system += f"\n\n[피드백]\n{feedback}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *history,
+            {"role": "user", "content": message},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title=f"{evaluatee} 인사평가서 {period}",
+        valid_types=VALID_TYPES,
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return reply
 
 
 async def run_payroll_doc(
@@ -1327,23 +1431,194 @@ async def run_payroll_doc(
     pay_month: str,
     extra_note: str | None = None,
 ) -> str:
-    """급여명세서·원천징수영수증·4대보험 신고용 문서 초안."""
-    lines = [
-        f"[문서 종류] {doc_kind} (급여명세서 | 원천징수영수증 | 4대보험 신고서)",
-        f"[대상자] {target}",
-        f"[지급월/대상기간] {pay_month}",
-    ]
-    if extra_note:
-        lines.append(f"[특이사항] {extra_note}")
-    synthetic = (
-        "급여·세무 문서 초안을 작성해주세요. "
-        "[ARTIFACT] 블록(type=payroll_doc, sub_domain=Tax&HR) 포함. "
-        "4대보험 요율·소득세 간이세액표·비과세 한도를 반영. "
-        "당해 공식 요율은 발행 시 재확인 안내 문구 포함.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    """급여명세서(Excel 자동생성) · 원천징수영수증 · 4대보험신고서 초안."""
+    import asyncio as _asyncio
+    from app.agents._payroll_excel import generate_payroll_excel
+
+    _PAYROLL_SLIP_KEYWORDS = ("급여명세서", "임금명세서", "급여 명세서", "임금 명세서")
+    is_payslip = any(k in doc_kind for k in _PAYROLL_SLIP_KEYWORDS)
+
+    sb = get_supabase()
+
+    # ── 원천징수영수증 / 4대보험 신고서 → LLM 마크다운 ──
+    if not is_payslip:
+        knowledge = _load_knowledge("tax_calendar_2026.md")
+        sub_hub_list = await list_sub_hub_titles(account_id, "documents")
+        feedback = await feedback_context(account_id, "documents")
+        user_msg = message
+        if extra_note:
+            user_msg = f"[특이사항] {extra_note}\n\n{message}"
+        system = (
+            SYSTEM_PROMPT
+            + "\n\n"
+            + _CATEGORY_GUIDANCE["tax_hr"]
+            + f"\n\n[작업 지시]\n"
+            f"'{doc_kind}' 문서를 작성하세요. 대상자: {target}, 기간: {pay_month}.\n"
+            f"2026년 기준 4대보험 요율·소득세 간이세액표를 적용하고, 신고 전 재확인 안내 포함.\n"
+            f"응답 마지막에 [ARTIFACT](type=payroll_doc, sub_domain=Tax&HR) 포함.\n"
+            + (f"\n\n[세무 기준 자료]\n{knowledge}" if knowledge else "")
+            + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
+            + today_context()
+        )
+        if long_term_context:
+            system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+        if feedback:
+            system += f"\n\n[피드백]\n{feedback}"
+        resp = await chat_completion(
+            messages=[{"role": "system", "content": system}, *history, {"role": "user", "content": user_msg}],
+        )
+        reply = resp.choices[0].message.content or ""
+        await save_artifact_from_reply(
+            account_id, "documents", reply,
+            default_title=f"{doc_kind} — {target}",
+            valid_types=VALID_TYPES,
+            type_to_subhub=_TYPE_TO_SUBHUB,
+        )
+        return reply
+
+    # ── 급여명세서 — Excel 자동생성 경로 ──
+    try:
+        profile_row = (
+            sb.table("profiles")
+            .select("business_type,employees_count")
+            .eq("id", account_id)
+            .maybe_single()
+            .execute()
+        )
+        profile = profile_row.data or {}
+    except Exception:
+        profile = {}
+
+    # LLM으로 급여 구조화 데이터 추출 (gpt-4o-mini, JSON only)
+    _RATES_BLOCK = (
+        "[2026년 4대보험 요율 — 근로자 부담]\n"
+        "- 국민연금: 4.5% (상한 590만원)\n"
+        "- 건강보험: 3.545%\n"
+        "- 장기요양보험: 건강보험료 × 12.95%\n"
+        "- 고용보험: 0.9%\n"
+        "- 소득세: 간이세액표 기준 (비과세 식대 월 20만원 공제 후)\n"
+        "- 초단시간(주 15h 미만): 4대보험 미적용, 소득세만 공제\n\n"
+        "[고용 유형]\n"
+        "- 초단시간: 1주 소정근로 15시간 미만 (단시간 알바)\n"
+        "- 시급제: 1주 15시간 이상 시급/일급\n"
+        "- 월급제: 월 고정급"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    json_system = (
+        "당신은 급여 계산 전문가입니다. 사용자 요청에서 급여명세서 데이터를 추출해 JSON만 반환하세요. 설명 없이 JSON만.\n\n"
+        + _RATES_BLOCK
+        + f"\n\n[사업장 프로필] 업종: {profile.get('business_type') or '미상'}"
+        + f" | 직원수: {profile.get('employees_count') or '미상'}\n\n"
+        'JSON 스키마 (알 수 없는 항목은 0):\n'
+        '{"employment_type":"초단시간|시급제|월급제","has_allowances":bool,'
+        '"name":"string","pay_date":"YYYY-MM-DD",'
+        '"hourly_rate":0,"hours_worked":0.0,"base_pay":0,'
+        '"overtime_hours":0.0,"overtime_pay":0,'
+        '"night_hours":0.0,"night_pay":0,'
+        '"holiday_hours":0.0,"holiday_pay":0,'
+        '"meal_allowance":0,"family_allowance":0,'
+        '"income_tax":0,"national_pension":0,"health_insurance":0,'
+        '"ltc_insurance":0,"employment_insurance":0,'
+        '"total_pay":0,"total_deductions":0,"net_pay":0}'
+    )
+    user_context = f"대상자: {target}, 지급월: {pay_month}"
+    if extra_note:
+        user_context += f", 특이사항: {extra_note}"
+    user_context += f"\n\n{message}"
+
+    json_resp = await chat_completion(
+        messages=[{"role": "system", "content": json_system}, {"role": "user", "content": user_context}],
+        model="gpt-4o-mini",
+        temperature=0,
+    )
+    raw_json = (json_resp.choices[0].message.content or "{}").strip()
+    try:
+        if raw_json.startswith("```"):
+            raw_json = re.sub(r"^```[a-z]*\n?", "", raw_json).rstrip("`").strip()
+        payroll_data = json.loads(raw_json)
+    except Exception:
+        payroll_data = {}
+
+    if not payroll_data.get("name"):
+        payroll_data["name"] = target
+    if not payroll_data.get("pay_date"):
+        try:
+            payroll_data["pay_date"] = f"{pay_month.strip()[:7]}-25"
+        except Exception:
+            pass
+
+    # Excel 생성
+    try:
+        excel_bytes, filename = generate_payroll_excel(payroll_data)
+    except Exception as exc:
+        log.exception("급여명세서 Excel 생성 실패: %s", exc)
+        return (
+            "급여명세서 엑셀 생성 중 오류가 발생했어요. 데이터를 확인 후 다시 시도해 주세요.\n\n"
+            f"[ARTIFACT]\ntype: payroll_doc\ntitle: {target} 급여명세서\nsub_domain: Tax&HR\n[/ARTIFACT]"
+        )
+
+    # Supabase Storage 업로드
+    _BUCKET = "documents-uploads"
+    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{filename}"
+
+    def _upload_excel() -> str:
+        try:
+            sb.storage.from_(_BUCKET).upload(
+                path=storage_key,
+                file=excel_bytes,
+                file_options={
+                    "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "upsert": "false",
+                },
+            )
+            res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
+            if isinstance(res, dict):
+                return res.get("signedURL") or res.get("signedUrl") or ""
+            return ""
+        except Exception as exc:
+            log.warning("급여명세서 Storage 업로드 실패: %s", exc)
+            return ""
+
+    download_url = await _asyncio.to_thread(_upload_excel)
+
+    # 답변 조합
+    emp = payroll_data.get("employment_type", "")
+    total_pay = payroll_data.get("total_pay", 0)
+    total_ded = payroll_data.get("total_deductions", 0)
+    net_pay = payroll_data.get("net_pay", 0)
+
+    lines = [f"**{target}** ({pay_month}) 급여명세서를 작성했어요."]
+    if emp:
+        lines.append(f"- 고용 유형: {emp}")
+    if total_pay:
+        lines.append(f"- 지급액 합계: {total_pay:,}원")
+    if total_ded:
+        lines.append(f"- 공제액 합계: {total_ded:,}원")
+    if net_pay:
+        lines.append(f"- **실수령액: {net_pay:,}원**")
+
+    reply = "\n".join(lines)
+    if download_url:
+        reply += f"\n\n[📥 급여명세서 엑셀 다운로드]({download_url})"
+    else:
+        reply += "\n\n(파일 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.)"
+    reply += "\n\n> ⚠️ 4대보험 요율·소득세는 2026년 기준이며, 신고 전 국세청·공단 공식 자료로 재확인하세요."
+    reply += (
+        f"\n\n[ARTIFACT]\ntype: payroll_doc\ntitle: {target} 급여명세서 {pay_month}\n"
+        f"sub_domain: Tax&HR\n"
+        + (f"file_url: {download_url}\n" if download_url else "")
+        + "[/ARTIFACT]"
+    )
+
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title=f"{target} 급여명세서 {pay_month}",
+        valid_types=VALID_TYPES,
+        extra_meta_keys=("file_url",),
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return reply
 
 
 async def run_tax_calendar(
@@ -1357,22 +1632,52 @@ async def run_tax_calendar(
     target_year: int,
     extra_note: str | None = None,
 ) -> str:
-    """세무 신고 캘린더 생성 — 부가세·종소세·원천세·4대보험 등."""
-    lines = [
-        f"[사업자 형태] {business_type} (개인 일반/간이 | 법인)",
-        f"[대상 연도] {target_year}",
-    ]
-    if extra_note:
-        lines.append(f"[특이사항] {extra_note}")
-    synthetic = (
-        "세무 신고 캘린더를 작성해주세요. "
-        "[ARTIFACT] 블록(type=tax_calendar, sub_domain=Tax&HR) 포함. "
-        "부가세·종소세·법인세·원천세·4대보험 일정을 월별 표로 구성하고, "
-        "각 일정의 근거 법조(부가세법 §49, 소득세법 §70 등) 를 함께 명시.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    """세무 신고 캘린더 — 지식 파일 주입 + 프로필 업종 활용."""
+    knowledge = _load_knowledge("tax_calendar_2026.md")
+    sub_hub_list = await list_sub_hub_titles(account_id, "documents")
+    feedback = await feedback_context(account_id, "documents")
+
+    system = (
+        SYSTEM_PROMPT
+        + "\n\n"
+        + _CATEGORY_GUIDANCE["tax_hr"]
+        + "\n\n[작업 지시]\n"
+        f"'{business_type}' 사업자의 {target_year}년 세무 신고 캘린더를 작성하세요.\n"
+        "작성 규칙:\n"
+        "1. 월별 표 형식 (월 | 신고·납부 항목 | 기한 | 근거 법조)\n"
+        "2. 사업자 유형(개인 일반/간이/법인)에 따라 해당 항목만 포함\n"
+        "3. 4대보험 납부일도 포함\n"
+        "4. 기한이 주말·공휴일이면 다음 영업일로 자동 연장됨을 안내 (국세기본법 §5)\n"
+        "5. 마지막에 '당해 연도 세율은 법령 개정 시 변동 가능, 신고 전 국세청 재확인' 주의 문구\n"
+        f"6. 응답 마지막에 [ARTIFACT](type=tax_calendar, sub_domain=Tax&HR, title={target_year}년 세무 캘린더) 포함\n"
+        + (f"\n\n[세무 기준 자료]\n{knowledge}" if knowledge else "")
+        + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
+        + today_context()
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if extra_note:
+        system += f"\n\n[특이사항] {extra_note}"
+    if feedback:
+        system += f"\n\n[피드백]\n{feedback}"
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": system},
+            *history,
+            {"role": "user", "content": message},
+        ],
+    )
+    reply = resp.choices[0].message.content or ""
+    await save_artifact_from_reply(
+        account_id,
+        "documents",
+        reply,
+        default_title=f"{target_year}년 세무 캘린더",
+        valid_types=VALID_TYPES,
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+    return reply
 
 
 async def run_review(
@@ -1506,9 +1811,9 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "doc_checklist_guide",
             "description": (
-                "세무·인사·운영 관련 체크리스트 또는 가이드 — "
-                "창업 준비·연말정산·4대보험·근태 관리·인사평가 등 절차·원칙 문서. "
-                "[카테고리: Tax&HR — 인사평가·세무 (채용 제외)]"
+                "세무·운영 관련 체크리스트 또는 가이드 — "
+                "창업 준비·연말정산·4대보험·근태 관리 등 절차·원칙 문서. "
+                "[카테고리: Tax&HR — 세무·급여 (채용 제외)]"
             ),
             "handler": run_checklist_guide,
             "parameters": {
@@ -1571,28 +1876,8 @@ def describe(account_id: str) -> list[dict]:
             },
         },
         # ──────────────────────────────────────────────────────
-        # Step 3-A — Tax&HR 신규 3종
+        # Step 3-A — Tax&HR 신규 2종 (hr_evaluation 제외)
         # ──────────────────────────────────────────────────────
-        {
-            "name": "doc_hr_evaluation",
-            "description": (
-                "인사평가서 템플릿 생성 — 5점 척도 지표 + 종합 등급 포함. "
-                "'직원 평가서 만들어줘', '인사평가 양식 뽑아줘' 요청이면 이 tool. "
-                "프로필의 직원 수·업종 자동 반영. "
-                "[카테고리: Tax&HR — 인사평가 관리]"
-            ),
-            "handler": run_hr_evaluation,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "evaluatee":       {"type": "string", "description": "피평가자 (직원명 또는 직책)"},
-                    "period":          {"type": "string", "description": "평가 기간 (예: 2026년 상반기, 2026-01~06)"},
-                    "metrics":         {"type": "array", "items": {"type": "string"}, "description": "평가 지표 목록"},
-                    "evaluation_type": {"type": "string", "enum": ["연간", "반기", "분기", "수시"], "default": "연간"},
-                },
-                "required": ["evaluatee", "period"],
-            },
-        },
         {
             "name": "doc_payroll_doc",
             "description": (

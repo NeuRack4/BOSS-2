@@ -213,7 +213,6 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "계약서 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
       { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
       { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
-      { name: "인사평가서", prompt: "인사평가서 만들어줘" },
       { name: "급여명세서", prompt: "급여명세서 만들어줘" },
       { name: "세무 캘린더", prompt: "세무 캘린더 만들어줘" },
       { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
