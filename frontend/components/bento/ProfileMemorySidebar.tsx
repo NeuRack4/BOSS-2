@@ -66,6 +66,7 @@ const CHANNELS_LABEL: Record<string, string> = {
 
 export const ProfileMemorySidebar = () => {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [longMem, setLongMem] = useState<LongMemoryRow[]>([]);
   const [memos, setMemos] = useState<MemoRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +82,7 @@ export const ProfileMemorySidebar = () => {
         if (!cancelled) setLoading(false);
         return;
       }
+      if (!cancelled) setEmail(user.email ?? null);
 
       const profileP = supabase
         .from("profiles")
@@ -134,7 +136,7 @@ export const ProfileMemorySidebar = () => {
       aria-label="프로필 및 기억"
     >
       <div className="min-h-0 flex-1 basis-0">
-        <ProfileCard profile={profile} loading={loading} />
+        <ProfileCard profile={profile} email={email} loading={loading} />
       </div>
       <div className="min-h-0 flex-1 basis-0">
         <LongMemoryCard items={longMem} loading={loading} />
@@ -205,9 +207,11 @@ const formatProfileField = (
 
 const ProfileCard = ({
   profile,
+  email,
   loading,
 }: {
   profile: ProfileRow | null;
+  email: string | null;
   loading: boolean;
 }) => {
   const FIELDS: Array<{ label: string; key: keyof ProfileRow }> = [
@@ -243,6 +247,16 @@ const ProfileCard = ({
         </div>
       ) : (
         <div className="space-y-1.5">
+          {email && (
+            <div className="flex items-baseline justify-between gap-2 rounded-[5px] bg-[#fcfcfc]/40 px-3 py-1.5">
+              <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-[#030303]/50">
+                Email
+              </span>
+              <span className="truncate text-right text-[12.5px] text-[#030303]/70">
+                {email}
+              </span>
+            </div>
+          )}
           <div className="rounded-[5px] bg-[#fcfcfc]/60 px-3 py-2">
             <div className="mb-0.5 font-mono text-[11px] uppercase tracking-wider text-[#030303]/50">
               Nickname
