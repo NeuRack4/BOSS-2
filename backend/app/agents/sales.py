@@ -50,6 +50,7 @@ VALID_TYPES: tuple[str, ...] = (
     "revenue_entry",      # Revenue  — 매출 입력/기록
     "cost_report",        # Costs    — 비용/원가 기록
     "price_strategy",     # Pricing  — 가격 전략
+    "menu_list",          # Pricing  — 메뉴 마스터 목록
     "customer_script",    # Customers — 고객 응대 스크립트
     "customer_analysis",  # Customers — 고객 분석
     "sales_report",       # Reports  — 매출 분석 리포트
@@ -62,6 +63,7 @@ _TYPE_TO_SUBHUB: dict[str, str] = {
     "revenue_entry":     "Revenue",
     "cost_report":       "Costs",
     "price_strategy":    "Pricing",
+    "menu_list":         "Pricing",
     "customer_script":   "Customers",
     "customer_analysis": "Customers",
     "sales_report":      "Reports",
@@ -856,26 +858,75 @@ async def run_menu_upsert(
         margin = f"\n- 마진: {menu['price'] - menu['cost_price']:,}원 ({margin_pct}%)"
 
     if action == "updated":
-        price_note = (
-            f" ({old_price:,}원 → {menu['price']:,}원)" if old_price and old_price != menu["price"]
-            else ""
-        )
-        return (
-            f"⚠️ **{menu['name']}** 메뉴가 이미 등록되어 있어요.\n\n"
-            f"가격을 업데이트했어요.\n"
-            f"- 카테고리: {menu['category']}\n"
-            f"- 판매가: {menu['price']:,}원{price_note}\n"
-            f"- 원가: {menu['cost_price']:,}원"
-            f"{margin}"
-        )
+        old_cost     = result.get("old_cost", 0)
+        price_changed = old_price is not None and old_price != menu["price"]
+        cost_changed  = old_cost != menu["cost_price"]
+        anything_changed = price_changed or cost_changed
+
+        changes = []
+        if price_changed:
+            changes.append(f"판매가 {old_price:,}원 → {menu['price']:,}원")
+        if cost_changed:
+            changes.append(f"원가 {old_cost:,}원 → {menu['cost_price']:,}원")
+
+        if anything_changed:
+            change_line = "변경사항: " + " / ".join(changes)
+            return (
+                f"✅ **{name}** 메뉴를 업데이트했어요.\n\n"
+                f"{change_line}\n"
+                f"- 카테고리: {menu['category']}\n"
+                f"- 판매가: {menu['price']:,}원\n"
+                f"- 원가: {menu['cost_price']:,}원"
+                f"{margin}"
+            )
+        else:
+            return (
+                f"**{name}** 메뉴는 이미 동일한 정보로 등록되어 있어요.\n\n"
+                f"- 판매가: {menu['price']:,}원\n"
+                f"- 원가: {menu['cost_price']:,}원"
+                f"{margin}"
+            )
+
+    no_cost_nudge = (
+        f"\n\n💡 원가를 입력하면 마진율을 자동 계산해드려요.\n"
+        f"→ **\"{menu['name']} 원가 [금액]원으로 수정해줘\"** 라고 말씀해보세요."
+        if menu["cost_price"] == 0 else ""
+    )
 
     return (
         f"✅ **{menu['name']}** 메뉴를 새로 등록했어요.\n\n"
         f"- 카테고리: {menu['category']}\n"
         f"- 판매가: {menu['price']:,}원\n"
         f"- 원가: {menu['cost_price']:,}원"
-        f"{margin}\n\n"
-        "메뉴를 더 등록하거나 '메뉴 목록 보여줘'라고 해보세요."
+        f"{margin}"
+        f"{no_cost_nudge}"
+    )
+
+
+@_traceable(name="sales.run_menu_delete")
+async def run_menu_delete(
+    *,
+    account_id: str,
+    name: str,
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    from app.agents._sales._menu_manager import delete_menu
+    result = await delete_menu(account_id=account_id, name=name)
+
+    if result["action"] == "not_found":
+        return (
+            f"❌ **{name}** 메뉴를 찾을 수 없어요.\n"
+            "'메뉴 목록 보여줘'로 등록된 메뉴를 확인해보세요."
+        )
+
+    menu = result["menu"]
+    return (
+        f"🗑️ **{name}** 메뉴를 삭제했어요.\n\n"
+        f"- 카테고리: {menu['category']}\n"
+        f"- 판매가: {menu['price']:,}원"
     )
 
 
@@ -888,8 +939,9 @@ async def run_menu_list(
     long_term_context: str = "",
     rag_context: str = "",
 ) -> str:
-    from app.agents._sales._menu_manager import list_menus_with_profit
+    from app.agents._sales._menu_manager import list_menus_with_profit, upsert_menu_list_artifact
     data = await list_menus_with_profit(account_id=account_id)
+
     if not data["menus"]:
         return (
             "등록된 메뉴가 없어요.\n\n"
@@ -897,6 +949,10 @@ async def run_menu_list(
             "- '아메리카노 4500원 등록해줘'\n"
             "- '라떼 5000원, 원가 800원으로 추가해줘'"
         )
+
+    # Pricing 서브허브에 menu_list artifact upsert (_revenue.py 패턴)
+    await upsert_menu_list_artifact(account_id=account_id, menus=data["menus"])
+
     lines = [f"📋 **메뉴판** (총 {data['total']}개)\n"]
     for cat, items in data["by_category"].items():
         lines.append(f"\n**{cat}**")
@@ -905,6 +961,7 @@ async def run_menu_list(
                 f" — 마진 {m['margin_rate']}%" if m["margin_rate"] is not None else ""
             )
             lines.append(f"- {m['name']}: {m['price']:,}원{margin}")
+    lines.append("\nSales 칸반 Pricing 컬럼에서 '메뉴판' 카드를 클릭하면 상세 확인할 수 있어요.")
     return "\n".join(lines)
 
 
@@ -1125,6 +1182,22 @@ def describe(account_id: str) -> list[dict]:
             ),
             "handler": run_menu_list,
             "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "sales_menu_delete",
+            "description": (
+                "[카테고리: Pricing] 메뉴 삭제. "
+                "'초코라떼 삭제해줘', '아메리카노 메뉴 지워줘', '메뉴 없애줘' 등 삭제 요청 시 호출. "
+                "절대 sales_menu_upsert와 혼동하지 말 것."
+            ),
+            "handler": run_menu_delete,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "삭제할 메뉴 이름"},
+                },
+                "required": ["name"],
+            },
         },
         {
             "name": "sales_menu_analysis",

@@ -1098,15 +1098,12 @@ export const NodeDetailModal = () => {
                   </Section>
                 )}
 
-                {/* PRICING 메뉴 목록 — Pricing 서브허브 상세에서 표시 */}
-                {artifact.kind === "domain" &&
-                  artifact.type === "category" &&
-                  artifact.title === "Pricing" &&
-                  accountId && (
-                    <Section>
-                      <MenuListPanel accountId={accountId} />
-                    </Section>
-                  )}
+                {/* MENU LIST 패널 — menu_list artifact 카드 클릭 시 표시 */}
+                {artifact.type === "menu_list" && accountId && (
+                  <Section>
+                    <MenuListPanel accountId={accountId} />
+                  </Section>
+                )}
 
                 {/* CONTENT */}
                 <Section>
