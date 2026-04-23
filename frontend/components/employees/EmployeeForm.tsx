@@ -211,7 +211,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
           size="sm"
           variant="outline"
           onClick={onCancel}
-          className="text-[12px]"
+          className="border-[#d4a588] text-[12px] text-[#d4a588] hover:bg-[#d4a588]/10"
         >
           Cancel
         </Button>
