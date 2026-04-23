@@ -42,11 +42,11 @@ export const DomainPage = ({ domain }: Props) => {
     <ChatProvider>
       <div className="bento-shell flex h-screen flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-[1400px] overflow-x-hidden p-4 md:p-6">
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-hidden p-4 md:p-6">
             <div
               className={cn(
-                "relative mb-6 overflow-hidden rounded-[5px] p-6 text-[color:var(--kb-fg-on-banner)] shadow-lg md:p-8",
+                "relative mb-4 shrink-0 overflow-hidden rounded-[5px] p-5 text-[color:var(--kb-fg-on-banner)] shadow-lg md:p-6",
                 meta.bg,
               )}
             >
@@ -56,33 +56,35 @@ export const DomainPage = ({ domain }: Props) => {
               />
               <Link
                 href="/dashboard"
-                className="mb-3 inline-flex items-center gap-1.5 text-xs text-[color:var(--kb-fg-on-banner-muted)] transition-colors hover:text-[color:var(--kb-fg-on-banner)]"
+                className="mb-2 inline-flex items-center gap-1.5 text-xs text-[color:var(--kb-fg-on-banner-muted)] transition-colors hover:text-[color:var(--kb-fg-on-banner)]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Dashboard
               </Link>
               <div className="relative flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/30 backdrop-blur-sm">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/30 backdrop-blur-sm">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                  <h1 className="text-xl font-bold tracking-tight md:text-2xl">
                     {meta.label}
                   </h1>
-                  <p className="text-xs text-[color:var(--kb-fg-on-banner-muted)] md:text-sm">
+                  <p className="text-xs text-[color:var(--kb-fg-on-banner-muted)]">
                     Sub-hub boards
                   </p>
                 </div>
               </div>
             </div>
 
-            {userId ? (
-              <KanbanBoard accountId={userId} domain={domain} />
-            ) : (
-              <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] p-8 text-center text-xs text-[color:var(--kb-fg-muted)]">
-                불러오는 중...
-              </div>
-            )}
+            <div className="min-h-0 flex-1">
+              {userId ? (
+                <KanbanBoard accountId={userId} domain={domain} />
+              ) : (
+                <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] p-8 text-center text-xs text-[color:var(--kb-fg-muted)]">
+                  불러오는 중...
+                </div>
+              )}
+            </div>
           </div>
         </main>
         <BriefingLoader />

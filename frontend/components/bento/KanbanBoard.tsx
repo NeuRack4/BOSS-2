@@ -174,16 +174,16 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
   }
 
   return (
-    <div className="relative">
+    <div className="flex h-full flex-col">
       {board.unassigned.length > 0 && (
-        <div className="mb-4 rounded-[5px] border border-[color:var(--kb-warn-border)] bg-[color:var(--kb-warn-bg)] px-4 py-3 text-[11px] text-[color:var(--kb-warn-fg)]">
+        <div className="mb-3 shrink-0 rounded-[5px] border border-[color:var(--kb-warn-border)] bg-[color:var(--kb-warn-bg)] px-4 py-3 text-[11px] text-[color:var(--kb-warn-fg)]">
           아직 서브허브에 배정되지 않은 항목 {board.unassigned.length}개. 아래
           컬럼으로 끌어 놓아 배정하세요.
         </div>
       )}
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="flex gap-3" style={{ minWidth: "max-content" }}>
+      <div className="min-h-0 flex-1 overflow-x-auto pb-4">
+        <div className="flex h-full gap-3" style={{ minWidth: "max-content" }}>
           {board.unassigned.length > 0 && (
             <KanbanColumn
               title="미분류"
@@ -201,7 +201,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
             domain === "recruitment" && h.title === "Managing" ? (
               <div
                 key={h.id}
-                className="flex min-h-[300px] flex-1 min-w-[260px] flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
+                className="flex h-full min-w-[260px] flex-1 flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
               >
                 <div className="flex items-center justify-between border-b border-[color:var(--kb-border)] px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -216,13 +216,13 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
                   <button
                     type="button"
                     onClick={() => managingPanelRef.current?.openNew()}
-                    className="flex items-center gap-1 rounded-[4px] border border-[color:var(--kb-border)] px-2 py-1 text-[11px] text-[color:var(--kb-fg-muted)] hover:bg-[color:var(--kb-surface-hover)]"
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] text-[color:var(--kb-fg-subtle)] transition-colors hover:bg-[color:var(--kb-surface-hover)] hover:text-[color:var(--kb-fg-strong)]"
                   >
                     <Plus className="h-3 w-3" />
-                    직원 추가
+                    Add Employee
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2">
+                <div className="min-h-0 flex-1 overflow-y-auto p-2">
                   <EmployeeManagingPanel
                     ref={managingPanelRef}
                     accountId={accountId}
