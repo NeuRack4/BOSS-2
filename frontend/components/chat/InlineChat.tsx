@@ -13,6 +13,7 @@ import {
 import {
   ArrowUpIcon,
   Bot,
+  Camera,
   Loader2,
   Paperclip,
   PlusIcon,
@@ -72,6 +73,7 @@ type UploadCategory =
   | "invoice"
   | "tax"
   | "id"
+  | "menu"
   | "other";
 
 type ConfirmPayload = {
@@ -131,6 +133,7 @@ const UPLOAD_TYPES: ReadonlyArray<{ value: string; label: string }> = [
   { value: "checklist", label: "체크리스트" },
   { value: "guide", label: "가이드" },
   { value: "receipt", label: "영수증" },
+  { value: "menu", label: "메뉴" },
   { value: "invoice", label: "청구서" },
   { value: "tax", label: "세금계산서" },
   { value: "id", label: "신분증" },
@@ -143,6 +146,7 @@ const CATEGORY_LABEL: Record<UploadCategory, string> = {
   invoice: "청구서",
   tax: "세금계산서",
   id: "신분증",
+  menu: "메뉴판",
   other: "기타",
 };
 
@@ -472,6 +476,7 @@ export const InlineChat = () => {
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const sendRef = useRef<
     ((text: string, messageIndex?: number) => Promise<void>) | null
   >(null);
@@ -832,7 +837,8 @@ export const InlineChat = () => {
         }
         const nonDocs = items.filter(
           (it) =>
-            !it.needs_confirmation &&
+            // ephemeral 업로드(artifact_id=null)는 needs_confirmation 무관하게 즉시 처리
+            (!it.needs_confirmation || it.artifact_id === null) &&
             it.final_category &&
             it.final_category !== "documents",
         );
@@ -872,8 +878,11 @@ export const InlineChat = () => {
         const receiptItems = nonDocs.filter(
           (it) => it.final_category === "receipt",
         );
+        const menuItems = nonDocs.filter(
+          (it) => it.final_category === "menu",
+        );
         const otherNonDocs = nonDocs.filter(
-          (it) => it.final_category !== "receipt",
+          (it) => it.final_category !== "receipt" && it.final_category !== "menu",
         );
 
         if (otherNonDocs.length > 0) {
@@ -903,6 +912,21 @@ export const InlineChat = () => {
               `방금 업로드한 영수증 "${latestReceipt.title}" 을 매출/비용으로 기록해줘.`,
             );
           }
+        }
+
+        if (menuItems.length > 0 && userId) {
+          // 메뉴판 이미지 — sales agent 의 `sales_menu_ocr` capability 가 수행.
+          const latestMenu = menuItems[menuItems.length - 1];
+          setPendingReceipt({
+            storage_path:  latestMenu.storage_path  || "",
+            bucket:        latestMenu.bucket        || "documents-uploads",
+            mime_type:     latestMenu.mime_type      || "image/jpeg",
+            original_name: latestMenu.original_name || "",
+            size_bytes:    latestMenu.size_bytes     || 0,
+          });
+          await sendRef.current?.(
+            `방금 업로드한 메뉴판 "${latestMenu.title}" 을 메뉴로 등록해줘.`,
+          );
         }
 
         if (docsOk.length === 1 && confirms.length === 0) {
@@ -2082,6 +2106,15 @@ export const InlineChat = () => {
                   onChange={handleFileSelect}
                   className="hidden"
                 />
+                {/* 모바일 카메라 전용 input — capture="environment" 로 후면 카메라 직접 실행 */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
                 <button
                   type="button"
                   disabled={uploading || loading || !userId}
@@ -2095,6 +2128,17 @@ export const InlineChat = () => {
                   ) : (
                     <Paperclip className="h-4 w-4 text-[#030303]/70" />
                   )}
+                </button>
+                {/* 카메라 버튼 — 모바일에서 카메라 앱 직접 실행, 데스크톱에서 파일 선택 */}
+                <button
+                  type="button"
+                  disabled={uploading || loading || !userId}
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-1 rounded p-1.5 transition-colors hover:bg-[#030303]/[0.05] disabled:opacity-50"
+                  aria-label="카메라로 촬영"
+                  title="카메라로 영수증 촬영"
+                >
+                  <Camera className="h-4 w-4 text-[#030303]/70" />
                 </button>
                 <select
                   value={uploadType}

@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] — feature/sales-camera-receipt (모바일 카메라 영수증 촬영 기능)
+
+### Added — Frontend
+
+- **`frontend/components/chat/InlineChat.tsx`**
+  - `Camera` 아이콘 import 추가 (lucide-react)
+  - `cameraInputRef` 신규: `<input type="file" accept="image/*" capture="environment" />` — 모바일에서 후면 카메라 직접 실행, 데스크톱에서 파일 선택 폴백
+  - 카메라 버튼(📷) 추가 — 기존 paperclip 버튼 옆에 배치, 클릭 시 `cameraInputRef` 트리거
+  - 촬영된 이미지는 기존 `handleFileSelect` → `uploadFiles` → 영수증 OCR 흐름 그대로 처리
+
+## [1.8.1] — feature/sales-menu-ocr (메뉴 이미지 분류 구조 개선 + InlineChat 메뉴 라우팅)
+
+### Added — Backend
+
+- **`backend/app/agents/_doc_classify.py`** — `menu` 독립 category 신설. `Category` 타입·`CATEGORY_LABELS`·`USER_DECLARED_TYPES`·`_HEURISTICS`에 `"menu"` 추가. 키워드: `메뉴판`, `menu board`, `오늘의 메뉴`, `today's menu`, `menu`, `메뉴`, `매뉴` 등. 영수증과 분리된 독립 라우팅 경로 확보.
+
+### Changed — Backend
+
+- **`backend/app/agents/sales.py`** — `describe()` 내 `_is_menu_image` 파일명 기반 필터 추가. 파일명에 `menu/메뉴` 포함 시 `sales_parse_receipt` 제외 → `sales_menu_ocr`만 광고.
+
+### Changed — Frontend
+
+- **`frontend/components/chat/InlineChat.tsx`**
+  - `UploadCategory` 타입에 `"menu"` 추가
+  - `CATEGORY_LABEL`, `UPLOAD_TYPES` 드롭다운에 `"메뉴"` 항목 추가
+  - `menuItems` 필터 신규: `final_category === "menu"` 이미지 → `setPendingReceipt` + `"메뉴로 등록해줘"` 자동 전송
+  - `otherNonDocs`에서 `menu` 제외
+  - `nonDocs` 필터 수정: ephemeral 업로드(`artifact_id === null`)는 `needs_confirmation` 무관하게 즉시 처리 (기존 버그 수정)
+
+## [1.8.0] — feature/sales-menu-ocr (메뉴판 이미지 OCR + 이미지 라우팅 구조 개선)
+
+### Added — Backend
+
+- **`backend/app/agents/_sales/_ocr.py`** — `_MENU_PROMPT` + `parse_menu_from_bytes()` 신규 추가. GPT-4o Vision으로 메뉴판 이미지에서 `[{name, category, price}]` 추출.
+- **`backend/app/agents/sales.py`** — `run_menu_ocr` 핸들러 + `sales_menu_ocr` capability 추가. `_sales_context.pending_receipt` + `_upload_context.pending_upload` 두 경로 모두 지원. 이미지 있을 때만 조건부 광고(`[즉시 호출 가능]` + 파일명 포함). 메뉴 일괄 upsert 후 `menu_list` artifact 자동 갱신.
+
+### Changed — Backend
+
+- **`backend/app/agents/_doc_classify.py`** — 이미지 확장자(`.jpg .jpeg .png .gif .webp .bmp .heic`) 파일은 `receipt`로 라우팅. 이미지 컨텐츠 판단(영수증/메뉴판 등)은 sales 에이전트(플래너)가 담당하도록 책임 분리. 공유 분류기에 도메인 지식 추가 없이 라우팅 역할만 수행.
+
 ## [1.7.0] — feature-marketing (마케팅 도메인 확장 — 이벤트 기획·성과 리포트·자동화 스케줄·인스타그램 피드 인라인 렌더)
 
 ### Added — 마케팅 Capability 확장 (`backend/app/agents/marketing.py`)
