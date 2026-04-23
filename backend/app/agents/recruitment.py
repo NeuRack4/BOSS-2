@@ -665,6 +665,129 @@ async def run_onboarding(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 급여 미리보기 (순수 Python 계산)
+# ──────────────────────────────────────────────────────────────────────────
+_PAYROLL_PREVIEW_PREFIX = "__PAYROLL_PREVIEW_REQUEST__:"
+
+
+async def run_payroll_preview(
+    message: str,
+    account_id: str,
+    history: list | None = None,
+    rag_context: str = "",
+    long_term_context: str = "",
+    *,
+    employee_id: str | None = None,
+    pay_month: str | None = None,
+    **_,
+) -> str:
+    import json as _json
+    from app.agents._payroll_calculator import calculate_payroll, format_preview_table
+
+    # __PAYROLL_PREVIEW_REQUEST__: 마커에서 파라미터 추출
+    emp_id = employee_id
+    month = pay_month
+    if _PAYROLL_PREVIEW_PREFIX in message:
+        try:
+            raw = message[message.index(_PAYROLL_PREVIEW_PREFIX) + len(_PAYROLL_PREVIEW_PREFIX):]
+            data = _json.loads(raw.strip())
+            emp_id = data.get("employee_id", emp_id)
+            month = data.get("pay_month", month)
+        except Exception:
+            pass
+
+    if not emp_id or not month:
+        return "급여 미리보기를 위해 직원과 급여월 정보가 필요합니다."
+
+    # 직원 정보 조회
+    try:
+        emp_row = sb.table("employees").select("*").eq("id", emp_id).eq("account_id", account_id).maybe_single().execute()
+        emp = emp_row.data or {}
+    except Exception:
+        emp = {}
+
+    if not emp:
+        return "직원 정보를 찾을 수 없어요."
+
+    # 근무 기록 조회
+    try:
+        wr_res = (
+            sb.table("work_records")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("account_id", account_id)
+            .gte("work_date", f"{month}-01")
+            .lte("work_date", f"{month}-31")
+            .execute()
+        )
+        records = wr_res.data or []
+    except Exception:
+        records = []
+
+    total_hours = sum(float(r.get("hours_worked", 0)) for r in records)
+    total_ot = sum(float(r.get("overtime_hours", 0)) for r in records)
+    total_night = sum(float(r.get("night_hours", 0)) for r in records)
+    total_holiday = sum(float(r.get("holiday_hours", 0)) for r in records)
+
+    emp_name = emp.get("name", "직원")
+    emp_type = emp.get("employment_type", "시급제")
+    hourly = int(emp.get("hourly_rate") or 0)
+    monthly_sal = int(emp.get("monthly_salary") or 0)
+
+    if not hourly and not monthly_sal:
+        return f"{emp_name}의 시급 또는 월급 정보가 없어요. 직원 관리 탭에서 먼저 입력해 주세요."
+
+    result = calculate_payroll(
+        employment_type=emp_type,
+        hourly_rate=hourly,
+        monthly_salary=monthly_sal,
+        hours_worked=total_hours,
+        overtime_hours=total_ot,
+        night_hours=total_night,
+        holiday_hours=total_holiday,
+    )
+
+    preview_md = format_preview_table(result, emp_name, month)
+
+    # 직원 정보 + 계산 결과를 다음 턴 Documents 에이전트가 읽을 수 있도록 마커 임베드
+    preview_data = {
+        "employee_id": emp_id,
+        "employee_name": emp_name,
+        "employment_type": emp_type,
+        "hourly_rate": hourly,
+        "monthly_salary": monthly_sal,
+        "pay_month": month,
+        "pay_day": emp.get("pay_day") or 25,
+        "hours_worked": total_hours,
+        "overtime_hours": total_ot,
+        "night_hours": total_night,
+        "holiday_hours": total_holiday,
+        "base_pay": result.base_pay,
+        "overtime_pay": result.overtime_pay,
+        "night_pay": result.night_pay,
+        "holiday_pay": result.holiday_pay,
+        "meal_allowance": result.meal_allowance,
+        "gross_pay": result.gross_pay,
+        "national_pension": result.national_pension,
+        "health_insurance": result.health_insurance,
+        "ltc_insurance": result.ltc_insurance,
+        "employment_insurance": result.employment_insurance,
+        "income_tax": result.income_tax,
+        "local_income_tax": result.local_income_tax,
+        "total_deductions": result.total_deductions,
+        "net_pay": result.net_pay,
+        "has_insurance": result.has_insurance,
+    }
+
+    reply = (
+        f"{preview_md}\n\n"
+        f"[PAYROLL_PREVIEW_DATA:{_json.dumps(preview_data, ensure_ascii=False)}]\n\n"
+        "[CHOICES]\n급여명세서 생성\n취소\n[/CHOICES]"
+    )
+    return reply
+
+
 def describe(account_id: str) -> list[dict]:
     """OpenAI tools 스펙용 capability 매니페스트."""
     caps: list[dict] = [
@@ -765,6 +888,24 @@ def describe(account_id: str) -> list[dict]:
                     },
                 },
                 "required": ["position"],
+            },
+        },
+        {
+            "name": "recruit_payroll_preview",
+            "description": (
+                "직원 DB에서 근무 기록을 읽어 급여명세서 미리보기를 계산한다. "
+                "순수 Python 수식으로 4대보험·소득세 공제액을 산출하고 표 형식으로 보여준다. "
+                "사용자가 확인하면 Documents 에이전트가 Excel을 생성한다. "
+                "급여/월급/페이/봉급/명세서 키워드가 있을 때 호출."
+            ),
+            "handler": run_payroll_preview,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "employee_id": {"type": "string", "description": "직원 UUID (선택 — 없으면 picker UI 표시)"},
+                    "pay_month": {"type": "string", "description": "급여 정산 월 YYYY-MM (예: 2026-04)"},
+                },
+                "required": ["pay_month"],
             },
         },
     ]

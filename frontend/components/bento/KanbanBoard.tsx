@@ -1,10 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { KanbanColumn } from "./KanbanColumn";
 import type { KanbanCardData } from "./KanbanCard";
 import type { DomainKey } from "./types";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
+import {
+  EmployeeManagingPanel,
+  type EmployeeManagingHandle,
+} from "@/components/employees/EmployeeManagingPanel";
 
 type SubHub = {
   id: string;
@@ -31,6 +36,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const draggingRef = useRef<{ id: string; from: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const managingPanelRef = useRef<EmployeeManagingHandle>(null);
 
   const { openDetail } = useNodeDetail();
 
@@ -191,20 +197,53 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
               onCardClick={handleCardClick}
             />
           )}
-          {board.sub_hubs.map((h) => (
-            <KanbanColumn
-              key={h.id}
-              title={h.title}
-              subHubId={h.id}
-              domain={domain}
-              cards={board.cards[h.id] ?? []}
-              draggingId={draggingId}
-              onCardDragStart={onCardDragStart}
-              onCardDragEnd={onCardDragEnd}
-              onCardDrop={onCardDrop}
-              onCardClick={handleCardClick}
-            />
-          ))}
+          {board.sub_hubs.map((h) =>
+            domain === "recruitment" && h.title === "Managing" ? (
+              <div
+                key={h.id}
+                className="flex min-w-[260px] flex-1 flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
+              >
+                <div className="flex items-center justify-between border-b border-[color:var(--kb-border)] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full bg-[#d4a588]"
+                      aria-hidden
+                    />
+                    <span className="text-[13px] font-semibold tracking-tight text-[color:var(--kb-fg-strong)]">
+                      Managing
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => managingPanelRef.current?.openNew()}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] text-[color:var(--kb-fg-subtle)] transition-colors hover:bg-[color:var(--kb-surface-hover)] hover:text-[color:var(--kb-fg-strong)]"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Employee
+                  </button>
+                </div>
+                <div className="max-h-[600px] overflow-y-auto p-2">
+                  <EmployeeManagingPanel
+                    ref={managingPanelRef}
+                    accountId={accountId}
+                  />
+                </div>
+              </div>
+            ) : (
+              <KanbanColumn
+                key={h.id}
+                title={h.title}
+                subHubId={h.id}
+                domain={domain}
+                cards={board.cards[h.id] ?? []}
+                draggingId={draggingId}
+                onCardDragStart={onCardDragStart}
+                onCardDragEnd={onCardDragEnd}
+                onCardDrop={onCardDrop}
+                onCardClick={handleCardClick}
+              />
+            ),
+          )}
         </div>
       </div>
     </div>

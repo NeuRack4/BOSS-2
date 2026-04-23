@@ -56,6 +56,8 @@ const GOAL_LABEL: Record<string, string> = {
 
 const inputCls =
   "w-full rounded-[5px] border border-[#030303]/10 bg-[#fafafa] px-3 py-1.5 text-[13px] text-[#030303] placeholder:text-[#030303]/30 focus:border-[#4a7c59] focus:outline-none focus:ring-1 focus:ring-[#4a7c59]";
+const readonlyCls =
+  "w-full rounded-[5px] border border-[#030303]/10 bg-[#f0ede8] px-3 py-1.5 text-[13px] text-[#030303]/60 cursor-default select-all";
 const selectCls =
   "w-full rounded-[5px] border border-[#030303]/10 bg-[#fafafa] px-3 py-1.5 text-[13px] text-[#030303] focus:border-[#4a7c59] focus:outline-none focus:ring-1 focus:ring-[#4a7c59]";
 const labelCls =
@@ -80,6 +82,7 @@ export const ProfileModal = ({ open, onClose }: Props) => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +99,7 @@ export const ProfileModal = ({ open, onClose }: Props) => {
         return;
       }
       setUserId(user.id);
+      setEmail(user.email ?? null);
       const { data } = await supabase
         .from("profiles")
         .select(
@@ -173,6 +177,17 @@ export const ProfileModal = ({ open, onClose }: Props) => {
           <div className="flex h-full flex-col gap-4">
             <ScrollArea className="min-h-0 flex-1 pr-1">
               <div className="space-y-4 pb-2">
+                {/* Email (read-only) */}
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input
+                    className={readonlyCls}
+                    value={email ?? ""}
+                    readOnly
+                    tabIndex={-1}
+                  />
+                </div>
+
                 {/* Identity */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>

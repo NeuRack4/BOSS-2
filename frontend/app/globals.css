@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -173,4 +175,28 @@
   --kb-warn-fg: #7a5210;
   --kb-dday-urgent: #c7422f;
   --kb-dday-soon: #a6730a;
+}
+
+/* react-grid-layout edit mode */
+.rgl-edit .react-resizable-handle {
+  opacity: 1;
+  background-image: none;
+  width: 16px;
+  height: 16px;
+  bottom: 4px;
+  right: 4px;
+  border-right: 2px solid rgba(90, 80, 64, 0.5);
+  border-bottom: 2px solid rgba(90, 80, 64, 0.5);
+  cursor: se-resize;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: rgba(90, 80, 64, 0.12);
+  border-radius: 5px;
+  border: 2px dashed rgba(90, 80, 64, 0.3);
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  display: none;
 }

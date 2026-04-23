@@ -50,6 +50,7 @@ from app.routers import (
     summary,
     uploads,
 )
+from app.routers.employees import router as employees_router, work_router as work_records_router
 
 app = FastAPI(title="BOSS-2 API", version="0.1.0")
 
@@ -84,6 +85,8 @@ app.include_router(menus.router)
 app.include_router(sales.router)
 app.include_router(subsidies.router)
 app.include_router(stats.router)
+app.include_router(employees_router)
+app.include_router(work_records_router)
 
 
 @app.get("/health")

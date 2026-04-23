@@ -52,6 +52,11 @@ import {
 } from "./MenuAnalysisCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
+import {
+  EmployeePickerCard,
+  extractEmployeePickerPayload,
+  type EmployeePickerPayload,
+} from "./EmployeePickerCard";
 
 type UploadCategory =
   | "documents"
@@ -87,6 +92,7 @@ type Message = {
   costAction?: CostActionData;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
+  employeePicker?: EmployeePickerPayload;
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -213,7 +219,6 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "계약서 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
       { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
       { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
-      { name: "인사평가서", prompt: "인사평가서 만들어줘" },
       { name: "급여명세서", prompt: "급여명세서 만들어줘" },
       { name: "세무 캘린더", prompt: "세무 캘린더 만들어줘" },
       { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
@@ -967,8 +972,10 @@ export const InlineChat = () => {
           parseCostAction(afterSales);
         const { cleaned: afterShorts, payload: shortsWizard } =
           extractShortsWizardPayload(afterCost);
-        const { cleaned: cleanReply, payload: menuChart } =
+        const { cleaned: afterMenu, payload: menuChart } =
           extractMenuChartPayload(afterShorts);
+        const { cleaned: cleanReply, payload: employeePicker } =
+          extractEmployeePickerPayload(afterMenu);
         setMessages((prev) => [
           ...prev,
           {
@@ -981,6 +988,7 @@ export const InlineChat = () => {
             costAction,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
+            employeePicker: employeePicker ?? undefined,
           },
         ]);
         const sp = data?.data?.speaker;
@@ -1373,6 +1381,15 @@ export const InlineChat = () => {
                             },
                           ]);
                         }}
+                      />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.employeePicker && userId && (
+                    <div className="ml-8 max-w-[85%]">
+                      <EmployeePickerCard
+                        payload={msg.employeePicker}
+                        accountId={userId}
+                        onConfirm={(confirmMsg) => send(confirmMsg, i)}
                       />
                     </div>
                   )}

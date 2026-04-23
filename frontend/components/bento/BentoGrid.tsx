@@ -1,23 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DomainCard } from "./DomainCard";
-import { ChatCenterCard } from "./ChatCenterCard";
-import { ScheduleCard } from "./ScheduleCard";
-import { ActivityCard } from "./ActivityCard";
-import { PreviousChatCard } from "./PreviousChatCard";
 import { ProfileMemorySidebar } from "./ProfileMemorySidebar";
-import { CommentQueueCard } from "./CommentQueueCard";
-import { SubsidyMatchCard } from "./SubsidyMatchCard";
-import type { DashboardSummary, DomainStats, DomainKey } from "./types";
-
-const EMPTY_STATS: DomainStats = {
-  active_count: 0,
-  upcoming_count: 0,
-  recent_count: 0,
-  total_count: 0,
-  recent_titles: [],
-};
+import { ChatCenterCard } from "./ChatCenterCard";
+import { useLayout } from "./LayoutContext";
+import { WidgetSlot } from "./WidgetSlot";
+import type { DashboardSummary } from "./types";
+import type { WidgetRenderProps } from "./widgetRegistry";
 
 type Props = {
   accountId: string;
@@ -27,6 +16,7 @@ export const BentoGrid = ({ accountId }: Props) => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
+  const ctx = useLayout();
 
   useEffect(() => {
     let cancel = false;
@@ -53,65 +43,66 @@ export const BentoGrid = ({ accountId }: Props) => {
     };
   }, [apiBase, accountId]);
 
-  const stats = (d: DomainKey) => summary?.domains?.[d] ?? EMPTY_STATS;
+  const rp: WidgetRenderProps = { accountId, summary };
 
   return (
     <div className="flex w-full justify-center gap-4 p-4 md:p-6">
-      <ProfileMemorySidebar />
+      <ProfileMemorySidebar renderProps={rp} />
       <div className="w-full max-w-[1400px]">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:auto-rows-[140px] md:gap-4">
-          {/* Top-left: Chat (half width, 5 rows tall) */}
+          {/* Chat — not customizable */}
           <div className="order-1 md:col-span-6 md:row-span-5 md:col-start-1 md:row-start-1 h-[560px] md:h-auto">
             <ChatCenterCard />
           </div>
 
-          {/* Top-right: 채용/매출 column — 4:6 height split */}
+          {/* Col 7-9: two stacked slots */}
           <div className="order-2 md:col-span-3 md:row-span-4 md:col-start-7 md:row-start-1 flex flex-col gap-3 md:gap-4">
             <div className="h-[160px] md:h-auto md:flex-[4]">
-              <DomainCard domain="recruitment" stats={stats("recruitment")} />
+              <WidgetSlot slotId="main-col7-top" renderProps={rp} />
             </div>
             <div className="h-[160px] md:h-auto md:flex-[6]">
-              <DomainCard domain="sales" stats={stats("sales")} />
+              <WidgetSlot slotId="main-col7-bottom" renderProps={rp} />
             </div>
           </div>
 
-          {/* Top-right: 마케팅/서류 column — 6:4 height split */}
+          {/* Col 10-12: two stacked slots */}
           <div className="order-3 md:col-span-3 md:row-span-4 md:col-start-10 md:row-start-1 flex flex-col gap-3 md:gap-4">
             <div className="h-[160px] md:h-auto md:flex-[6]">
-              <DomainCard domain="marketing" stats={stats("marketing")} />
+              <WidgetSlot slotId="main-col10-top" renderProps={rp} />
             </div>
             <div className="h-[160px] md:h-auto md:flex-[4]">
-              <DomainCard domain="documents" stats={stats("documents")} />
+              <WidgetSlot slotId="main-col10-bottom" renderProps={rp} />
             </div>
           </div>
 
-          {/* Chat History: col 1-3, spans 3 rows, bottom-aligned */}
+          {/* Previous Chat */}
           <div className="order-6 md:col-span-3 md:row-span-3 md:col-start-1 md:row-start-6 h-[420px] md:h-auto">
-            <PreviousChatCard />
+            <WidgetSlot slotId="main-prev-chat" renderProps={rp} />
           </div>
 
-          {/* Upcoming Schedule: col 4-6, row 6 (above CommentQueue) */}
+          {/* Schedule */}
           <div className="order-7 md:col-span-3 md:row-span-1 md:col-start-4 md:row-start-6 h-[140px] md:h-auto">
-            <ScheduleCard items={summary?.upcoming ?? []} />
+            <WidgetSlot slotId="main-schedule" renderProps={rp} />
           </div>
 
-          {/* Recent Activity: col 7-12, rows 5-6 */}
+          {/* Activity */}
           <div className="order-8 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-5 h-[284px] md:h-auto">
-            <ActivityCard items={summary?.recent_activity ?? []} />
+            <WidgetSlot slotId="main-activity" renderProps={rp} />
           </div>
 
-          {/* Comment Queue: col 4-8, rows 7-8 (5 cols) */}
+          {/* Comment Queue */}
           <div className="order-9 md:col-span-5 md:row-span-2 md:col-start-4 md:row-start-7 h-[284px] md:h-auto">
-            <CommentQueueCard accountId={accountId} />
+            <WidgetSlot slotId="main-comment" renderProps={rp} />
           </div>
 
-          {/* Subsidy Matches: col 9-12, rows 7-8 (4 cols) */}
+          {/* Subsidy */}
           <div className="order-10 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-7 h-[284px] md:h-auto">
-            <SubsidyMatchCard accountId={accountId} />
+            <WidgetSlot slotId="main-subsidy" renderProps={rp} />
           </div>
         </div>
       </div>
-      {loading && !summary && (
+
+      {loading && !summary && !ctx?.isEditing && (
         <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
           <div className="rounded-full bg-[#fcfcfc] px-4 py-1.5 text-xs text-[#030303] shadow-lg">
             불러오는 중...

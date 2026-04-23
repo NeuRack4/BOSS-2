@@ -16,6 +16,7 @@ import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
 import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
 import { SubsidyModal } from "@/components/layout/SubsidyModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
+import { useLayout } from "@/components/bento/LayoutContext";
 
 type HeaderProps = {
   sidebar?: boolean;
@@ -34,6 +35,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [dmCampaignOpen, setDmCampaignOpen] = useState(false);
   const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const layoutCtx = useLayout();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -108,8 +110,26 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     </Link>
   );
 
+  const layoutBtn = layoutCtx && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={
+        layoutCtx.isEditing ? layoutCtx.cancelEditing : layoutCtx.startEditing
+      }
+      className={
+        layoutCtx.isEditing
+          ? "bg-[#ebe0ca] text-[#2e2719]"
+          : "text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+      }
+    >
+      Layout
+    </Button>
+  );
+
   return (
     <header className="relative h-12 bg-transparent text-[#2e2719] shrink-0 z-50 px-4 md:px-6">
+      {/* Search bar — absolutely centered */}
       <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
         <button
           type="button"
@@ -122,60 +142,104 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
           </kbd>
         </button>
       </div>
+
       <div className="flex h-full w-full justify-center gap-4">
+        {/* Sidebar slot: logo + Layout button, visible only at >= 1500px */}
         {sidebar && (
-          <div className="hidden min-w-[220px] max-w-[320px] flex-1 basis-0 items-center self-stretch min-[1500px]:flex">
+          <div className="hidden min-w-[220px] max-w-[320px] flex-1 basis-0 items-center gap-2 self-stretch min-[1500px]:flex">
             {logo}
+            {layoutBtn}
           </div>
         )}
-        <div className="flex h-full w-full max-w-[1400px] items-center justify-between gap-4">
-          <div className={sidebar ? "min-[1500px]:invisible" : ""}>{logo}</div>
 
+        {/* Main content row */}
+        <div className="flex h-full w-full max-w-[1400px] items-center justify-between gap-4">
+          {/* Left: logo + Layout button — hidden at >= 1500px when sidebar is active */}
+          <div
+            className={`flex items-center gap-2 ${sidebar ? "min-[1500px]:invisible" : ""}`}
+          >
+            {logo}
+            {layoutBtn}
+          </div>
+
+          {/* Right: editing controls or normal action buttons */}
           <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setScheduleOpen(true)}
-              title="Schedule"
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-            >
-              Schedule
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setActivityOpen(true)}
-              title="Activity"
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-            >
-              Activity
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCommentOpen(true)}
-              title="Comments"
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-            >
-              Comments
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDmCampaignOpen(true)}
-              title="DM Campaigns"
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-            >
-              DM
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-            >
-              Logout
-            </Button>
+            {layoutCtx?.isEditing ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={layoutCtx.saveLayout}
+                  disabled={layoutCtx.isSaving}
+                  className="text-[#5a5040] ring-1 ring-[#5a5040]/40 hover:bg-[#ebe0ca] hover:text-[#2e2719] hover:ring-[#2e2719]/40"
+                >
+                  {layoutCtx.isSaving ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={layoutCtx.resetLayout}
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Reset
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={layoutCtx.cancelEditing}
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setScheduleOpen(true)}
+                  title="Schedule"
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Schedule
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActivityOpen(true)}
+                  title="Activity"
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Activity
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCommentOpen(true)}
+                  title="Comments"
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Comments
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDmCampaignOpen(true)}
+                  title="DM Campaigns"
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  DM
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Logout
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

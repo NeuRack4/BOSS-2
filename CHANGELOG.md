@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-04-23
+
+### Added — Dashboard
+
+- **위젯 레이아웃 커스터마이징** — 헤더 `Layout` 버튼으로 편집 모드 진입. 채팅창 제외 전 셀(메인 그리드 9개 + 사이드바 3개)을 12종 위젯 중 자유롭게 교체 가능. `Save / Reset / Cancel` 버튼으로 저장·초기화·취소. 레이아웃은 `dashboard_layouts` 테이블에 계정별 영구 저장.
+- **`widgetRegistry.tsx`** — 위젯 정의 레지스트리. `WIDGET_REGISTRY` 배열에 항목 추가만 하면 피커에 자동 노출되는 확장 구조.
+- **`LayoutContext.tsx`** — 편집 상태·레이아웃 저장·불러오기 전담 Context.
+- **`WidgetSlot.tsx`** — 편집 모드 오버레이(Change 버튼 + 위젯 피커 드롭다운) 래퍼 컴포넌트.
+- **`supabase/migrations/030_dashboard_layouts.sql`** — `dashboard_layouts` 테이블 신설 (`account_id PK · layout jsonb · hidden text[] · updated_at`).
+
+### Added — Recruitment
+
+- **직원 관리 기능** — 직원 등록·수정·삭제 CRUD + EmployeeForm UI (전체 영문화). Managing 컬럼 칸반 카드에 직원 목록 표시 + 헤더 직원 추가 버튼.
+- **급여명세서 크로스도메인 플로우** — Recruitment ↔ Documents 연계 재설계. Tax&HR 에이전트가 급여명세서 Excel 자동 생성·세무 캘린더·체크리스트 처리.
+
+### Added — Documents
+
+- **Operations 행정 신청서 3종** — `admin_application` 핸들러 구현.
+- **Tax&HR 핸들러** — 급여명세서 Excel 자동 생성, 세무 캘린더, 체크리스트 capability.
+
+### Added — Frontend
+
+- **프로필 이메일 표시** — 헤더·프로필 카드에 로그인 이메일 읽기 전용 노출.
+- **Kanban Managing 컬럼** — 뷰포트 높이 고정 + 헤더 버튼 소형화.
+
+### Fixed
+
+- **Kanban** — 다른 도메인 칸반 레이아웃 원상복구, Managing 컬럼에만 `max-h` 제한 적용.
+
+### Changed
+
+- **EmployeeForm** — 전체 텍스트 영문화, Save/Cancel 버튼 스타일 통일 (Save: Managing 포인트 컬러, Cancel: 아웃라인).
+
+---
+
 ## [1.5.0] — feature/sales-menu-pricing (Sales 메뉴 마스터 + 벤치마킹 + 목표 달성률)
 
 ### Added — DB
