@@ -6,23 +6,24 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type KeyboardEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import {
   ArrowUpIcon,
-  Bot,
   Camera,
   Loader2,
   Paperclip,
   PlusIcon,
   X,
 } from "lucide-react";
+import { BossAvatar, EmployeeAvatar } from "./ChatAvatars";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useChat } from "./ChatContext";
 import {
   ReviewResultCard,
@@ -47,6 +48,7 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 import { CostInputTable, type CostActionData } from "./CostInputTable";
+import { WorkTableCard, type WorkActionData } from "./WorkTableCard";
 import {
   ShortsWizardCard,
   extractShortsWizardPayload,
@@ -67,18 +69,9 @@ import {
   extractMarketingReportPayload,
   type MarketingReportPayload,
 } from "./MarketingReportCard";
-import {
-  EventPlanFormCard,
-  extractEventPlanForm,
-} from "./EventPlanFormCard";
-import {
-  SnsPostFormCard,
-  extractSnsPostForm,
-} from "./SnsPostFormCard";
-import {
-  BlogPostFormCard,
-  extractBlogPostForm,
-} from "./BlogPostFormCard";
+import { EventPlanFormCard, extractEventPlanForm } from "./EventPlanFormCard";
+import { SnsPostFormCard, extractSnsPostForm } from "./SnsPostFormCard";
+import { BlogPostFormCard, extractBlogPostForm } from "./BlogPostFormCard";
 import {
   ReviewReplyFormCard,
   extractReviewReplyForm,
@@ -125,6 +118,8 @@ type Message = {
   confirm?: ConfirmPayload;
   salesAction?: SalesActionData;
   costAction?: CostActionData;
+  workAction?: WorkActionData;
+  workConfirmed?: boolean;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
   salesInsight?: SalesInsightPayload;
@@ -239,21 +234,50 @@ const DOMAIN_CAPABILITIES: Array<{
         name: "Instagram 포스트",
         prompt: "인스타그램 피드 기획해줘.",
         icon: (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0"
+          >
             <defs>
-              <linearGradient id="ig-grad" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%"   stopColor="#FFDC80" />
-                <stop offset="15%"  stopColor="#FCAF45" />
-                <stop offset="35%"  stopColor="#F77737" />
-                <stop offset="50%"  stopColor="#FD1D1D" />
-                <stop offset="70%"  stopColor="#E1306C" />
-                <stop offset="85%"  stopColor="#833AB4" />
+              <linearGradient
+                id="ig-grad"
+                x1="0"
+                y1="24"
+                x2="24"
+                y2="0"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stopColor="#FFDC80" />
+                <stop offset="15%" stopColor="#FCAF45" />
+                <stop offset="35%" stopColor="#F77737" />
+                <stop offset="50%" stopColor="#FD1D1D" />
+                <stop offset="70%" stopColor="#E1306C" />
+                <stop offset="85%" stopColor="#833AB4" />
                 <stop offset="100%" stopColor="#405DE6" />
               </linearGradient>
             </defs>
             <rect width="24" height="24" rx="6" fill="url(#ig-grad)" />
-            <rect x="5" y="5" width="14" height="14" rx="4" stroke="white" strokeWidth="1.8" fill="none" />
-            <circle cx="12" cy="12" r="3.3" stroke="white" strokeWidth="1.8" fill="none" />
+            <rect
+              x="5"
+              y="5"
+              width="14"
+              height="14"
+              rx="4"
+              stroke="white"
+              strokeWidth="1.8"
+              fill="none"
+            />
+            <circle
+              cx="12"
+              cy="12"
+              r="3.3"
+              stroke="white"
+              strokeWidth="1.8"
+              fill="none"
+            />
             <circle cx="17" cy="7" r="1.1" fill="white" />
           </svg>
         ),
@@ -262,9 +286,18 @@ const DOMAIN_CAPABILITIES: Array<{
         name: "네이버 Blog 포스트",
         prompt: "블로그 포스트 작성해줘",
         icon: (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0"
+          >
             <rect width="24" height="24" rx="4" fill="#03C75A" />
-            <path d="M13.8 12.6L10.8 7.5H8.5v9h2.2v-5.1l3 5.1H16v-9h-2.2z" fill="white" />
+            <path
+              d="M13.8 12.6L10.8 7.5H8.5v9h2.2v-5.1l3 5.1H16v-9h-2.2z"
+              fill="white"
+            />
           </svg>
         ),
       },
@@ -272,7 +305,13 @@ const DOMAIN_CAPABILITIES: Array<{
         name: "YouTube Shorts",
         prompt: "유튜브 Shorts 영상 만들어줘",
         icon: (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0"
+          >
             <rect width="24" height="24" rx="5" fill="#FF0000" />
             <polygon points="9.5,7.5 18,12 9.5,16.5" fill="white" />
           </svg>
@@ -281,7 +320,10 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "이벤트 기획", prompt: "프로모션 이벤트 기획해줘" },
       { name: "리뷰 답글", prompt: "리뷰 답글 작성해줘" },
       { name: "성과 리포트", prompt: "인스타그램·유튜브 성과 리포트 보여줘" },
-      { name: "자동화 스케줄", prompt: "매주 월요일 인스타 포스트 자동으로 올려줘" },
+      {
+        name: "자동화 스케줄",
+        prompt: "매주 월요일 인스타 포스트 자동으로 올려줘",
+      },
     ],
   },
   {
@@ -394,6 +436,40 @@ function parseCostAction(text: string): {
   return { clean, action };
 }
 
+function parseWorkTableAction(text: string): {
+  clean: string;
+  action: WorkActionData | undefined;
+} {
+  const PREFIX = "[ACTION:OPEN_WORK_TABLE:";
+  const start = text.indexOf(PREFIX);
+  if (start === -1) return { clean: text, action: undefined };
+  const jsonStart = start + PREFIX.length;
+  let depth = 0;
+  let jsonEnd = -1;
+  for (let i = jsonStart; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        jsonEnd = i;
+        break;
+      }
+    }
+  }
+  if (jsonEnd === -1) return { clean: text, action: undefined };
+  let markerEnd = jsonEnd + 1;
+  while (markerEnd < text.length && text[markerEnd] !== "]") markerEnd++;
+  markerEnd++;
+  let action: WorkActionData | undefined;
+  try {
+    action = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    /* ignore */
+  }
+  const clean = (text.slice(0, start) + text.slice(markerEnd)).trim();
+  return { clean, action };
+}
+
 const MIN_TEXTAREA = 56;
 const MAX_TEXTAREA = 160;
 
@@ -415,30 +491,42 @@ export const InlineChat = () => {
     registerSender,
     currentSessionId,
     setCurrentSessionId,
-    setSessions,
     newSessionTick,
     loadSessionTick,
     pendingLoadSessionId,
     pendingBriefing,
     consumeBriefing,
     setLastSpeaker,
+    messages: _messages,
+    setMessages: _setMessages,
+    loading,
+    setLoading,
+    userId,
+    fetchSessions,
+    avatarUrl,
   } = useChat();
+  const messages = _messages as Message[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setMessages = _setMessages as any as Dispatch<
+    SetStateAction<Message[]>
+  >;
 
-  const [messages, setMessages] = useState<Message[]>(emptyMessages);
   const [initialSuggestions, setInitialSuggestions] = useState<string[]>(() =>
     pickSuggested(),
   );
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<string>("auto");
-  const [userId, setUserId] = useState<string | null>(null);
   const [showSalesTable, setShowSalesTable] = useState(false);
   const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(
     null,
   );
   const [showCostTable, setShowCostTable] = useState(false);
   const [costTableData, setCostTableData] = useState<CostActionData | null>(
+    null,
+  );
+  const [showWorkTable, setShowWorkTable] = useState(false);
+  const [workTableData, setWorkTableData] = useState<WorkActionData | null>(
     null,
   );
   const { openDetail } = useNodeDetail();
@@ -503,35 +591,11 @@ export const InlineChat = () => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth
-      .getUser()
-      .then(({ data }) => setUserId(data.user?.id ?? null));
-  }, []);
-
-  useEffect(() => {
     const viewport = scrollViewportRef.current;
     if (viewport) {
       viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
     }
   }, [messages]);
-
-  const fetchSessions = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(
-        `${apiBase}/api/chat/sessions?account_id=${userId}&limit=50`,
-      );
-      const json = await res.json();
-      setSessions(json?.data ?? []);
-    } catch {
-      /* noop */
-    }
-  }, [apiBase, userId, setSessions]);
-
-  useEffect(() => {
-    if (userId) fetchSessions();
-  }, [userId, fetchSessions]);
 
   useEffect(() => {
     if (pendingBriefing) {
@@ -574,10 +638,25 @@ export const InlineChat = () => {
               status?: "uploading" | "done" | "error";
             } | null;
           }) => {
+            const raw = m.content ?? "";
+            const { clean: afterSales, action: salesAction } =
+              parseSalesAction(raw);
+            const { clean: afterCost, action: costAction } =
+              parseCostAction(afterSales);
+            const { clean: afterWork, action: workAction } =
+              parseWorkTableAction(afterCost);
+            const { cleaned: afterShorts, payload: shortsWizard } =
+              extractShortsWizardPayload(afterWork);
+            const { cleaned: afterMenu, payload: menuChart } =
+              extractMenuChartPayload(afterShorts);
             const { cleaned: afterMktReport, payload: mktReport } =
-              extractMarketingReportPayload(m.content ?? "");
-            const { cleaned: cleanedContent, payload: igPayload } =
+              extractMarketingReportPayload(afterMenu);
+            const { cleaned: afterInstagram, payload: igPayload } =
               extractInstagramPayload(afterMktReport);
+            const { cleaned: afterEventForm, hasForm: eventPlanForm } =
+              extractEventPlanForm(afterInstagram);
+            const { cleaned: cleanedContent, payload: employeePicker } =
+              extractEmployeePickerPayload(afterEventForm);
             return {
               role: m.role === "user" ? "user" : "assistant",
               content: cleanedContent,
@@ -589,11 +668,38 @@ export const InlineChat = () => {
                     sizeKb: m.attachment.size_kb ?? undefined,
                   }
                 : undefined,
+              salesAction,
+              costAction,
+              workAction: workAction ?? undefined,
+              shortsWizard: shortsWizard ?? undefined,
+              menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
               instagram: igPayload ?? undefined,
+              eventPlanForm: eventPlanForm || undefined,
+              employeePicker: employeePicker ?? undefined,
             };
           },
         );
+        // workConfirmed 복원: workAction이 있는 assistant 메시지 뒤에
+        // 매칭되는 __WORK_TABLE_CONFIRMED__ 유저 메시지가 있으면 true 로 표시
+        for (let mi = 0; mi < mapped.length; mi++) {
+          const m = mapped[mi];
+          if (m.role !== "assistant" || !m.workAction) continue;
+          const { employee_id, pay_month } = m.workAction;
+          const prefix = `__WORK_TABLE_CONFIRMED__:`;
+          const confirmed = mapped.slice(mi + 1).some((nm) => {
+            if (nm.role !== "user") return false;
+            const raw2 = msgs[mapped.indexOf(nm)]?.content ?? nm.content ?? "";
+            if (!raw2.startsWith(prefix)) return false;
+            try {
+              const p = JSON.parse(raw2.slice(prefix.length).trim());
+              return p.employee_id === employee_id && p.pay_month === pay_month;
+            } catch {
+              return false;
+            }
+          });
+          if (confirmed) mapped[mi] = { ...m, workConfirmed: true };
+        }
         // 마지막 assistant 메시지의 speaker 로 배지 복원
         const lastAssistant = [...msgs]
           .reverse()
@@ -879,11 +985,10 @@ export const InlineChat = () => {
         const receiptItems = nonDocs.filter(
           (it) => it.final_category === "receipt",
         );
-        const menuItems = nonDocs.filter(
-          (it) => it.final_category === "menu",
-        );
+        const menuItems = nonDocs.filter((it) => it.final_category === "menu");
         const otherNonDocs = nonDocs.filter(
-          (it) => it.final_category !== "receipt" && it.final_category !== "menu",
+          (it) =>
+            it.final_category !== "receipt" && it.final_category !== "menu",
         );
 
         if (otherNonDocs.length > 0) {
@@ -919,11 +1024,11 @@ export const InlineChat = () => {
           // 메뉴판 이미지 — sales agent 의 `sales_menu_ocr` capability 가 수행.
           const latestMenu = menuItems[menuItems.length - 1];
           setPendingReceipt({
-            storage_path:  latestMenu.storage_path  || "",
-            bucket:        latestMenu.bucket        || "documents-uploads",
-            mime_type:     latestMenu.mime_type      || "image/jpeg",
+            storage_path: latestMenu.storage_path || "",
+            bucket: latestMenu.bucket || "documents-uploads",
+            mime_type: latestMenu.mime_type || "image/jpeg",
             original_name: latestMenu.original_name || "",
-            size_bytes:    latestMenu.size_bytes     || 0,
+            size_bytes: latestMenu.size_bytes || 0,
           });
           await sendRef.current?.(
             `방금 업로드한 메뉴판 "${latestMenu.title}" 을 메뉴로 등록해줘.`,
@@ -1078,8 +1183,10 @@ export const InlineChat = () => {
           parseSalesAction(rawReply);
         const { clean: afterCost, action: costAction } =
           parseCostAction(afterSales);
+        const { clean: afterWork, action: workAction } =
+          parseWorkTableAction(afterCost);
         const { cleaned: afterShorts, payload: shortsWizard } =
-          extractShortsWizardPayload(afterCost);
+          extractShortsWizardPayload(afterWork);
         const { cleaned: afterInsight, payload: salesInsight } =
           extractInsightPayload(afterShorts);
         const { cleaned: afterMenu, payload: menuChart } =
@@ -1110,6 +1217,7 @@ export const InlineChat = () => {
               : undefined,
             salesAction,
             costAction,
+            workAction: workAction ?? undefined,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
             salesInsight: salesInsight ?? undefined,
@@ -1338,6 +1446,18 @@ export const InlineChat = () => {
           }}
         />
       )}
+      {showWorkTable && workTableData && (
+        <WorkTableCard
+          data={workTableData}
+          onClose={() => setShowWorkTable(false)}
+          onConfirm={(confirmed) => {
+            setShowWorkTable(false);
+            sendRef.current?.(
+              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: confirmed.employee_id, pay_month: confirmed.pay_month, records: confirmed.records })}`,
+            );
+          }}
+        />
+      )}
       <div className="flex h-full min-h-0 flex-col">
         {messages.length === 0 && !loading ? (
           <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
@@ -1408,7 +1528,18 @@ export const InlineChat = () => {
                   .trim();
               }
 
+              if (
+                msg.role === "user" &&
+                (displayText || "").startsWith("__WORK_TABLE_CONFIRMED__:")
+              ) {
+                displayText = "✓ Work hours confirmed";
+              }
+
               if (msg.role === "assistant") {
+                displayText = (displayText || "")
+                  .replace(/\[PAYROLL_PREVIEW_DATA:[^\]]*\]/g, "")
+                  .trim();
+
                 const rrExtracted = extractReviewReplyPayload(
                   displayText || "",
                 );
@@ -1442,8 +1573,21 @@ export const InlineChat = () => {
                     )}
                   >
                     {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                        <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                      <div className="mt-0.5 shrink-0 overflow-hidden rounded-full">
+                        <BossAvatar size={24} />
+                      </div>
+                    )}
+                    {msg.role === "user" && (
+                      <div className="order-last mt-0.5 shrink-0 overflow-hidden rounded-full">
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt="me"
+                            className="h-6 w-6 object-cover"
+                          />
+                        ) : (
+                          <EmployeeAvatar size={24} />
+                        )}
                       </div>
                     )}
                     {msg.attachment ? (
@@ -1568,16 +1712,12 @@ export const InlineChat = () => {
                   )}
                   {msg.role === "assistant" && msg.snsPostForm && (
                     <div className="ml-8">
-                      <SnsPostFormCard
-                        onSubmit={(message) => send(message)}
-                      />
+                      <SnsPostFormCard onSubmit={(message) => send(message)} />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.blogPostForm && (
                     <div className="ml-8">
-                      <BlogPostFormCard
-                        onSubmit={(message) => send(message)}
-                      />
+                      <BlogPostFormCard onSubmit={(message) => send(message)} />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.reviewReplyForm && (
@@ -1924,13 +2064,155 @@ export const InlineChat = () => {
                       </div>
                     </div>
                   )}
+                  {msg.role === "assistant" && msg.workAction && (
+                    <div className="ml-8 flex flex-col gap-1.5">
+                      {msg.workAction.records.length > 0 && (
+                        <div className="overflow-hidden rounded-[5px] border border-[#030303]/10 bg-white">
+                          <div className="flex items-center justify-between border-b border-[#030303]/[0.08] px-3 py-1.5">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                              Work hours
+                            </span>
+                            <span className="font-mono text-[11px] text-[#030303]/60">
+                              {msg.workAction.employee_name} ·{" "}
+                              {msg.workAction.pay_month}
+                            </span>
+                          </div>
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-[#030303]/10 text-left font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                <th className="px-3 py-1.5 font-medium">
+                                  날짜
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  기본
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  연장
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  야간
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  휴일
+                                </th>
+                                <th className="px-3 py-1.5 font-medium">
+                                  메모
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {msg.workAction.records.map((r, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="border-b border-[#030303]/5 last:border-b-0"
+                                >
+                                  <td className="px-3 py-1.5 font-mono tabular-nums text-[#030303]">
+                                    {r.work_date}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {r.hours_worked}h
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.overtime_hours > 0
+                                      ? `${r.overtime_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.night_hours > 0
+                                      ? `${r.night_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.holiday_hours > 0
+                                      ? `${r.holiday_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[#030303]/50">
+                                    {r.memo || ""}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#030303]/10 bg-[#f4f1ed]">
+                                <td className="px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                  합계
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[13px] font-semibold text-[#030303]">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.hours_worked,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.overtime_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.night_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.holiday_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={loading || msg.workConfirmed}
+                          onClick={() => {
+                            setMessages((prev) =>
+                              prev.map((m, idx) =>
+                                idx === i ? { ...m, workConfirmed: true } : m,
+                              ),
+                            );
+                            sendRef.current?.(
+                              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: msg.workAction!.employee_id, pay_month: msg.workAction!.pay_month, records: msg.workAction!.records })}`,
+                            );
+                          }}
+                          className="w-full rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium disabled:opacity-40"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={msg.workConfirmed}
+                          onClick={() => {
+                            setWorkTableData(msg.workAction!);
+                            setShowWorkTable(true);
+                          }}
+                          className="w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
+                        >
+                          Edit in table
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
             {loading && (
               <div className="flex justify-start gap-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7f8f54]/20">
-                  <Bot className="h-3.5 w-3.5 text-[#6a7843]" />
+                <div className="mt-0.5 shrink-0 overflow-hidden rounded-full">
+                  <BossAvatar size={24} />
                 </div>
                 <div className="rounded-[5px] bg-[#f1ece2] px-3 py-2">
                   <Loader2 className="h-4 w-4 animate-spin text-[#030303]/60" />

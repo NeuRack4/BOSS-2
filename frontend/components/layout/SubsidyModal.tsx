@@ -34,6 +34,7 @@ type SubsidyItem = {
   detail_url: string | null;
   external_url: string | null;
   form_files: FormFile[];
+  hashtags?: string[];
 };
 
 const formatPeriod = (item: SubsidyItem): string => {

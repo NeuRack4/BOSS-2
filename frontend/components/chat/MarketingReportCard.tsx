@@ -109,7 +109,9 @@ function StatCell({
       <span className="text-[10px] uppercase tracking-wide text-neutral-500">
         {label}
       </span>
-      <span className="text-[15px] font-semibold text-neutral-800">{value}</span>
+      <span className="text-[15px] font-semibold text-neutral-800">
+        {value}
+      </span>
       {sub && <span className="text-[10px] text-neutral-400">{sub}</span>}
     </div>
   );
@@ -124,7 +126,7 @@ export function MarketingReportCard({
 }) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const [tab, setTab] = useState<"overview" | "instagram" | "youtube">(
-    "overview"
+    "overview",
   );
   const [ytConnecting, setYtConnecting] = useState(false);
   const [ytData, setYtData] = useState<YoutubeData>(payload.youtube);
@@ -145,10 +147,14 @@ export function MarketingReportCard({
     try {
       const accountId = await getAccountId();
       const res = await fetch(
-        `${apiBase}/api/marketing/youtube/oauth/start?account_id=${accountId}`
+        `${apiBase}/api/marketing/youtube/oauth/start?account_id=${accountId}`,
       );
       const { url } = await res.json();
-      const popup = window.open(url, "youtube_oauth", "popup=true,width=600,height=700");
+      const popup = window.open(
+        url,
+        "youtube_oauth",
+        "popup=true,width=600,height=700",
+      );
 
       const onMsg = async (e: MessageEvent) => {
         if (e.data?.type !== "youtube_connected") return;
@@ -159,7 +165,7 @@ export function MarketingReportCard({
           // 연결 성공 → YouTube 데이터 즉시 재조회
           try {
             const r = await fetch(
-              `${apiBase}/api/marketing/report/youtube?account_id=${accountId}&days=${payload.period_days}`
+              `${apiBase}/api/marketing/report/youtube?account_id=${accountId}&days=${payload.period_days}`,
             );
             const json = await r.json();
             if (json?.data) setYtData(json.data);
@@ -201,7 +207,11 @@ export function MarketingReportCard({
                   : "text-neutral-500 hover:bg-neutral-100"
               }`}
             >
-              {t === "overview" ? "분석" : t === "instagram" ? "인스타" : "유튜브"}
+              {t === "overview"
+                ? "분석"
+                : t === "instagram"
+                  ? "인스타"
+                  : "유튜브"}
             </button>
           ))}
         </div>
@@ -226,18 +236,18 @@ export function MarketingReportCard({
                 </span>
               )}
               {ytOk ? (
-              <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600">
-                ● YouTube 연결됨
-              </span>
-            ) : (
-              <button
-                onClick={handleConnectYoutube}
-                disabled={ytConnecting}
-                className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-300 bg-white text-neutral-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-              >
-                {ytConnecting ? "연결 중…" : "○ YouTube 연결하기"}
-              </button>
-            )}
+                <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600">
+                  ● YouTube 연결됨
+                </span>
+              ) : (
+                <button
+                  onClick={handleConnectYoutube}
+                  disabled={ytConnecting}
+                  className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-300 bg-white text-neutral-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  {ytConnecting ? "연결 중…" : "○ YouTube 연결하기"}
+                </button>
+              )}
             </div>
 
             {/* AI 분석 텍스트 */}
@@ -316,7 +326,8 @@ export function MarketingReportCard({
                               {post.caption || "(캡션 없음)"}
                             </p>
                             <p className="text-[11px] text-neutral-400 mt-0.5">
-                              engagement {fmt(post.engagement)} · 저장 {fmt(post.saved)}
+                              engagement {fmt(post.engagement)} · 저장{" "}
+                              {fmt(post.saved)}
                             </p>
                           </div>
                         </a>
@@ -347,7 +358,7 @@ export function MarketingReportCard({
                   ) : (
                     <>
                       <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                        <path d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.81a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.5-5.81zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        <path d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.81a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.5-5.81zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                       </svg>
                       YouTube 연결하기
                     </>
@@ -408,7 +419,8 @@ export function MarketingReportCard({
                               {v.title || v.video_id}
                             </p>
                             <p className="text-[11px] text-neutral-400 mt-0.5">
-                              조회 {fmt(v.views)} · {fmt(v.watch_minutes)}분 · 좋아요 {fmt(v.likes)}
+                              조회 {fmt(v.views)} · {fmt(v.watch_minutes)}분 ·
+                              좋아요 {fmt(v.likes)}
                             </p>
                           </div>
                         </a>

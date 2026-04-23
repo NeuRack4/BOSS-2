@@ -1549,7 +1549,8 @@ async def run_payroll_doc(
             )
 
         _BUCKET = "documents-uploads"
-        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
+        _safe_month = confirmed_month.replace("-", "")
+        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_{_safe_month}.xlsx"
 
         def _upload_from_preview():
             try:
@@ -1715,9 +1716,10 @@ async def run_payroll_doc(
             f"[ARTIFACT]\ntype: payroll_doc\ntitle: {target} 급여명세서\nsub_domain: Tax&HR\n[/ARTIFACT]"
         )
 
-    # Supabase Storage 업로드
+    # Supabase Storage 업로드 — filename 에 한글이 포함될 수 있으므로 ASCII-safe 경로 사용
     _BUCKET = "documents-uploads"
-    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
+    _safe_name = re.sub(r"[^\x20-\x7E]", "", filename) or "payroll_slip.xlsx"
+    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{_safe_name}"
 
     def _upload_excel() -> str:
         try:

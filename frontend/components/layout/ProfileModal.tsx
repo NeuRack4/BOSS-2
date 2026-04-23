@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useChat } from "@/components/chat/ChatContext";
+import { EmployeeAvatar } from "@/components/chat/ChatAvatars";
 
 type ProfileRow = {
   display_name: string | null;
@@ -15,9 +17,10 @@ type ProfileRow = {
   channels: string | null;
   primary_goal: string | null;
   profile_meta: Record<string, unknown> | null;
+  avatar_url: string | null;
 };
 
-type Form = Omit<ProfileRow, "profile_meta">;
+type Form = Omit<ProfileRow, "profile_meta" | "avatar_url">;
 
 type Props = {
   open: boolean;
@@ -83,6 +86,10 @@ export const ProfileModal = ({ open, onClose }: Props) => {
   const [saved, setSaved] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { setAvatarUrl } = useChat();
 
   useEffect(() => {
     if (!open) return;
@@ -103,7 +110,7 @@ export const ProfileModal = ({ open, onClose }: Props) => {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "display_name, business_name, business_type, business_stage, employees_count, location, channels, primary_goal, profile_meta",
+          "display_name, business_name, business_type, business_stage, employees_count, location, channels, primary_goal, profile_meta, avatar_url",
         )
         .eq("id", user.id)
         .single();
@@ -111,6 +118,7 @@ export const ProfileModal = ({ open, onClose }: Props) => {
       const p = (data as ProfileRow | null) ?? null;
       setProfile(p);
       setForm(toForm(p));
+      setAvatarPreview(p?.avatar_url ?? null);
 
       const entries: Array<[string, string]> = [];
       if (p?.profile_meta && typeof p.profile_meta === "object") {
@@ -133,6 +141,42 @@ export const ProfileModal = ({ open, onClose }: Props) => {
 
   const set = (k: keyof Form, v: string) =>
     setForm((prev) => ({ ...prev, [k]: v }));
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    const MAX_MB = 2;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      alert(`Image must be under ${MAX_MB}MB.`);
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${userId}/avatar.${ext}`;
+      const supabase = createClient();
+      const { error } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(path);
+      const url = `${urlData.publicUrl}?t=${Date.now()}`;
+      await supabase
+        .from("profiles")
+        .update({ avatar_url: url })
+        .eq("id", userId);
+      setAvatarPreview(url);
+      setAvatarUrl(url);
+    } catch (err) {
+      console.error("Avatar upload failed", err);
+      alert("Upload failed. Please try again.");
+    } finally {
+      setAvatarUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSave = async () => {
     if (!userId) return;
@@ -177,6 +221,62 @@ export const ProfileModal = ({ open, onClose }: Props) => {
           <div className="flex h-full flex-col gap-4">
             <ScrollArea className="min-h-0 flex-1 pr-1">
               <div className="space-y-4 pb-2">
+                {/* Avatar */}
+                <div>
+                  <label className={labelCls}>Chat Icon</label>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#030303]/10 bg-white">
+                      {avatarPreview ? (
+                        <img
+                          src={avatarPreview}
+                          alt="avatar"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <EmployeeAvatar size={56} />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        className="rounded-[5px] border border-[#030303]/15 bg-[#fafafa] px-3 py-1.5 text-[12px] text-[#030303]/70 transition-colors hover:bg-[#f0ede8] disabled:opacity-40"
+                      >
+                        {avatarUploading ? "Uploading…" : "Upload photo"}
+                      </button>
+                      {avatarPreview && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!userId) return;
+                            const supabase = createClient();
+                            await supabase
+                              .from("profiles")
+                              .update({ avatar_url: null })
+                              .eq("id", userId);
+                            setAvatarPreview(null);
+                            setAvatarUrl(null);
+                          }}
+                          className="text-left text-[11px] text-[#030303]/40 hover:text-[#c0392b]"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10.5px] text-[#030303]/40">
+                    JPG / PNG / WebP · max 2MB
+                  </p>
+                </div>
+
                 {/* Email (read-only) */}
                 <div>
                   <label className={labelCls}>Email</label>

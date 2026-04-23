@@ -4,17 +4,25 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   ReactNode,
 } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export type ChatSession = {
   id: string;
   title: string;
   created_at: string;
   updated_at: string;
+};
+
+// Minimal base type for persistent message storage — InlineChat casts to its full Message type
+export type ChatMessageBase = {
+  role: string;
+  content: string;
 };
 
 type ChatSendFn = (text: string) => void;
@@ -43,6 +51,15 @@ type ChatContextValue = {
   consumeBriefing: () => void;
   lastSpeaker: SpeakerKey[] | null;
   setLastSpeaker: (next: SpeakerKey[] | null) => void;
+  // Lifted state — survives page navigation
+  messages: ChatMessageBase[];
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessageBase[]>>;
+  loading: boolean;
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  userId: string | null;
+  fetchSessions: () => Promise<void>;
+  avatarUrl: string | null;
+  setAvatarUrl: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -60,6 +77,57 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [lastSpeaker, setLastSpeakerState] = useState<SpeakerKey[] | null>(
     null,
   );
+  const [messages, setMessages] = useState<ChatMessageBase[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL;
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setUserId(data.user?.id ?? null));
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        setAvatarUrl(
+          (data as { avatar_url: string | null } | null)?.avatar_url ?? null,
+        );
+      });
+  }, [userId]);
+
+  const fetchSessions = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(
+        `${apiBase}/api/chat/sessions?account_id=${userId}&limit=50`,
+      );
+      const json = await res.json();
+      setSessions(json?.data ?? []);
+    } catch {
+      /* noop */
+    }
+  }, [apiBase, userId]);
+
+  useEffect(() => {
+    if (userId) fetchSessions();
+  }, [userId, fetchSessions]);
 
   const setLastSpeaker = useCallback((next: SpeakerKey[] | null) => {
     setLastSpeakerState(next && next.length ? next : null);
@@ -112,6 +180,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       consumeBriefing,
       lastSpeaker,
       setLastSpeaker,
+      messages,
+      setMessages,
+      loading,
+      setLoading,
+      userId,
+      fetchSessions,
+      avatarUrl,
+      setAvatarUrl,
     }),
     [
       registerSender,
@@ -128,6 +204,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       consumeBriefing,
       lastSpeaker,
       setLastSpeaker,
+      messages,
+      loading,
+      userId,
+      fetchSessions,
+      avatarUrl,
     ],
   );
 

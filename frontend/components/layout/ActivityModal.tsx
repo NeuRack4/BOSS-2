@@ -122,6 +122,24 @@ export const ActivityModal = ({ open, onClose }: Props) => {
     };
   }, [open]);
 
+  useEffect(() => {
+    const handler = () => {
+      if (!open) return;
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        supabase
+          .from("activity_logs")
+          .select("id,type,domain,title,description,created_at,metadata")
+          .order("created_at", { ascending: false })
+          .limit(200)
+          .then(({ data }) => setActivities((data as Activity[] | null) ?? []));
+      });
+    };
+    window.addEventListener("boss:artifacts-changed", handler);
+    return () => window.removeEventListener("boss:artifacts-changed", handler);
+  }, [open]);
+
   const handleNavigate = async (a: Activity) => {
     let artifactId = a.metadata?.artifact_id ?? null;
     if (!artifactId) {

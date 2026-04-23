@@ -38,7 +38,10 @@ import {
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
 import MenuListPanel from "@/components/sales/MenuListPanel";
-import { SalesInsightCard, type SalesInsightPayload } from "@/components/chat/SalesInsightCard";
+import {
+  SalesInsightCard,
+  type SalesInsightPayload,
+} from "@/components/chat/SalesInsightCard";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -586,7 +589,7 @@ const Toggle = ({
 );
 
 export const NodeDetailModal = () => {
-  const { currentId, closeDetail, openDetail } = useNodeDetail();
+  const { currentId, employeeCtx, closeDetail, openDetail } = useNodeDetail();
   const open = currentId !== null;
 
   const [loading, setLoading] = useState(false);
@@ -620,6 +623,24 @@ export const NodeDetailModal = () => {
   const [boostNote, setBoostNote] = useState("");
   const [boosting, setBoosting] = useState(false);
   const [boostDone, setBoostDone] = useState(false);
+
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = useCallback(async () => {
+    if (!currentId || !accountId) return;
+    if (!confirm("이 항목을 삭제하시겠어요?")) return;
+    setDeleting(true);
+    try {
+      await fetch(`${API}/api/artifacts/${currentId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId }),
+      });
+      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+      closeDetail();
+    } finally {
+      setDeleting(false);
+    }
+  }, [currentId, accountId, closeDetail]);
 
   // Sales / cost records (revenue_entry · cost_report 노드 전용)
   const [records, setRecords] = useState<LedgerRecord[]>([]);
@@ -1068,7 +1089,7 @@ export const NodeDetailModal = () => {
               </span>
               <span
                 className={cn(
-                  "ml-auto rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider text-[10px]",
+                  "rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider text-[10px]",
                   artifact.status === "active"
                     ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                     : artifact.status === "paused"
@@ -1088,16 +1109,31 @@ export const NodeDetailModal = () => {
                   {d}
                 </span>
               ))}
+              {artifact.kind !== "domain" &&
+                artifact.type !== "subsidy_recommendation" && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="ml-auto flex items-center gap-1 rounded-[4px] border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    <Trash2 size={11} />
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                )}
             </div>
 
             <ScrollArea className="min-h-0 flex-1 pr-1">
               <div className="flex flex-col gap-2">
                 {/* SALES INSIGHT 카드 — sales_report 상세에서 표시 */}
                 {artifact.type === "sales_report" &&
-                  artifact.metadata?.sales_insight && (
+                  Boolean(artifact.metadata?.sales_insight) && (
                     <Section>
                       <SalesInsightCard
-                        payload={artifact.metadata.sales_insight as SalesInsightPayload}
+                        payload={
+                          artifact.metadata!
+                            .sales_insight as SalesInsightPayload
+                        }
                       />
                     </Section>
                   )}
@@ -1967,6 +2003,341 @@ export const NodeDetailModal = () => {
             </ScrollArea>
           </>
         )}
+      </div>
+    </Modal>
+  );
+};
+
+// ── Employee Detail Modal ──────────────────────────────────────────────────
+
+type WorkRecord = {
+  id: string;
+  work_date: string;
+  hours_worked: number;
+  overtime_hours: number;
+  night_hours: number;
+  holiday_hours: number;
+  memo: string | null;
+};
+
+type EmployeeDetail = {
+  id: string;
+  name: string;
+  employment_type: string;
+  hourly_rate: number | null;
+  monthly_salary: number | null;
+  pay_day: number | null;
+  phone: string | null;
+  department: string | null;
+  position: string | null;
+  hire_date: string | null;
+  status: string;
+};
+
+const toMonth = (d: Date) => d.toISOString().slice(0, 7);
+const fmtHours = (n: number) => (n > 0 ? `${n}h` : "—");
+
+export const EmployeeDetailModal = ({
+  employeeId,
+  accountId,
+  onClose,
+}: {
+  employeeId: string;
+  accountId: string;
+  onClose: () => void;
+}) => {
+  const [emp, setEmp] = useState<EmployeeDetail | null>(null);
+  const [records, setRecords] = useState<WorkRecord[]>([]);
+  const [month, setMonth] = useState(() => toMonth(new Date()));
+  const [loadingEmp, setLoadingEmp] = useState(true);
+  const [loadingRec, setLoadingRec] = useState(true);
+
+  // Add row state
+  const [showAdd, setShowAdd] = useState(false);
+  const [newDate, setNewDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [newHours, setNewHours] = useState("8");
+  const [newOt, setNewOt] = useState("0");
+  const [newNight, setNewNight] = useState("0");
+  const [newHoliday, setNewHoliday] = useState("0");
+  const [newMemo, setNewMemo] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/api/employees/${employeeId}?account_id=${accountId}`)
+      .then((r) => r.json())
+      .then((j) => setEmp(j?.data ?? null))
+      .finally(() => setLoadingEmp(false));
+  }, [employeeId, accountId]);
+
+  const loadRecords = useCallback(() => {
+    setLoadingRec(true);
+    fetch(
+      `${API}/api/employees/${employeeId}/work-records?account_id=${accountId}&month=${month}`,
+    )
+      .then((r) => r.json())
+      .then((j) => setRecords(j?.data ?? []))
+      .finally(() => setLoadingRec(false));
+  }, [employeeId, accountId, month]);
+
+  useEffect(() => {
+    loadRecords();
+  }, [loadRecords]);
+
+  const shiftMonth = (delta: number) => {
+    const [y, m] = month.split("-").map(Number);
+    setMonth(toMonth(new Date(y, m - 1 + delta, 1)));
+  };
+
+  const handleAdd = async () => {
+    if (!newDate || saving) return;
+    setSaving(true);
+    await fetch(`${API}/api/employees/${employeeId}/work-records`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        account_id: accountId,
+        work_date: newDate,
+        hours_worked: parseFloat(newHours) || 0,
+        overtime_hours: parseFloat(newOt) || 0,
+        night_hours: parseFloat(newNight) || 0,
+        holiday_hours: parseFloat(newHoliday) || 0,
+        memo: newMemo || null,
+      }),
+    });
+    setSaving(false);
+    setShowAdd(false);
+    setNewMemo("");
+    loadRecords();
+  };
+
+  const handleDelete = async (id: string) => {
+    await fetch(`${API}/api/work-records/${id}?account_id=${accountId}`, {
+      method: "DELETE",
+    });
+    loadRecords();
+  };
+
+  const totalH = records.reduce((s, r) => s + r.hours_worked, 0);
+  const totalOt = records.reduce((s, r) => s + r.overtime_hours, 0);
+  const totalNight = records.reduce((s, r) => s + r.night_hours, 0);
+  const totalHoliday = records.reduce((s, r) => s + r.holiday_hours, 0);
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={emp?.name ?? "Employee"}
+      widthClass="w-[min(760px,95vw)]"
+      variant="dashboard"
+    >
+      <div className="flex h-[min(86vh,800px)] min-h-[400px] flex-col gap-4 overflow-y-auto p-1">
+        {/* Basic info */}
+        {loadingEmp ? (
+          <div className="text-sm text-[#030303]/50">Loading...</div>
+        ) : emp ? (
+          <Section>
+            <SectionHeader icon={<FileText size={13} />} title="Basic info" />
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px]">
+              {[
+                ["Employment", emp.employment_type],
+                ["Department", emp.department],
+                ["Position", emp.position],
+                ["Phone", emp.phone],
+                ["Hire date", emp.hire_date],
+                ["Pay day", emp.pay_day ? `Day ${emp.pay_day}` : null],
+                [
+                  "Hourly rate",
+                  emp.hourly_rate
+                    ? `₩${emp.hourly_rate.toLocaleString()}`
+                    : null,
+                ],
+                [
+                  "Monthly salary",
+                  emp.monthly_salary
+                    ? `₩${emp.monthly_salary.toLocaleString()}`
+                    : null,
+                ],
+              ]
+                .filter(([, v]) => v)
+                .map(([label, value]) => (
+                  <div key={label} className="flex gap-2">
+                    <span className="w-24 shrink-0 text-[#030303]/50">
+                      {label}
+                    </span>
+                    <span className="text-[#030303]">{value}</span>
+                  </div>
+                ))}
+            </div>
+          </Section>
+        ) : null}
+
+        {/* Work records */}
+        <Section>
+          <div className="mb-2 flex items-center justify-between">
+            <SectionHeader
+              icon={<CalendarDays size={13} />}
+              title="Work records"
+            />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => shiftMonth(-1)}
+                className="rounded p-1 text-[#030303]/50 hover:bg-[#030303]/5"
+              >
+                <Clock size={12} />
+              </button>
+              <span className="font-mono text-[11px] text-[#030303]/70">
+                {month}
+              </span>
+              <button
+                onClick={() => shiftMonth(1)}
+                className="rounded p-1 text-[#030303]/50 hover:bg-[#030303]/5"
+              >
+                <Clock size={12} />
+              </button>
+              <button
+                onClick={() => setShowAdd((v) => !v)}
+                className="ml-1 flex items-center gap-0.5 rounded-[4px] border border-[#030303]/15 px-2 py-0.5 text-[11px] text-[#030303]/70 hover:bg-[#030303]/5"
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {showAdd && (
+            <div className="mb-2 grid grid-cols-6 gap-1.5 rounded-[5px] border border-[#030303]/10 bg-[#f4f1ed] p-2 text-[12px]">
+              <input
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="col-span-2 rounded-[4px] border border-[#030303]/15 bg-white px-2 py-1 focus:outline-none"
+              />
+              {[
+                ["Reg", newHours, setNewHours],
+                ["OT", newOt, setNewOt],
+                ["Night", newNight, setNewNight],
+                ["Hol", newHoliday, setNewHoliday],
+              ].map(([label, val, setter]) => (
+                <div key={label as string} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-[#030303]/50">
+                    {label as string}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={val as string}
+                    onChange={(e) =>
+                      (setter as (v: string) => void)(e.target.value)
+                    }
+                    className="rounded-[4px] border border-[#030303]/15 bg-white px-1.5 py-1 text-right font-mono focus:outline-none"
+                  />
+                </div>
+              ))}
+              <input
+                value={newMemo}
+                onChange={(e) => setNewMemo(e.target.value)}
+                placeholder="Memo"
+                className="col-span-3 rounded-[4px] border border-[#030303]/15 bg-white px-2 py-1 focus:outline-none"
+              />
+              <div className="col-span-3 flex gap-1.5">
+                <button
+                  onClick={handleAdd}
+                  disabled={saving}
+                  className="flex-1 rounded-[4px] bg-[#030303] py-1 text-white disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setShowAdd(false)}
+                  className="flex-1 rounded-[4px] border border-[#030303]/15 py-1 text-[#030303]/70"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {loadingRec ? (
+            <div className="py-4 text-center text-[12px] text-[#030303]/40">
+              Loading...
+            </div>
+          ) : records.length === 0 ? (
+            <div className="py-6 text-center text-[12px] text-[#030303]/40">
+              No records this month
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[5px] border border-[#030303]/10 bg-white">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-[#030303]/10 font-mono text-[10px] uppercase tracking-wider text-[#030303]/50">
+                    <th className="px-3 py-1.5 text-left">Date</th>
+                    <th className="px-2 py-1.5 text-right">Reg</th>
+                    <th className="px-2 py-1.5 text-right">OT</th>
+                    <th className="px-2 py-1.5 text-right">Night</th>
+                    <th className="px-2 py-1.5 text-right">Hol</th>
+                    <th className="px-3 py-1.5 text-left">Memo</th>
+                    <th className="w-7 px-1 py-1.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-[#030303]/5 last:border-0"
+                    >
+                      <td className="px-3 py-1.5 font-mono tabular-nums text-[#030303]">
+                        {r.work_date}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                        {fmtHours(r.hours_worked)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[#030303]/60">
+                        {fmtHours(r.overtime_hours)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[#030303]/60">
+                        {fmtHours(r.night_hours)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[#030303]/60">
+                        {fmtHours(r.holiday_hours)}
+                      </td>
+                      <td className="px-3 py-1.5 text-[#030303]/50">
+                        {r.memo ?? ""}
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <button
+                          onClick={() => handleDelete(r.id)}
+                          className="rounded p-0.5 text-[#030303]/20 hover:bg-rose-50 hover:text-rose-500"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-[#030303]/10 bg-[#f4f1ed] font-mono text-[11px] font-semibold text-[#030303]">
+                    <td className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[#030303]/50">
+                      Total
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{totalH}h</td>
+                    <td className="px-2 py-1.5 text-right text-[#030303]/60">
+                      {totalOt > 0 ? `${totalOt}h` : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-[#030303]/60">
+                      {totalNight > 0 ? `${totalNight}h` : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-[#030303]/60">
+                      {totalHoliday > 0 ? `${totalHoliday}h` : "—"}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </Section>
       </div>
     </Modal>
   );

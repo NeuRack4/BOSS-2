@@ -669,66 +669,52 @@ async def run_onboarding(
 # 급여 미리보기 (순수 Python 계산)
 # ──────────────────────────────────────────────────────────────────────────
 _PAYROLL_PREVIEW_PREFIX = "__PAYROLL_PREVIEW_REQUEST__:"
+_WORK_TABLE_CONFIRMED_PREFIX = "__WORK_TABLE_CONFIRMED__:"
 
 
-async def run_payroll_preview(
-    message: str,
-    account_id: str,
-    history: list | None = None,
-    rag_context: str = "",
-    long_term_context: str = "",
-    *,
-    employee_id: str | None = None,
-    pay_month: str | None = None,
-    **_,
-) -> str:
+def _resolve_employee(account_id: str, employee_id: str | None, employee_name: str | None) -> dict:
+    """UUID 또는 이름으로 직원 단건 조회. 못 찾으면 {} 반환."""
+    import re as _re
+    sb = get_supabase()
+    _UUID_RE = _re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I)
+    if employee_id and _UUID_RE.match(employee_id):
+        row = sb.table("employees").select("*").eq("id", employee_id).eq("account_id", account_id).maybe_single().execute()
+        return row.data or {}
+    name_query = (employee_name or employee_id or "").strip()
+    if not name_query:
+        return {}
+    all_rows = sb.table("employees").select("*").eq("account_id", account_id).execute()
+    all_emps = all_rows.data or []
+    candidates = [e for e in all_emps if name_query.lower() in (e.get("name") or "").lower()]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        names = ", ".join(c.get("name", "") for c in candidates)
+        raise ValueError(f"'{name_query}'와 일치하는 직원이 여러 명입니다: {names}\n정확한 이름으로 다시 말씀해 주세요.")
+    return {}
+
+
+def _fetch_work_records(account_id: str, employee_uuid: str, month: str) -> list[dict]:
+    import calendar as _cal
+    sb = get_supabase()
+    y, m = int(month[:4]), int(month[5:7])
+    last_day = _cal.monthrange(y, m)[1]
+    res = (
+        sb.table("work_records")
+        .select("work_date,hours_worked,overtime_hours,night_hours,holiday_hours,memo")
+        .eq("employee_id", employee_uuid)
+        .eq("account_id", account_id)
+        .gte("work_date", f"{month}-01")
+        .lte("work_date", f"{month}-{last_day:02d}")
+        .order("work_date")
+        .execute()
+    )
+    return res.data or []
+
+
+def _build_payroll_reply(emp: dict, month: str, records: list[dict]) -> str:
     import json as _json
     from app.agents._payroll_calculator import calculate_payroll, format_preview_table
-
-    # __PAYROLL_PREVIEW_REQUEST__: 마커에서 파라미터 추출
-    emp_id = employee_id
-    month = pay_month
-    if _PAYROLL_PREVIEW_PREFIX in message:
-        try:
-            raw = message[message.index(_PAYROLL_PREVIEW_PREFIX) + len(_PAYROLL_PREVIEW_PREFIX):]
-            data = _json.loads(raw.strip())
-            emp_id = data.get("employee_id", emp_id)
-            month = data.get("pay_month", month)
-        except Exception:
-            pass
-
-    if not emp_id or not month:
-        return "급여 미리보기를 위해 직원과 급여월 정보가 필요합니다."
-
-    # 직원 정보 조회
-    try:
-        emp_row = sb.table("employees").select("*").eq("id", emp_id).eq("account_id", account_id).maybe_single().execute()
-        emp = emp_row.data or {}
-    except Exception:
-        emp = {}
-
-    if not emp:
-        return "직원 정보를 찾을 수 없어요."
-
-    # 근무 기록 조회
-    try:
-        wr_res = (
-            sb.table("work_records")
-            .select("*")
-            .eq("employee_id", emp_id)
-            .eq("account_id", account_id)
-            .gte("work_date", f"{month}-01")
-            .lte("work_date", f"{month}-31")
-            .execute()
-        )
-        records = wr_res.data or []
-    except Exception:
-        records = []
-
-    total_hours = sum(float(r.get("hours_worked", 0)) for r in records)
-    total_ot = sum(float(r.get("overtime_hours", 0)) for r in records)
-    total_night = sum(float(r.get("night_hours", 0)) for r in records)
-    total_holiday = sum(float(r.get("holiday_hours", 0)) for r in records)
 
     emp_name = emp.get("name", "직원")
     emp_type = emp.get("employment_type", "시급제")
@@ -737,6 +723,11 @@ async def run_payroll_preview(
 
     if not hourly and not monthly_sal:
         return f"{emp_name}의 시급 또는 월급 정보가 없어요. 직원 관리 탭에서 먼저 입력해 주세요."
+
+    total_hours = sum(float(r.get("hours_worked", 0)) for r in records)
+    total_ot = sum(float(r.get("overtime_hours", 0)) for r in records)
+    total_night = sum(float(r.get("night_hours", 0)) for r in records)
+    total_holiday = sum(float(r.get("holiday_hours", 0)) for r in records)
 
     result = calculate_payroll(
         employment_type=emp_type,
@@ -747,12 +738,10 @@ async def run_payroll_preview(
         night_hours=total_night,
         holiday_hours=total_holiday,
     )
-
     preview_md = format_preview_table(result, emp_name, month)
 
-    # 직원 정보 + 계산 결과를 다음 턴 Documents 에이전트가 읽을 수 있도록 마커 임베드
     preview_data = {
-        "employee_id": emp_id,
+        "employee_id": emp["id"],
         "employee_name": emp_name,
         "employment_type": emp_type,
         "hourly_rate": hourly,
@@ -779,13 +768,169 @@ async def run_payroll_preview(
         "net_pay": result.net_pay,
         "has_insurance": result.has_insurance,
     }
-
-    reply = (
+    return (
         f"{preview_md}\n\n"
         f"[PAYROLL_PREVIEW_DATA:{_json.dumps(preview_data, ensure_ascii=False)}]\n\n"
         "[CHOICES]\n급여명세서 생성\n취소\n[/CHOICES]"
     )
-    return reply
+
+
+async def run_payroll_preview(
+    message: str,
+    account_id: str,
+    history: list | None = None,
+    rag_context: str = "",
+    long_term_context: str = "",
+    *,
+    employee_id: str | None = None,
+    employee_name: str | None = None,
+    pay_month: str | None = None,
+    **_,
+) -> str:
+    import json as _json
+
+    # ── 1. 파라미터 추출 (마커 우선) ──────────────────────────────────────────
+    emp_id = employee_id
+    emp_name_hint = employee_name
+    month = pay_month
+
+    # __WORK_TABLE_CONFIRMED__ 마커: Save 버튼 → 바로 급여 계산
+    if _WORK_TABLE_CONFIRMED_PREFIX in message:
+        try:
+            raw = message[message.index(_WORK_TABLE_CONFIRMED_PREFIX) + len(_WORK_TABLE_CONFIRMED_PREFIX):]
+            confirmed = _json.loads(raw.strip())
+            emp_id = confirmed.get("employee_id", emp_id)
+            month = confirmed.get("pay_month", month)
+        except Exception:
+            pass
+
+    if _PAYROLL_PREVIEW_PREFIX in message:
+        try:
+            raw = message[message.index(_PAYROLL_PREVIEW_PREFIX) + len(_PAYROLL_PREVIEW_PREFIX):]
+            data = _json.loads(raw.strip())
+            emp_id = data.get("employee_id", emp_id)
+            emp_name_hint = data.get("employee_name", emp_name_hint)
+            month = data.get("pay_month", month)
+        except Exception:
+            pass
+
+    # ── Step A: 직원 정보가 없으면 먼저 직원 선택 질문 ──────────────────────────
+    if not emp_id and not emp_name_hint:
+        try:
+            _sb = get_supabase()
+            _rows = (
+                _sb.table("employees")
+                .select("name")
+                .eq("account_id", account_id)
+                .order("name")
+                .execute()
+                .data or []
+            )
+            _names = [r["name"] for r in _rows if r.get("name")]
+        except Exception:
+            _names = []
+        if _names:
+            _choices = "\n".join(_names[:8])
+            return (
+                "누구의 급여명세서인가요?\n\n"
+                f"[CHOICES]\n{_choices}\n직접 입력\n[/CHOICES]"
+            )
+        return "누구의 급여명세서를 만들까요? 직원 이름을 알려주세요."
+
+    # ── 2. 직원 조회 ──────────────────────────────────────────────────────────
+    try:
+        emp = _resolve_employee(account_id, emp_id, emp_name_hint)
+    except ValueError as e:
+        return str(e)
+    except Exception as _e:
+        log.exception("[payroll_preview] employee lookup failed: %s", _e)
+        emp = {}
+
+    if not emp:
+        return f"'{emp_name_hint or emp_id}' 직원을 찾을 수 없어요. 이름을 다시 확인해 주세요."
+
+    employee_uuid = emp["id"]
+    emp_display = emp.get("name", "직원")
+
+    # ── Step B: 월 정보가 없으면 월 선택 질문 ────────────────────────────────
+    if not month:
+        from datetime import date as _date
+        _today = _date.today()
+        _y, _m = _today.year, _today.month
+        _month_opts = []
+        for _ in range(3):
+            _month_opts.append(f"{_y}-{_m:02d}")
+            _m -= 1
+            if _m == 0:
+                _m, _y = 12, _y - 1
+        _choices = "\n".join(_month_opts)
+        return (
+            f"{emp_display}의 몇 월 급여명세서를 만들까요?\n\n"
+            f"[CHOICES]\n{_choices}\n직접 입력\n[/CHOICES]"
+        )
+
+    # ── 3. Save 확인 마커 → 즉시 급여 계산 ───────────────────────────────────
+    if _WORK_TABLE_CONFIRMED_PREFIX in message:
+        records = []
+        try:
+            raw = message[message.index(_WORK_TABLE_CONFIRMED_PREFIX) + len(_WORK_TABLE_CONFIRMED_PREFIX):]
+            confirmed_data = _json.loads(raw.strip())
+            records = confirmed_data.get("records") or []
+        except Exception:
+            pass
+        if not records:
+            try:
+                records = _fetch_work_records(account_id, employee_uuid, month)
+            except Exception:
+                records = []
+        return _build_payroll_reply(emp, month, records)
+
+    # ── 4. 근무 기록 조회 → 표 확인 단계 ─────────────────────────────────────
+    try:
+        records = _fetch_work_records(account_id, employee_uuid, month)
+    except Exception:
+        records = []
+
+    emp_name = emp.get("name", "직원")
+
+    if not records:
+        _YES = {"입력하기", "ㅇㅇ", "네", "응", "예", "yes", "입력", "직접입력", "직접 입력"}
+        _msg_clean = message.strip().lower().replace(" ", "")
+        if any(kw.replace(" ", "") in _msg_clean for kw in _YES):
+            empty_payload = _json.dumps(
+                {"employee_id": employee_uuid, "employee_name": emp_name, "pay_month": month, "records": []},
+                ensure_ascii=False,
+            )
+            return (
+                f"{emp_name} {month} 근무 기록 입력 화면을 열어드릴게요.\n\n"
+                f"[ACTION:OPEN_WORK_TABLE:{empty_payload}]"
+            )
+        return (
+            f"{emp_name}의 {month} 근무 기록이 없어요. 직접 입력하시겠어요?\n\n"
+            "[CHOICES]\n입력하기\n취소\n[/CHOICES]"
+        )
+
+    # 근무 기록을 표 액션 마커로 반환
+    work_table_payload = {
+        "employee_id": employee_uuid,
+        "employee_name": emp_name,
+        "pay_month": month,
+        "records": [
+            {
+                "work_date": r["work_date"],
+                "hours_worked": float(r.get("hours_worked", 0)),
+                "overtime_hours": float(r.get("overtime_hours", 0)),
+                "night_hours": float(r.get("night_hours", 0)),
+                "holiday_hours": float(r.get("holiday_hours", 0)),
+                "memo": r.get("memo") or "",
+            }
+            for r in records
+        ],
+    }
+    return (
+        f"{emp_name}의 {month} 근무 기록입니다. 확인 후 저장하면 급여명세서를 계산해 드릴게요.\n\n"
+        f"[ACTION:OPEN_WORK_TABLE:{_json.dumps(work_table_payload, ensure_ascii=False)}]"
+    )
 
 
 def describe(account_id: str) -> list[dict]:
@@ -902,10 +1047,11 @@ def describe(account_id: str) -> list[dict]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "employee_id": {"type": "string", "description": "직원 UUID (선택 — 없으면 picker UI 표시)"},
+                    "employee_id": {"type": "string", "description": "직원 UUID. UUID를 모르면 생략하고 employee_name을 사용."},
+                    "employee_name": {"type": "string", "description": "직원 이름 (예: 송진우). employee_id UUID를 모를 때 사용."},
                     "pay_month": {"type": "string", "description": "급여 정산 월 YYYY-MM (예: 2026-04)"},
                 },
-                "required": ["pay_month"],
+                "required": [],
             },
         },
     ]
