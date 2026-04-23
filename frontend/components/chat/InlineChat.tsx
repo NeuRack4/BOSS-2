@@ -40,6 +40,7 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SalesInputTable, type SalesActionData } from "./SalesInputTable";
 import { CostInputTable, type CostActionData } from "./CostInputTable";
+import { WorkTableCard, type WorkActionData } from "./WorkTableCard";
 import {
   ShortsWizardCard,
   extractShortsWizardPayload,
@@ -55,10 +56,7 @@ import {
   extractMarketingReportPayload,
   type MarketingReportPayload,
 } from "./MarketingReportCard";
-import {
-  EventPlanFormCard,
-  extractEventPlanForm,
-} from "./EventPlanFormCard";
+import { EventPlanFormCard, extractEventPlanForm } from "./EventPlanFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -99,6 +97,7 @@ type Message = {
   confirm?: ConfirmPayload;
   salesAction?: SalesActionData;
   costAction?: CostActionData;
+  workAction?: WorkActionData;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
   instagram?: InstagramPayload;
@@ -326,6 +325,40 @@ function parseCostAction(text: string): {
   return { clean, action };
 }
 
+function parseWorkTableAction(text: string): {
+  clean: string;
+  action: WorkActionData | undefined;
+} {
+  const PREFIX = "[ACTION:OPEN_WORK_TABLE:";
+  const start = text.indexOf(PREFIX);
+  if (start === -1) return { clean: text, action: undefined };
+  const jsonStart = start + PREFIX.length;
+  let depth = 0;
+  let jsonEnd = -1;
+  for (let i = jsonStart; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        jsonEnd = i;
+        break;
+      }
+    }
+  }
+  if (jsonEnd === -1) return { clean: text, action: undefined };
+  let markerEnd = jsonEnd + 1;
+  while (markerEnd < text.length && text[markerEnd] !== "]") markerEnd++;
+  markerEnd++;
+  let action: WorkActionData | undefined;
+  try {
+    action = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    /* ignore */
+  }
+  const clean = (text.slice(0, start) + text.slice(markerEnd)).trim();
+  return { clean, action };
+}
+
 const MIN_TEXTAREA = 56;
 const MAX_TEXTAREA = 160;
 
@@ -371,6 +404,10 @@ export const InlineChat = () => {
   );
   const [showCostTable, setShowCostTable] = useState(false);
   const [costTableData, setCostTableData] = useState<CostActionData | null>(
+    null,
+  );
+  const [showWorkTable, setShowWorkTable] = useState(false);
+  const [workTableData, setWorkTableData] = useState<WorkActionData | null>(
     null,
   );
   const { openDetail } = useNodeDetail();
@@ -990,8 +1027,10 @@ export const InlineChat = () => {
           parseSalesAction(rawReply);
         const { clean: afterCost, action: costAction } =
           parseCostAction(afterSales);
+        const { clean: afterWork, action: workAction } =
+          parseWorkTableAction(afterCost);
         const { cleaned: afterShorts, payload: shortsWizard } =
-          extractShortsWizardPayload(afterCost);
+          extractShortsWizardPayload(afterWork);
         const { cleaned: afterMenu, payload: menuChart } =
           extractMenuChartPayload(afterShorts);
         const { cleaned: afterMarketing, payload: marketingReport } =
@@ -1012,6 +1051,7 @@ export const InlineChat = () => {
               : undefined,
             salesAction,
             costAction,
+            workAction: workAction ?? undefined,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
             marketingReport: marketingReport ?? undefined,
@@ -1235,6 +1275,18 @@ export const InlineChat = () => {
           }}
         />
       )}
+      {showWorkTable && workTableData && (
+        <WorkTableCard
+          data={workTableData}
+          onClose={() => setShowWorkTable(false)}
+          onConfirm={(confirmed) => {
+            setShowWorkTable(false);
+            sendRef.current?.(
+              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: confirmed.employee_id, pay_month: confirmed.pay_month })}`,
+            );
+          }}
+        />
+      )}
       <div className="flex h-full min-h-0 flex-col">
         {messages.length === 0 && !loading ? (
           <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
@@ -1300,7 +1352,18 @@ export const InlineChat = () => {
                   .trim();
               }
 
+              if (
+                msg.role === "user" &&
+                (displayText || "").startsWith("__WORK_TABLE_CONFIRMED__:")
+              ) {
+                displayText = "✓ Work hours confirmed";
+              }
+
               if (msg.role === "assistant") {
+                displayText = (displayText || "")
+                  .replace(/\[PAYROLL_PREVIEW_DATA:[^\]]*\]/gs, "")
+                  .trim();
+
                 const rrExtracted = extractReviewReplyPayload(
                   displayText || "",
                 );
@@ -1778,6 +1841,142 @@ export const InlineChat = () => {
                             </Button>
                           </>
                         )}
+                      </div>
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.workAction && (
+                    <div className="ml-8 flex flex-col gap-1.5">
+                      {msg.workAction.records.length > 0 && (
+                        <div className="overflow-hidden rounded-[5px] border border-[#030303]/10 bg-white">
+                          <div className="flex items-center justify-between border-b border-[#030303]/[0.08] px-3 py-1.5">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                              Work hours
+                            </span>
+                            <span className="font-mono text-[11px] text-[#030303]/60">
+                              {msg.workAction.employee_name} ·{" "}
+                              {msg.workAction.pay_month}
+                            </span>
+                          </div>
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-[#030303]/10 text-left font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                <th className="px-3 py-1.5 font-medium">
+                                  날짜
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  기본
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  연장
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  야간
+                                </th>
+                                <th className="px-3 py-1.5 text-right font-medium">
+                                  휴일
+                                </th>
+                                <th className="px-3 py-1.5 font-medium">
+                                  메모
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {msg.workAction.records.map((r, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="border-b border-[#030303]/5 last:border-b-0"
+                                >
+                                  <td className="px-3 py-1.5 font-mono tabular-nums text-[#030303]">
+                                    {r.work_date}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]">
+                                    {r.hours_worked}h
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.overtime_hours > 0
+                                      ? `${r.overtime_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.night_hours > 0
+                                      ? `${r.night_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                    {r.holiday_hours > 0
+                                      ? `${r.holiday_hours}h`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[#030303]/50">
+                                    {r.memo || ""}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#030303]/10 bg-[#f4f1ed]">
+                                <td className="px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
+                                  합계
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[13px] font-semibold text-[#030303]">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.hours_worked,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.overtime_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.night_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[#030303]/70">
+                                  {msg.workAction.records.reduce(
+                                    (s, r) => s + r.holiday_hours,
+                                    0,
+                                  )}
+                                  h
+                                </td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={loading}
+                          onClick={() => {
+                            sendRef.current?.(
+                              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: msg.workAction!.employee_id, pay_month: msg.workAction!.pay_month })}`,
+                            );
+                          }}
+                          className="w-full rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium disabled:opacity-40"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setWorkTableData(msg.workAction!);
+                            setShowWorkTable(true);
+                          }}
+                          className="w-full rounded-[5px] border-[#7a6250] bg-[#f3ede7] text-[#7a6250] hover:bg-[#e8ddd4] text-xs font-medium disabled:opacity-40"
+                        >
+                          Edit in table
+                        </Button>
                       </div>
                     </div>
                   )}

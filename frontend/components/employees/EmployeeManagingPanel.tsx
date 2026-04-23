@@ -7,10 +7,10 @@ import {
   useImperativeHandle,
   useState,
 } from "react";
-import { ChevronDown, ChevronUp, Pencil, Trash2, User } from "lucide-react";
+import { Pencil, Trash2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmployeeForm, type EmployeeFormData } from "./EmployeeForm";
-import { WorkRecordPanel } from "./WorkRecordPanel";
+import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 
 export type Employee = {
   id: string;
@@ -46,7 +46,7 @@ export const EmployeeManagingPanel = forwardRef<EmployeeManagingHandle, Props>(
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editTarget, setEditTarget] = useState<Employee | null>(null);
-    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const { openEmployee } = useNodeDetail();
 
     const load = useCallback(async () => {
       setLoading(true);
@@ -150,9 +150,13 @@ export const EmployeeManagingPanel = forwardRef<EmployeeManagingHandle, Props>(
                   {/* Info */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-medium leading-snug text-[color:var(--kb-fg)]">
+                      <button
+                        type="button"
+                        onClick={() => openEmployee(emp.id, accountId)}
+                        className="text-[13px] font-medium leading-snug text-[color:var(--kb-fg)] hover:underline"
+                      >
                         {emp.name}
-                      </span>
+                      </button>
                       <span
                         className={cn(
                           "rounded px-1.5 py-0.5 text-[9px] font-semibold",
@@ -192,33 +196,8 @@ export const EmployeeManagingPanel = forwardRef<EmployeeManagingHandle, Props>(
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedId((prev) =>
-                          prev === emp.id ? null : emp.id,
-                        )
-                      }
-                      className="rounded p-1 text-[color:var(--kb-fg-muted)] hover:bg-[color:var(--kb-surface-hover)]"
-                    >
-                      {expandedId === emp.id ? (
-                        <ChevronUp className="h-3 w-3" />
-                      ) : (
-                        <ChevronDown className="h-3 w-3" />
-                      )}
-                    </button>
                   </div>
                 </div>
-
-                {/* Expanded: work records */}
-                {expandedId === emp.id && (
-                  <div className="mt-2.5 border-t border-[color:var(--kb-border)] pt-2.5">
-                    <WorkRecordPanel
-                      employeeId={emp.id}
-                      accountId={accountId}
-                    />
-                  </div>
-                )}
               </div>
             </div>
           ))

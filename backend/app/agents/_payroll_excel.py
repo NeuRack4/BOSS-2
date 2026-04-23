@@ -210,5 +210,5 @@ def generate_payroll_excel(data: PayrollData) -> tuple[bytes, str]:
 
     name = data.get("name", "직원")
     pay_date = (data.get("pay_date") or "")[:7].replace("-", "")
-    filename = f"급여명세서_{name}_{pay_date}.xlsx"
+    filename = f"{name}_{pay_date}_급여명세서.xlsx"
     return buf.getvalue(), filename

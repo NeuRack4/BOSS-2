@@ -1,6 +1,7 @@
 """직원 관리 CRUD — /api/employees, /api/work-records."""
 from __future__ import annotations
 
+import calendar
 from datetime import date
 from typing import Optional
 
@@ -148,11 +149,12 @@ async def list_work_records(
         .select("*")
         .eq("employee_id", employee_id)
         .eq("account_id", account_id)
-        .order("work_date")
     )
     if month:
-        q = q.gte("work_date", f"{month}-01").lte("work_date", f"{month}-31")
-    res = q.execute()
+        y, m = int(month[:4]), int(month[5:7])
+        last_day = calendar.monthrange(y, m)[1]
+        q = q.gte("work_date", f"{month}-01").lte("work_date", f"{month}-{last_day:02d}")
+    res = q.order("work_date").execute()
     return {"data": res.data}
 
 
