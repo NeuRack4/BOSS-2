@@ -17,12 +17,28 @@ export type WidgetId = string;
 export type WidgetRenderProps = {
   accountId: string;
   summary: DashboardSummary | null;
+  bgColor?: string;
 };
 
 export type WidgetDef = {
   id: WidgetId;
   label: string;
   render: (props: WidgetRenderProps) => ReactNode;
+};
+
+export const WIDGET_DEFAULT_COLORS: Record<string, string> = {
+  profile: "#f1d9c7",
+  "long-memory": "#eee3c4",
+  memos: "#c6dad1",
+  "domain-recruitment": "#f1d9c7",
+  "domain-sales": "#cfd9cc",
+  "domain-marketing": "#f4dbd9",
+  "domain-documents": "#d9d4e6",
+  "previous-chat": "#d9d4e6",
+  schedule: "#eee3c4",
+  activity: "#c6dad1",
+  "comment-queue": "#f4dbd9",
+  subsidy: "#cfd9cc",
 };
 
 const EMPTY_STATS: DomainStats = {
@@ -38,84 +54,94 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   {
     id: "profile",
     label: "Profile",
-    render: () => <ProfileWidget />,
+    render: ({ bgColor }) => <ProfileWidget bgColor={bgColor} />,
   },
   {
     id: "long-memory",
     label: "Long-term Memory",
-    render: () => <LongMemoryWidget />,
+    render: ({ bgColor }) => <LongMemoryWidget bgColor={bgColor} />,
   },
   {
     id: "memos",
     label: "Memos",
-    render: () => <MemosWidget />,
+    render: ({ bgColor }) => <MemosWidget bgColor={bgColor} />,
   },
   {
     id: "domain-recruitment",
     label: "Recruitment",
-    render: ({ summary }) => (
+    render: ({ summary, bgColor }) => (
       <DomainCard
         domain="recruitment"
         stats={summary?.domains?.recruitment ?? EMPTY_STATS}
+        bgColor={bgColor}
       />
     ),
   },
   {
     id: "domain-sales",
     label: "Sales",
-    render: ({ summary }) => (
+    render: ({ summary, bgColor }) => (
       <DomainCard
         domain="sales"
         stats={summary?.domains?.sales ?? EMPTY_STATS}
+        bgColor={bgColor}
       />
     ),
   },
   {
     id: "domain-marketing",
     label: "Marketing",
-    render: ({ summary }) => (
+    render: ({ summary, bgColor }) => (
       <DomainCard
         domain="marketing"
         stats={summary?.domains?.marketing ?? EMPTY_STATS}
+        bgColor={bgColor}
       />
     ),
   },
   {
     id: "domain-documents",
     label: "Documents",
-    render: ({ summary }) => (
+    render: ({ summary, bgColor }) => (
       <DomainCard
         domain="documents"
         stats={summary?.domains?.documents ?? EMPTY_STATS}
+        bgColor={bgColor}
       />
     ),
   },
   {
     id: "previous-chat",
     label: "Chat History",
-    render: () => <PreviousChatCard />,
+    render: ({ bgColor }) => <PreviousChatCard bgColor={bgColor} />,
   },
   {
     id: "schedule",
     label: "Schedule",
-    render: ({ summary }) => <ScheduleCard items={summary?.upcoming ?? []} />,
+    render: ({ summary, bgColor }) => (
+      <ScheduleCard items={summary?.upcoming ?? []} bgColor={bgColor} />
+    ),
   },
   {
     id: "activity",
     label: "Activity",
-    render: ({ summary }) => (
-      <ActivityCard items={summary?.recent_activity ?? []} />
+    render: ({ summary, bgColor }) => (
+      <ActivityCard items={summary?.recent_activity ?? []} bgColor={bgColor} />
     ),
   },
   {
     id: "comment-queue",
     label: "Comment Queue",
-    render: ({ accountId }) => <CommentQueueCard accountId={accountId} />,
+    render: ({ accountId, bgColor }) => (
+      <CommentQueueCard accountId={accountId} bgColor={bgColor} />
+    ),
   },
   {
     id: "subsidy",
     label: "Subsidy Match",
-    render: ({ accountId }) => <SubsidyMatchCard accountId={accountId} />,
+    render: ({ accountId, bgColor }) => (
+      <SubsidyMatchCard accountId={accountId} bgColor={bgColor} />
+    ),
   },
 ];
 

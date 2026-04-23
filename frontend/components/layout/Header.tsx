@@ -17,6 +17,7 @@ import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
 import { SubsidyModal } from "@/components/layout/SubsidyModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { useLayout } from "@/components/bento/LayoutContext";
+import { COLOR_SETS } from "@/components/bento/colorSets";
 
 type HeaderProps = {
   sidebar?: boolean;
@@ -166,6 +167,28 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
           <div className="flex items-center gap-1 shrink-0">
             {layoutCtx?.isEditing ? (
               <>
+                <select
+                  value={layoutCtx.selectedColorSet ?? ""}
+                  onChange={(e) =>
+                    layoutCtx.setSelectedColorSet(e.target.value || null)
+                  }
+                  className="rounded-md border border-[#ddd0b4] bg-[#fbf6eb] px-2 py-1 text-[13px] text-[#5a5040] focus:outline-none hover:bg-[#ebe0ca]"
+                >
+                  <option value="">Color Set</option>
+                  {COLOR_SETS.map((cs) => (
+                    <option key={cs.name} value={cs.name}>
+                      {cs.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={layoutCtx.randomizeColors}
+                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  Random
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

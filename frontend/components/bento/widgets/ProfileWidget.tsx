@@ -45,7 +45,7 @@ const formatField = (k: keyof ProfileRow, v: string | null): string | null => {
   return v;
 };
 
-export const ProfileWidget = () => {
+export const ProfileWidget = ({ bgColor }: { bgColor?: string }) => {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,7 +103,7 @@ export const ProfileWidget = () => {
         }
       }}
       className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
-      style={{ backgroundColor: "#f1d9c7" }}
+      style={{ backgroundColor: bgColor ?? "#f1d9c7" }}
     >
       <div className="mb-3 flex shrink-0 items-center justify-between">
         <span className="text-base font-semibold tracking-tight text-[#030303]">

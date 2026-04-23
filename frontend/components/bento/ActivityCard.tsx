@@ -29,9 +29,10 @@ const TYPE_LABEL: Record<string, string> = {
 
 type Props = {
   items: ActivityItem[];
+  bgColor?: string;
 };
 
-export const ActivityCard = ({ items }: Props) => {
+export const ActivityCard = ({ items, bgColor }: Props) => {
   const shown = items.slice(0, 6);
   const openModal = () =>
     window.dispatchEvent(new CustomEvent("boss:open-activity-modal"));
@@ -48,7 +49,8 @@ export const ActivityCard = ({ items }: Props) => {
       tabIndex={0}
       onClick={openModal}
       onKeyDown={onKey}
-      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#c6dad1] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
+      style={{ backgroundColor: bgColor ?? "#c6dad1" }}
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
         <span className="text-base font-semibold tracking-tight text-[#030303]">

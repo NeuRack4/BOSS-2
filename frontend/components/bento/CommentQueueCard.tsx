@@ -28,9 +28,9 @@ const PLATFORM_BADGE = {
   },
 };
 
-type Props = { accountId: string };
+type Props = { accountId: string; bgColor?: string };
 
-export const CommentQueueCard = ({ accountId }: Props) => {
+export const CommentQueueCard = ({ accountId, bgColor }: Props) => {
   const [items, setItems] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
@@ -75,7 +75,8 @@ export const CommentQueueCard = ({ accountId }: Props) => {
           openModal();
         }
       }}
-      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#f4dbd9] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
+      style={{ backgroundColor: bgColor ?? "#f4dbd9" }}
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
