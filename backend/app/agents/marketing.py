@@ -24,6 +24,9 @@ from app.agents._artifact import (
     save_artifact_from_reply,
     list_sub_hub_titles,
     today_context,
+    pick_sub_hub_id,
+    pick_main_hub_id,
+    record_artifact_for_focus,
 )
 from app.agents._marketing_knowledge import marketing_knowledge_context
 from langsmith import traceable
@@ -47,6 +50,7 @@ VALID_TYPES: tuple[str, ...] = (
     "notice",
     "product_post",
     "shorts_video",
+    "schedule_post",
 )
 
 
@@ -257,7 +261,7 @@ SYSTEM_PROMPT = (
 - notice: 공지사항 (임시휴무·영업시간변경·이벤트·신상품 등)
 - product_post: 상품·서비스 소개 게시글
 
-허용 type: sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post
+허용 type: sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post | schedule_post
 """
     + _REQUIRED_FIELDS
     + _SNS_POST_FORMAT
@@ -536,6 +540,7 @@ async def run_sns_post(
     promotion: str | None = None,
     tone: str | None = None,
     platform: str = "instagram",
+    _preceding_reply: str | None = None,
 ) -> str:
     lines = [f"[주제] {topic}"]
     if product:
@@ -545,6 +550,8 @@ async def run_sns_post(
     if tone:
         lines.append(f"[톤] {tone}")
     lines.append(f"[플랫폼] {platform}")
+    if _preceding_reply:
+        lines.append(f"[참고 기획안 (앞 단계 결과)]\n{_preceding_reply[:1200]}")
     synthetic = (
         "SNS 피드 게시물(sns_post) 을 작성해주세요. 추가 질문 없이 바로 완성된 캡션 + 해시태그 + 추천 게시 시간을 출력하고, "
         "[ARTIFACT] 블록(type=sns_post) 으로 저장하세요.\n"
@@ -585,10 +592,13 @@ async def run_blog_post(
     topic: str,
     keywords: list[str] | None = None,
     auto_upload: bool = False,
+    _preceding_reply: str | None = None,
 ) -> str:
     lines = [f"[주제] {topic}"]
     if keywords:
         lines.append(f"[주요 키워드] {', '.join(keywords)}")
+    if _preceding_reply:
+        lines.append(f"[참고 기획안 (앞 단계 결과)]\n{_preceding_reply[:1200]}")
     if auto_upload:
         lines.append("[네이버 블로그 자동 업로드] 요청됨")
     synthetic = (
@@ -684,6 +694,344 @@ async def run_campaign_plan(
         + f"\n\n원본 사용자 요청: {message}"
     )
     return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_event_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """이벤트 기획 폼 UI를 반환한다. 세부 정보 없이 이벤트 기획 요청 시 즉시 호출."""
+    return "이벤트 정보를 입력해주세요.\n\n[[EVENT_PLAN_FORM]][[/EVENT_PLAN_FORM]]"
+
+
+async def run_event_plan(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    title: str,
+    event_type: str,
+    start_date: str,
+    end_date: str | None = None,
+    due_date: str | None = None,
+    benefit: str | None = None,
+) -> str:
+    """이벤트·프로모션 기획안을 artifact 로 등록한다. D-리마인드 알림 자동 설정."""
+    lines = [
+        f"[이벤트명] {title}",
+        f"[이벤트 종류] {event_type}",
+        f"[시작일] {start_date}",
+    ]
+    if end_date:
+        lines.append(f"[종료일] {end_date}")
+    if due_date:
+        lines.append(f"[행사일] {due_date}")
+    if benefit:
+        lines.append(f"[혜택·참여방법] {benefit}")
+    synthetic = (
+        f"'{title}' 이벤트/프로모션 기획안(event_plan) 을 작성해주세요. "
+        "[ARTIFACT] 블록(type=event_plan, start_date, "
+        + ("end_date, due_label='이벤트 종료'" if end_date else "due_date, due_label='이벤트 당일'")
+        + ") 으로 저장하세요.\n"
+        + "\n".join(lines)
+        + """
+
+[출력 형식 — 반드시 아래 구조로 작성]
+이모지 사용 금지. 대괄호 라벨([이벤트명] 등) 헤더 사용 금지.
+마크다운 굵은 글씨(**텍스트**)와 bullet(-) 만 사용. 간결하고 실용적으로.
+
+**이벤트 소개** (1~2문장, 핵심 콘셉트)
+
+**기간** : 날짜 ~ 날짜
+
+**혜택**
+- 혜택 항목 1
+- 혜택 항목 2
+
+**홍보 계획** (2~3줄)
+
+**준비 체크리스트**
+- [ ] 항목 1
+- [ ] 항목 2
+- [ ] 항목 3
+"""
+        + f"\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_notice(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    notice_type: str,
+    content: str,
+    date: str | None = None,
+    publish_sns: bool = False,
+) -> str:
+    """공지사항(notice) 을 작성하고 artifact 로 저장한다.
+    publish_sns=True 면 인스타그램용 SNS 버전도 함께 작성 → [[INSTAGRAM_POST]] 카드 자동 생성.
+    """
+    lines = [
+        f"[공지 종류] {notice_type}",
+        f"[핵심 내용] {content}",
+    ]
+    if date:
+        lines.append(f"[날짜/시간] {date}")
+
+    sns_instruction = ""
+    if publish_sns:
+        sns_instruction = (
+            "\n\n공지 작성 후, 같은 내용을 인스타그램에 바로 올릴 수 있도록 "
+            "SNS 캡션(3~4문장) + 해시태그(15~20개) + 💡 추천 게시 시간 형식으로도 작성해주세요. "
+            "SNS 버전은 [ARTIFACT] 블록 없이 공지 하단에 바로 붙여 출력하세요."
+        )
+
+    synthetic = (
+        f"{notice_type} 공지사항(notice) 을 작성해주세요. "
+        "짧고 명확하게, 핵심 정보만 담아서. "
+        "[ARTIFACT] 블록(type=notice) 으로 저장하세요.\n"
+        + "\n".join(lines)
+        + sns_instruction
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_marketing_report(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    period: int = 30,
+) -> str:
+    """Instagram + YouTube 성과 데이터를 조회하고 AI 분석 리포트를 생성한다."""
+    import json as _json
+    from app.services.instagram_insights import collect_report_data as ig_report
+    from app.services.youtube_analytics import collect_report_data as yt_report
+    from app.core.llm import chat_completion
+
+    # 두 플랫폼 데이터 병렬 수집
+    import asyncio as _asyncio
+    ig_data, yt_data = await _asyncio.gather(
+        ig_report(days=period),
+        yt_report(account_id=account_id, days=period),
+        return_exceptions=True,
+    )
+
+    if isinstance(ig_data, Exception):
+        ig_data = {"error": str(ig_data)}
+    if isinstance(yt_data, Exception):
+        yt_data = {"error": str(yt_data)}
+
+    ig_ok = "error" not in ig_data
+    yt_ok = "error" not in yt_data.get("channel", {})
+
+    # AI 분석용 데이터 요약 텍스트
+    summary_parts: list[str] = [f"[분석 기간] 최근 {period}일"]
+
+    if ig_ok:
+        acc = ig_data.get("account", {})
+        top = ig_data.get("top_posts", [])
+        summary_parts.append(
+            f"[Instagram]\n"
+            f"- 팔로워: {acc.get('followers_count', 0):,}명\n"
+            f"- 기간 도달수: {acc.get('reach', 0):,}회\n"
+            f"- 기간 인상수: {acc.get('impressions', 0):,}회\n"
+            f"- 프로필 방문: {acc.get('profile_views', 0):,}회\n"
+            f"- 평균 engagement: {ig_data.get('avg_engagement', 0):.1f}\n"
+            f"- 최고 게시물 TOP3: {[p.get('caption', '') for p in top]}"
+        )
+    else:
+        summary_parts.append(f"[Instagram] 데이터 없음: {ig_data.get('error', '')}")
+
+    if yt_ok:
+        ch = yt_data.get("channel", {})
+        top_v = yt_data.get("top_videos", [])
+        summary_parts.append(
+            f"[YouTube]\n"
+            f"- 조회수: {ch.get('views', 0):,}회\n"
+            f"- 시청시간: {ch.get('watch_minutes', 0):,}분\n"
+            f"- 구독자 증감: +{ch.get('subscribers_gained', 0)} / -{ch.get('subscribers_lost', 0)} "
+            f"(순증 {ch.get('net_subscribers', 0):+d}명)\n"
+            f"- 좋아요: {ch.get('likes', 0):,} / 댓글: {ch.get('comments', 0):,}\n"
+            f"- 상위 영상: {[v.get('url', '') for v in top_v[:3]]}"
+        )
+    else:
+        err = yt_data.get("channel", {}).get("error", "데이터 없음")
+        summary_parts.append(f"[YouTube] 데이터 없음: {err}")
+
+    data_summary = "\n\n".join(summary_parts)
+
+    # GPT-4o로 인사이트 분석
+    analysis_prompt = (
+        f"소상공인 마케팅 성과 데이터를 분석해서 실질적인 인사이트를 제공해주세요.\n\n"
+        f"{data_summary}\n\n"
+        "다음 3가지를 간결하게 작성해주세요:\n"
+        "1. 이번 기간 성과 요약 (2~3줄)\n"
+        "2. 잘된 점 + 개선 포인트 (각 1~2가지)\n"
+        "3. 다음 기간 추천 액션 (2~3가지, 구체적으로)\n\n"
+        "소상공인 입장에서 쉽게 이해할 수 있는 언어로 작성하세요."
+    )
+
+    try:
+        resp = await chat_completion(
+            messages=[{"role": "user", "content": analysis_prompt}],
+            model="gpt-4o",
+            temperature=0.4,
+        )
+        analysis = resp.choices[0].message.content or "분석 데이터를 불러올 수 없습니다."
+    except Exception:
+        analysis = "분석 중 오류가 발생했습니다."
+
+    # [[MARKETING_REPORT]] 마커 생성
+    report_payload = {
+        "period_days": period,
+        "instagram": ig_data if ig_ok else {"error": ig_data.get("error")},
+        "youtube": yt_data if yt_ok else {"error": yt_data.get("channel", {}).get("error")},
+        "analysis": analysis,
+    }
+    marker = f"\n\n[[MARKETING_REPORT]]{_json.dumps(report_payload, ensure_ascii=False)}[[/MARKETING_REPORT]]"
+
+    # artifact 저장용 응답 조합
+    reply_lines = [f"최근 {period}일 마케팅 성과 리포트를 생성했습니다.\n"]
+    reply_lines.append(analysis)
+    reply_lines.append(
+        f"\n[ARTIFACT]\ntitle: 마케팅 성과 리포트 ({period}일)\ntype: marketing_report\ndomains: [marketing]\n[/ARTIFACT]"
+    )
+    reply_lines.append(marker)
+
+    return "\n".join(reply_lines)
+
+
+def _cron_to_korean(cron: str) -> str:
+    """cron 5-field 표현식 → 한국어 요약."""
+    parts = cron.strip().split()
+    if len(parts) != 5:
+        return cron
+    minute, hour, dom, month, dow = parts
+    _DOW = {"0": "일", "1": "월", "2": "화", "3": "수", "4": "목", "5": "금", "6": "토", "7": "일"}
+    try:
+        time_str = f"오전 {int(hour)}시 {int(minute)}분" if hour != "*" and minute != "*" else ""
+    except ValueError:
+        time_str = ""
+    if dow != "*" and dom == "*":
+        days = "/".join(_DOW.get(d, d) for d in dow.replace("-", ",").split(","))
+        return f"매주 {days}요일 {time_str}".strip()
+    if dom != "*" and dow == "*":
+        return f"매월 {dom}일 {time_str}".strip()
+    if dow == "*" and dom == "*" and month == "*":
+        return f"매일 {time_str}".strip()
+    return cron
+
+
+async def run_schedule_post(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    task: str,
+    cron: str,
+    label: str | None = None,
+) -> str:
+    """정기 마케팅 작업 스케줄을 artifact 로 등록한다.
+
+    Celery Beat 이 next_run 시각에 artifact.content(= task) 를 marketing.run() 에 전달해
+    SNS 게시물 작성·블로그 포스팅 등 지정한 작업을 자동 실행한다.
+    """
+    import uuid as _uuid
+    from croniter import croniter as _croniter
+    from datetime import datetime as _dt, timezone as _tz
+    from app.core.supabase import get_supabase
+
+    # cron 유효성 검사 + next_run 계산
+    try:
+        _now = _dt.now(_tz.utc)
+        next_run = _croniter(cron, _now).get_next(_dt).isoformat()
+    except Exception:
+        return (
+            f"cron 표현식이 올바르지 않습니다: `{cron}`\n"
+            "예시: `0 9 * * 1` (매주 월요일 오전 9시), `0 10 * * *` (매일 오전 10시)"
+        )
+
+    title = label or f"자동: {task}"
+    cron_desc = _cron_to_korean(cron)
+
+    # Artifact 직접 생성 (schedule 메타데이터 포함)
+    sb = get_supabase()
+    artifact_id = str(_uuid.uuid4())
+    hub_id = (
+        pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=("campaign", "캠페인"))
+        or pick_main_hub_id(sb, account_id, "marketing")
+    )
+
+    result = sb.table("artifacts").insert({
+        "id": artifact_id,
+        "account_id": account_id,
+        "kind": "artifact",
+        "type": "schedule_post",
+        "title": title,
+        "content": task,
+        "domains": ["marketing"],
+        "status": "active",
+        "metadata": {
+            "schedule_enabled": True,
+            "schedule_status": "active",
+            "cron": cron,
+            "next_run": next_run,
+        },
+    }).execute()
+
+    created_id = ((result.data or [{}])[0]).get("id", artifact_id)
+    record_artifact_for_focus(created_id)
+
+    if hub_id:
+        try:
+            sb.table("artifact_edges").insert({
+                "account_id": account_id,
+                "from_id": hub_id,
+                "to_id": created_id,
+                "relation": "contains",
+            }).execute()
+        except Exception:
+            pass
+
+    try:
+        sb.table("activity_logs").insert({
+            "account_id": account_id,
+            "type": "artifact_created",
+            "domain": "marketing",
+            "title": title,
+            "description": f"마케팅 자동화 스케줄 등록 — {cron_desc}",
+            "metadata": {"artifact_id": created_id},
+        }).execute()
+    except Exception:
+        pass
+
+    # 사용자 안내 문구 (LLM 없이 직접 생성 — 형식 일관성 보장)
+    next_local = next_run[:16].replace("T", " ")
+    return (
+        f"마케팅 자동화 스케줄이 등록됐습니다.\n\n"
+        f"**{title}**\n"
+        f"- 실행 주기: {cron_desc}\n"
+        f"- 다음 실행: {next_local} UTC\n"
+        f"- 실행 작업: {task}\n\n"
+        f"Celery 스케줄러가 설정한 주기마다 자동으로 위 작업을 실행하고 결과를 로그로 저장합니다. "
+        f"스케줄 관리는 상단 캘린더 아이콘(Schedule Manager)에서 일시정지/재개할 수 있습니다."
+    )
 
 
 def describe(account_id: str) -> list[dict]:
@@ -791,6 +1139,104 @@ def describe(account_id: str) -> list[dict]:
                     "channels":   {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["title", "start_date", "end_date"],
+            },
+        },
+        {
+            "name": "mkt_event_form",
+            "description": (
+                "이벤트 기획 폼 UI를 열어 사용자가 이벤트 정보를 한번에 입력할 수 있게 한다. "
+                "'이벤트 기획해줘', '프로모션 기획해줘' 처럼 세부 정보(이벤트명·기간·혜택)가 없는 요청에 즉시 호출. "
+                "사용자가 이벤트명·날짜·혜택 등을 이미 제공한 경우에는 mkt_event_plan 을 직접 호출."
+            ),
+            "handler": run_event_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "mkt_event_plan",
+            "description": (
+                "이벤트·프로모션·세일·기념일 행사 기획안을 작성하고 artifact 로 등록한다. "
+                "start_date + end_date 또는 due_date 를 저장해 D-7/D-3/D-1/D-0 알림 자동 발생. "
+                "'이벤트 기획', '프로모션', '할인 행사', '기념일 이벤트' 요청 시 호출. "
+                "인스타 자동 게시 요청 시 mkt_sns_post(depends_on: mkt_event_plan) 을 함께 dispatch."
+            ),
+            "handler": run_event_plan,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":      {"type": "string", "description": "이벤트명 (예: '어버이날 감사 이벤트')"},
+                    "event_type": {"type": "string", "description": "이벤트 종류 (예: '할인', '증정', 'SNS 이벤트')"},
+                    "start_date": {"type": "string", "description": "시작일 YYYY-MM-DD"},
+                    "end_date":   {"type": "string", "description": "종료일 YYYY-MM-DD (기간 행사)"},
+                    "due_date":   {"type": "string", "description": "단일 행사일 YYYY-MM-DD (하루 행사)"},
+                    "benefit":    {"type": "string", "description": "혜택·참여 방법"},
+                },
+                "required": ["title", "event_type", "start_date"],
+            },
+        },
+        {
+            "name": "mkt_notice",
+            "description": (
+                "임시휴무·영업시간변경·이벤트·신상품 등 공지사항을 작성하고 artifact 로 저장한다. "
+                "publish_sns=true 로 호출하면 인스타그램용 SNS 버전도 함께 작성해 Instagram 카드를 자동 생성. "
+                "'공지', '임시휴무', '영업시간', '안내문' 요청 시 호출."
+            ),
+            "handler": run_notice,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notice_type":  {"type": "string", "description": "공지 종류 (예: '임시휴무', '영업시간 변경', '이벤트 안내')"},
+                    "content":      {"type": "string", "description": "공지 핵심 내용"},
+                    "date":         {"type": "string", "description": "날짜/시간 (선택)"},
+                    "publish_sns":  {"type": "boolean", "default": False, "description": "인스타그램 SNS 버전도 함께 작성 여부"},
+                },
+                "required": ["notice_type", "content"],
+            },
+        },
+        {
+            "name": "mkt_marketing_report",
+            "description": (
+                "Instagram + YouTube 실제 성과 데이터를 조회해 AI 마케팅 성과 리포트를 생성한다. "
+                "'성과 보고', '인스타 분석', '유튜브 분석', '이번달 마케팅 어땠어', '리포트' 요청 시 호출. "
+                "파라미터 없이 바로 호출해도 되며, period 는 기본 30일."
+            ),
+            "handler": run_marketing_report,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "period": {
+                        "type": "integer",
+                        "description": "분석 기간(일). 기본 30. 7·14·30·90 권장.",
+                        "default": 30,
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "mkt_schedule_post",
+            "description": (
+                "마케팅 작업을 정기 자동 실행하는 스케줄을 등록한다. "
+                "'매주', '매일', '자동으로', '정기적으로', '스케줄', '예약' 키워드와 함께 "
+                "SNS 게시물·블로그·광고 카피 등 반복 작업 요청 시 호출."
+            ),
+            "handler": run_schedule_post,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "자동 실행할 마케팅 작업 지시문 (예: '인스타그램 게시물 작성 — 오늘의 신메뉴 소개')",
+                    },
+                    "cron": {
+                        "type": "string",
+                        "description": "cron 5-field 표현식 (예: '0 9 * * 1' = 매주 월요일 오전 9시)",
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "스케줄 이름 (선택, 없으면 task 기반 자동 생성)",
+                    },
+                },
+                "required": ["task", "cron"],
             },
         },
     ]

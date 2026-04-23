@@ -5,70 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] — feature-marketing (마케팅 도메인 확장 — 이벤트 기획·성과 리포트·자동화 스케줄·인스타그램 피드 인라인 렌더)
+
+### Added — 마케팅 Capability 확장 (`backend/app/agents/marketing.py`)
+
+- **`run_event_form()`** — 이벤트 세부 정보 없이 "이벤트 기획해줘" 요청 시 즉시 `[[EVENT_PLAN_FORM]]` 마커를 반환해 채팅창 내 이벤트 기획 폼 UI를 오픈.
+- **`run_event_plan()`** — `title / event_type / start_date / end_date / due_date / benefit` 파라미터를 받아 `event_plan` artifact 등록 + D-리마인드 알림 자동 설정. `depends_on: mkt_event_plan` 플로우에서 `_preceding_reply` 를 주입받아 `run_sns_post()` / `run_blog_post()` 로 순차 연결 가능.
+- **`run_notice()`** — `notice_type / content / date` 파라미터. `publish_sns=true` 옵션 시 인스타그램 자동 게시 (`_publish_to_instagram`) 포함.
+- **`run_marketing_report()`** — Instagram Insights + YouTube Analytics 데이터를 `[[MARKETING_REPORT]]` 마커로 반환 → 채팅창 내 `MarketingReportCard` 렌더.
+- **`run_schedule_post()`** — `task` (자동 실행 지시문) + `cron` (5-field)을 받아 `schedule_post` artifact 생성 후 `metadata.schedule_enabled=true / cron / next_run` 으로 Celery Beat에 자동 등록.
+- **`run_sns_post()` / `run_blog_post()`** — `_preceding_reply: str | None` 파라미터 추가. Planner `depends_on` 체인에서 앞 단계(이벤트 기획안) 결과를 1,200자 이내로 system 프롬프트에 주입해 맥락 연속성 보장.
+- **`schedule_post`** — `VALID_TYPES` 및 `SYSTEM_PROMPT` 에 신규 type 추가.
+
+### Added — 마케팅 성과 리포트 API (`backend/app/routers/marketing.py`)
+
+- **`GET /api/marketing/report/instagram`** — `account_id / days(7–90)` 쿼리. `instagram_insights.collect_report_data()` 를 호출해 계정·게시물·Reels 성과 데이터를 반환.
+- **`GET /api/marketing/report/youtube`** — `account_id / days(7–90)` 쿼리. `youtube_analytics.collect_report_data()` 를 호출해 채널·영상 조회수·구독자 지표를 반환.
+
+### Added — 서비스 레이어 (`backend/app/services/`)
+
+- **`instagram_insights.py`** — Meta Graph API(`/me/media`, `/insights`) 를 통해 계정 프로필·게시물 목록·Reels·스토리 성과 데이터를 수집. `collect_report_data(days)` 반환 구조: `{account, posts, reels, summary}`.
+- **`youtube_analytics.py`** — YouTube Data API v3 + YouTube Analytics API 를 통해 채널 통계·영상별 성과(`views / likes / comments / watch_time`)를 수집. `collect_report_data(account_id, days)` 반환 구조: `{channel, videos, summary}`.
+
+### Added — 프론트엔드 카드 컴포넌트 (`frontend/components/chat/`)
+
+- **`EventPlanFormCard.tsx`** — `[[EVENT_PLAN_FORM]]` 마커 감지 시 채팅창에 렌더되는 이벤트 기획 인라인 폼. 이벤트명·종류·기간·혜택 입력 → 제출 시 `mkt_event_plan` capability로 자동 전송.
+- **`MarketingReportCard.tsx`** — `[[MARKETING_REPORT]]` 마커 감지 시 렌더. Instagram(팔로워·도달·좋아요·저장·댓글) + YouTube(구독자·조회수·시청 시간) 성과 지표를 탭 UI로 시각화.
+
+### Changed — InlineChat 마커 추출 체인 (`frontend/components/chat/InlineChat.tsx`)
+
+- **`send()` 추출 체인** — `afterMenu` 이후 `extractMarketingReportPayload` → `extractInstagramPayload` → `extractEventPlanForm` 순서로 추출 체인 확장. `marketingReport / instagram / eventPlanForm` 세 필드가 `Message` 객체에 저장됨.
+- **세션 로드** — 히스토리 로드 시에도 `extractMarketingReportPayload` → `extractInstagramPayload` 를 순차 적용해 `marketingReport / instagram` 페이로드 복원. 세션 재로드 후에도 카드가 사라지지 않음.
+- **`Message` 타입** — `instagram?: InstagramPayload / marketingReport?: MarketingReportPayload / eventPlanForm?: boolean` 필드 추가.
+- **`InstagramPostCard` 인라인 렌더** — 이전까지 렌더 시점에만 재추출하던 방식에서 `send()` 체인 정식 포함으로 변경. Instagram SNS 포스트 생성 시 채팅창에 즉시 피드 미리보기 카드가 렌더됨 (캔버스뿐 아니라 채팅창에서도).
+
+### Changed — Planner 시스템 프롬프트 (`backend/app/agents/_planner.py`)
+
+- **마케팅 도메인 설명** — "Instagram·YouTube 마케팅 성과 분석 리포트 + 마케팅 정기 자동화 스케줄 등록" 추가.
+- **Capability 가이드** — `mkt_event_form / mkt_event_plan / mkt_notice / mkt_marketing_report / mkt_schedule_post` 5종 신규 등록. `mkt_event_plan` 의 `depends_on` 체인 규칙(Instagram/네이버 블로그 연동 조건) 명시.
+- **`opening` 엄격화** — "opening 에는 질문을 절대 담지 마세요 — question 과 동일하거나 유사한 내용 엄격히 금지" 지시문으로 강화 (중복 노출 방지).
+
+### Removed
+
+- **`frontend/README.md`** — 불필요 제거.
+
+---
+
 ## [1.6.0] — 2026-04-23
 
 ### Added — Dashboard
 
 - **위젯 레이아웃 커스터마이징** — 헤더 `Layout` 버튼으로 편집 모드 진입. 채팅창 제외 전 셀(메인 그리드 9개 + 사이드바 3개)을 12종 위젯 중 자유롭게 교체 가능. `Save / Reset / Cancel` 버튼으로 저장·초기화·취소. 레이아웃은 `dashboard_layouts` 테이블에 계정별 영구 저장.
-- **`widgetRegistry.tsx`** — 위젯 정의 레지스트리. `WIDGET_REGISTRY` 배열에 항목 추가만 하면 피커에 자동 노출되는 확장 구조.
+- **`widgetRegistry.tsx`** — 위젯 정의 레지스트리.
 - **`LayoutContext.tsx`** — 편집 상태·레이아웃 저장·불러오기 전담 Context.
-- **`WidgetSlot.tsx`** — 편집 모드 오버레이(Change 버튼 + 위젯 피커 드롭다운) 래퍼 컴포넌트.
-- **`supabase/migrations/030_dashboard_layouts.sql`** — `dashboard_layouts` 테이블 신설 (`account_id PK · layout jsonb · hidden text[] · updated_at`).
+- **`WidgetSlot.tsx`** — 편집 모드 오버레이 래퍼 컴포넌트.
+- **`supabase/migrations/030_dashboard_layouts.sql`** — `dashboard_layouts` 테이블 신설.
 
 ### Added — Recruitment
 
-- **직원 관리 기능** — 직원 등록·수정·삭제 CRUD + EmployeeForm UI (전체 영문화). Managing 컬럼 칸반 카드에 직원 목록 표시 + 헤더 직원 추가 버튼.
-- **급여명세서 크로스도메인 플로우** — Recruitment ↔ Documents 연계 재설계. Tax&HR 에이전트가 급여명세서 Excel 자동 생성·세무 캘린더·체크리스트 처리.
+- **직원 관리 기능** — 직원 등록·수정·삭제 CRUD + EmployeeForm UI.
+- **급여명세서 크로스도메인 플로우** — Recruitment ↔ Documents 연계 재설계.
 
 ### Added — Documents
 
-- **Operations 행정 신청서 3종** — `admin_application` 핸들러 구현.
-- **Tax&HR 핸들러** — 급여명세서 Excel 자동 생성, 세무 캘린더, 체크리스트 capability.
-
-### Added — Frontend
-
-- **프로필 이메일 표시** — 헤더·프로필 카드에 로그인 이메일 읽기 전용 노출.
-- **Kanban Managing 컬럼** — 뷰포트 높이 고정 + 헤더 버튼 소형화.
-
-### Fixed
-
-- **Kanban** — 다른 도메인 칸반 레이아웃 원상복구, Managing 컬럼에만 `max-h` 제한 적용.
-
-### Changed
-
-- **EmployeeForm** — 전체 텍스트 영문화, Save/Cancel 버튼 스타일 통일 (Save: Managing 포인트 컬러, Cancel: 아웃라인).
+- **Operations 행정 신청서 3종** · **Tax&HR 핸들러** — 급여명세서 Excel 자동 생성, 세무 캘린더, 체크리스트.
 
 ---
 
 ## [1.5.0] — feature/sales-menu-pricing (Sales 메뉴 마스터 + 벤치마킹 + 목표 달성률)
 
-### Added — DB
+### Added
 
-- **`supabase/migrations/029_menus.sql`** — `menus` 테이블 신설. `account_id / name / category / price / cost_price / is_active / memo` + RLS + `unique(account_id, name)` 인덱스.
-- **`supabase/migrations/030_sales_timeslot.sql`** — `sales_records.time_slot` 컬럼 추가 (`오전 / 오후 / 저녁 / null`).
+- **`supabase/migrations/029_menus.sql`** · **`030_sales_timeslot.sql`** — `menus` 테이블 + `sales_records.time_slot` 컬럼.
+- **`/api/menus`** CRUD · **`/api/stats/personal-benchmark`** · **`/api/stats/goal`** API.
+- **`_sales/_menu_manager.py`** — 메뉴 upsert/delete/list + Pricing 서브허브 artifact.
+- **`MenuListPanel.tsx`** — 마진율 게이지 + 원가 인라인 입력 패널.
 
-### Added — Backend
+---
 
-- **`backend/app/routers/menus.py`** — `/api/menus` CRUD 4종 (POST · GET · PATCH · DELETE). GET은 카테고리별 그룹화 + 마진율 자동 계산 포함.
-- **`backend/app/agents/_sales/_menu_manager.py`** — `upsert_menu` (정규화 이름 비교·기존 값 보존·카테고리 자동 추론) · `delete_menu` · `list_menus_with_profit` · `upsert_menu_list_artifact` (Pricing 서브허브에 `menu_list` artifact upsert — `_revenue.py` 패턴 동일).
-- **`backend/app/routers/stats.py`** — `/api/stats/personal-benchmark` (지난달·전년 동월 비교 + 최근 8주 요일별 분석) · `/api/stats/goal` POST/GET (월 목표 매출 설정 + 달성률).
-- **`backend/app/agents/sales.py`** — `sales_menu_upsert` · `sales_menu_list` · `sales_menu_delete` capability 3종 추가. `menu_list` 타입을 `VALID_TYPES` + `_TYPE_TO_SUBHUB("Pricing")` 에 등록. 원가 미입력 시 채팅 유도 문구 자동 삽입.
-
-### Added — Frontend
-
-- **`frontend/components/sales/MenuListPanel.tsx`** — Pricing 서브허브 `menu_list` artifact 카드 클릭 시 렌더. 카테고리 요약 헤더(개수 + 평균 마진율) · 마진율 게이지바(60%↑초록/40%↑노랑/이하빨강) · 원가 미입력 경고 뱃지 + 인라인 원가 입력(PATCH 즉시 반영) + 챗봇 유도 힌트.
-
-### Changed — Backend
-
-- **`backend/app/main.py`** — `menus` 라우터 등록.
-- **`backend/app/agents/sales.py`** — `run_menu_upsert` 응답 개선: 신규/수정/변경없음 3케이스 명확히 분리. 가격·원가 각각 변경 감지 후 `변경사항: 원가 0원 → 3,000원` 형식으로 표시.
-
-### Changed — Frontend
-
-- **`frontend/components/sales/RevenueStatsPanel.tsx`** — `personal-benchmark` + `goal` API 병렬 fetch 추가. 목표 달성률 게이지바 + 나 vs 과거의 나 비교 카드(지난달·전년 동월 %) + 최고 요일 표시.
-- **`frontend/components/detail/NodeDetailModal.tsx`** — `artifact.type === "menu_list"` 조건 추가 → `MenuListPanel` 렌더.
-
-## [1.4.2] — feature-signinup (Sign up 페이지 신설 + Sign in·헤더·대시보드 UI 전면 리프레시)
+## [1.4.2] — feature-signinup — feature-signinup (Sign up 페이지 신설 + Sign in·헤더·대시보드 UI 전면 리프레시)
 
 ### Added — Auth 페이지
 

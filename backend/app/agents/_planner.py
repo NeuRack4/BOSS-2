@@ -145,7 +145,7 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 
 [도메인 가이드]
 - recruitment  : 채용공고·면접·직원 관리 + 채용 포스터/이미지 생성
-- marketing    : SNS·광고·캠페인·블로그·리뷰 답글·유튜브 쇼츠/숏폼 영상 + 광고 이미지/배너
+- marketing    : SNS·광고·캠페인·블로그·리뷰 답글·유튜브 쇼츠/숏폼 영상 + 광고 이미지/배너 + Instagram·YouTube 마케팅 성과 분석 리포트 + 마케팅 정기 자동화 스케줄 등록
 - sales        : 매출 입력/분석·비용 기록·가격 전략·고객 응대 스크립트 + 영수증 파싱
 - documents    : 계약서·견적서·공지문 작성/검토 + **한국 법률·법령 전분야 Q&A** (노동·임대차·공정·개인정보·세법·상법·식품위생·저작권 등 포함)
   → 법령 질문은 일반 상식 QA 가 아니라 documents 로 분류.
@@ -175,10 +175,17 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 - `mkt_blog_post`        → topic, keywords, 업종
 - `mkt_ad_copy`          → product, target, key_benefit, channel
 - `mkt_campaign_plan`    → title, start_date, end_date, goal, budget
+- `mkt_event_form`      → 파라미터 없음. '이벤트 기획해줘'처럼 세부 정보 없는 요청에 즉시 dispatch → 폼 UI 오픈. 이벤트명·날짜·혜택이 이미 메시지에 있으면 mkt_event_plan 직접 호출.
+- `mkt_event_plan`      → title, event_type, start_date (+ end_date 또는 due_date, benefit).
+  - 메시지에 "인스타그램 게시물도 바로 작성" 또는 "인스타그램" 채널이 포함되면 → mkt_sns_post(depends_on: mkt_event_plan) 추가.
+  - 메시지에 "네이버 블로그 포스트도 바로 작성" 또는 "네이버 블로그" 채널이 포함되면 → mkt_blog_post(depends_on: mkt_event_plan, auto_upload=true) 추가.
+- `mkt_notice`          → notice_type, content (+ date). 인스타 게시 요청 시 publish_sns=true.
 - `doc_contract`         → subtype, party_a, party_b, start_date (+ amount 권장)
 - `doc_estimate`         → client, items, total_amount, valid_until
 - `doc_proposal`         → client, scope, amount, reply_by
 - `sales_promotion`      → title, start_date, end_date, benefit, target
+- `mkt_marketing_report` → period (선택, 기본 30 — 파라미터 없어도 즉시 dispatch 가능)
+- `mkt_schedule_post`    → task (자동 실행할 작업 지시문), cron (5-field cron 표현식) — 둘 다 확정되어야 dispatch. cron 은 사용자가 '매주 월요일 오전 9시' 같이 말하면 변환할 것 ('0 9 * * 1').
 
 이들 필드 중 하나라도 **메시지/히스토리/프로필/장기기억** 에서 확정 안 되면 반드시 `mode=ask` 로 남은 필드 하나를 물으세요.
 **여러 필드가 동시에 비어있으면 한 턴에 하나씩** — 가장 근본적인 것부터 (예: position → business_name → location → wage → work_days 순).
@@ -192,7 +199,7 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 
 **한 턴 한 질문 (엄격)**:
 - `question` 필드에 **정확히 하나의 질문**만. 두 개 이상 섞지 말 것.
-- `opening` 에는 질문을 담지 마세요. opening 은 "확인해 보고 맞춤으로 작성할게요" 수준의 짧은 안내만 (생략 가능).
+- `opening` 에는 질문을 절대 담지 마세요. opening 은 "맞춤으로 작성해 드릴게요" 같은 짧은 안내 또는 **빈 문자열**. question 과 동일하거나 유사한 내용을 opening 에 넣으면 사용자에게 같은 말이 두 번 출력됩니다 — 엄격히 금지.
 - 두 가지를 동시에 물어야 할 것 같으면 가장 근본적인 것 하나만 고르고 나머지는 다음 턴으로 미루세요.
 
 **choices 를 적극 사용**:
