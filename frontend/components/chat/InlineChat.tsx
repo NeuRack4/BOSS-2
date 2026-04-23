@@ -11,6 +11,7 @@ import {
 import {
   ArrowUpIcon,
   Bot,
+  Camera,
   Loader2,
   Paperclip,
   PlusIcon,
@@ -430,6 +431,7 @@ export const InlineChat = () => {
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const sendRef = useRef<
     ((text: string, messageIndex?: number) => Promise<void>) | null
   >(null);
@@ -1873,6 +1875,15 @@ export const InlineChat = () => {
                   onChange={handleFileSelect}
                   className="hidden"
                 />
+                {/* 모바일 카메라 전용 input — capture="environment" 로 후면 카메라 직접 실행 */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
                 <button
                   type="button"
                   disabled={uploading || loading || !userId}
@@ -1886,6 +1897,17 @@ export const InlineChat = () => {
                   ) : (
                     <Paperclip className="h-4 w-4 text-[#030303]/70" />
                   )}
+                </button>
+                {/* 카메라 버튼 — 모바일에서 카메라 앱 직접 실행, 데스크톱에서 파일 선택 */}
+                <button
+                  type="button"
+                  disabled={uploading || loading || !userId}
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-1 rounded p-1.5 transition-colors hover:bg-[#030303]/[0.05] disabled:opacity-50"
+                  aria-label="카메라로 촬영"
+                  title="카메라로 영수증 촬영"
+                >
+                  <Camera className="h-4 w-4 text-[#030303]/70" />
                 </button>
                 <select
                   value={uploadType}

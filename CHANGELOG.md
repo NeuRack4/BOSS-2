@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] — feature/sales-camera-receipt (모바일 카메라 영수증 촬영 기능)
+
+### Added — Frontend
+
+- **`frontend/components/chat/InlineChat.tsx`**
+  - `Camera` 아이콘 import 추가 (lucide-react)
+  - `cameraInputRef` 신규: `<input type="file" accept="image/*" capture="environment" />` — 모바일에서 후면 카메라 직접 실행, 데스크톱에서 파일 선택 폴백
+  - 카메라 버튼(📷) 추가 — 기존 paperclip 버튼 옆에 배치, 클릭 시 `cameraInputRef` 트리거
+  - 촬영된 이미지는 기존 `handleFileSelect` → `uploadFiles` → 영수증 OCR 흐름 그대로 처리
+
 ## [1.8.1] — feature/sales-menu-ocr (메뉴 이미지 분류 구조 개선 + InlineChat 메뉴 라우팅)
 
 ### Added — Backend
