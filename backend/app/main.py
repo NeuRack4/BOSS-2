@@ -40,6 +40,7 @@ from app.routers import (
     memory,
     menus,
     memos,
+    pos,
     recruitment,
     reviews,
     sales,
@@ -82,6 +83,7 @@ app.include_router(uploads.router)
 app.include_router(reviews.router)
 app.include_router(costs.router)
 app.include_router(menus.router)
+app.include_router(pos.router)
 app.include_router(sales.router)
 app.include_router(subsidies.router)
 app.include_router(stats.router)

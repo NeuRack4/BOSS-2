@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] — feature/sales-square-pos (Square POS 연동 — 포스기 매출 자동 동기화)
+
+### Added — Backend
+
+- **`backend/app/agents/_sales/_pos.py`** — Square POS API 클라이언트. `get_locations` · `fetch_orders` (sandbox: OPEN+COMPLETED / production: COMPLETED) · `parse_orders_to_records` (카테고리 자동 추론) · `sync_pos_to_sales` (bulk insert + revenue_entry artifact + activity_log). LangSmith `@traceable` + `[Square]` 단계별 로그.
+- **`backend/app/routers/pos.py`** — `/api/pos/square/locations` · `/api/pos/square/sync` · `/api/pos/square/oauth/callback` (OAuth 준비 중).
+- **`supabase/migrations/033_sales_records_source_pos.sql`** — `sales_records.source` 허용값에 `pos` 추가.
+
+### Changed — Backend
+
+- **`backend/app/core/config.py`** — `square_app_id` · `square_access_token` · `square_environment` 설정 필드 추가.
+- **`backend/app/main.py`** — `pos` 라우터 등록.
+- **`backend/app/agents/sales.py`** — `run_sync_pos` + `sales_sync_pos` capability 추가. "오늘 포스 매출 불러와" 채팅 트리거.
+
 ## [2.2.0] — feature-rec (채용 UX 개선 · 채팅 아바타 · 전역 채팅 상태 리프팅)
 
 ### Added — 채팅 아바타 시스템 (`frontend/components/chat/ChatAvatars.tsx`)
