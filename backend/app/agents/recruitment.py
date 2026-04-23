@@ -326,6 +326,7 @@ async def _maybe_dispatch_posting_set(account_id: str, reply: str) -> str:
         notice = (
             "\n\n---\n"
             f"_(채용공고 3종이 캔버스에 저장되었어요 — 세트 artifact: `{parent_id}`)_"
+            "\n\n채용공고 포스터 이미지도 만들어 드릴까요?"
         )
         return cleaned + notice
     return cleaned + "\n\n---\n_(공고 저장 중 오류가 발생했어요. 다시 시도해주세요.)_"
