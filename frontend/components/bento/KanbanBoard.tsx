@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { KanbanColumn } from "./KanbanColumn";
 import type { KanbanCardData } from "./KanbanCard";
 import type { DomainKey } from "./types";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
-import { EmployeeManagingPanel } from "@/components/employees/EmployeeManagingPanel";
+import {
+  EmployeeManagingPanel,
+  type EmployeeManagingHandle,
+} from "@/components/employees/EmployeeManagingPanel";
 
 type SubHub = {
   id: string;
@@ -32,6 +36,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const draggingRef = useRef<{ id: string; from: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const managingPanelRef = useRef<EmployeeManagingHandle>(null);
 
   const { openDetail } = useNodeDetail();
 
@@ -198,17 +203,30 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
                 key={h.id}
                 className="flex min-h-[300px] flex-1 min-w-[260px] flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
               >
-                <div className="flex items-center gap-2 border-b border-[color:var(--kb-border)] px-4 py-3">
-                  <span
-                    className="h-2 w-2 rounded-full bg-[#d4a588]"
-                    aria-hidden
-                  />
-                  <span className="text-[13px] font-semibold tracking-tight text-[color:var(--kb-fg-strong)]">
-                    Managing
-                  </span>
+                <div className="flex items-center justify-between border-b border-[color:var(--kb-border)] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full bg-[#d4a588]"
+                      aria-hidden
+                    />
+                    <span className="text-[13px] font-semibold tracking-tight text-[color:var(--kb-fg-strong)]">
+                      Managing
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => managingPanelRef.current?.openNew()}
+                    className="flex items-center gap-1 rounded-[4px] border border-[color:var(--kb-border)] px-2 py-1 text-[11px] text-[color:var(--kb-fg-muted)] hover:bg-[color:var(--kb-surface-hover)]"
+                  >
+                    <Plus className="h-3 w-3" />
+                    직원 추가
+                  </button>
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <EmployeeManagingPanel accountId={accountId} />
+                <div className="flex-1 overflow-y-auto p-2">
+                  <EmployeeManagingPanel
+                    ref={managingPanelRef}
+                    accountId={accountId}
+                  />
                 </div>
               </div>
             ) : (
