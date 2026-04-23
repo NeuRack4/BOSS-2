@@ -38,6 +38,39 @@ async def _download_image(url: str) -> bytes:
         return r.content
 
 
+def _crop_to_portrait(image_bytes: bytes) -> bytes:
+    """이미지를 Instagram 최적 비율(4:5)로 중앙 크롭 후 JPEG bytes 반환.
+
+    - 원본이 이미 portrait(세로 긴 이미지)이면 4:5로 맞춰 크롭
+    - 원본이 square/landscape이면 가로를 줄여서 4:5로 크롭
+    - 최종 리사이즈: 1080×1350 (Instagram 권장 portrait 해상도)
+    """
+    import io
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    w, h = img.size
+
+    target_ratio = 4 / 5  # width / height
+
+    if w / h > target_ratio:
+        # 이미지가 너무 넓음 — 좌우 크롭
+        new_w = int(h * target_ratio)
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+    else:
+        # 이미지가 너무 세로로 긺 — 상하 크롭 (4:5 기준)
+        new_h = int(w / target_ratio)
+        top = (h - new_h) // 2
+        img = img.crop((0, top, w, top + new_h))
+
+    img = img.resize((1080, 1350), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    return buf.getvalue()
+
+
 async def _save_image_to_storage(image_bytes: bytes, account_id: str) -> str:
     """Supabase Storage의 instagram-images 버킷에 저장 후 공개 URL 반환."""
     import uuid
@@ -273,11 +306,16 @@ async def publish_post(
     ig_user_id = settings.instagram_user_id
     access_token = settings.meta_access_token
 
-    # 1) 모든 이미지를 Storage에 영구 저장
+    # 1) 모든 이미지를 4:5 portrait 크롭 후 Storage에 영구 저장
     log.info("[instagram] saving %d image(s) to storage", len(image_urls))
     public_urls: list[str] = []
     for url in image_urls:
         image_bytes = await _download_image(url)
+        try:
+            image_bytes = _crop_to_portrait(image_bytes)
+            log.info("[instagram] cropped to 4:5 portrait (1080x1350)")
+        except Exception as e:
+            log.warning("[instagram] portrait crop failed, using original: %s", e)
         public_url = await _save_image_to_storage(image_bytes, account_id)
         public_urls.append(public_url)
         log.info("[instagram] stored: %s", public_url[:80])

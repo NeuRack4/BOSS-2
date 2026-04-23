@@ -116,11 +116,24 @@ export const InstagramPostCard = ({
     }
   };
 
-  const caption = payload.caption || "";
+  // 이모티콘만 단독으로 한 줄 차지하는 경우 앞 줄에 붙임
+  const normalizeCaption = (text: string) =>
+    text
+      .split("\n")
+      .reduce<string[]>((acc, line) => {
+        const trimmed = line.trim();
+        const isEmojiOnly = trimmed.length > 0 && !/[\w가-힣a-zA-Z0-9]/.test(trimmed);
+        if (isEmojiOnly && acc.length > 0) {
+          acc[acc.length - 1] = acc[acc.length - 1].trimEnd() + " " + trimmed;
+        } else {
+          acc.push(line);
+        }
+        return acc;
+      }, [])
+      .join("\n");
+
+  const caption = normalizeCaption(payload.caption || "");
   const hashtags = payload.hashtags || [];
-  const isLongCaption = caption.length > 90;
-  const displayCaption =
-    captionExpanded || !isLongCaption ? caption : caption.slice(0, 90) + "…";
 
   const isCarousel = previewUrls.length > 1;
   const currentImage = previewUrls[previewIndex] ?? payload.image_url;
@@ -134,7 +147,7 @@ export const InstagramPostCard = ({
           onClose={() => setShowLibrary(false)}
         />
       )}
-      <div className="w-[260px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
+      <div className="w-[300px] overflow-hidden rounded-xl border border-[#ddd0b4] bg-white shadow-md">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-xs font-bold text-white">
@@ -150,7 +163,7 @@ export const InstagramPostCard = ({
         </div>
 
         {/* Image (캐러셀 슬라이더) */}
-        <div className="relative aspect-[4/5] w-full bg-[#f0ece4]">
+        <div className="relative aspect-square w-full bg-[#f0ece4]">
           {currentImage ? (
             <Image
               src={currentImage}
@@ -245,46 +258,38 @@ export const InstagramPostCard = ({
           </button>
         </div>
 
-        {/* Caption */}
-        <div className="px-3 pb-1">
+        {/* Caption + Hashtags */}
+        <div className="px-3 pb-2 pt-1">
           {caption && (
             <div className="text-[12.5px] leading-relaxed text-[#1a1a1a]">
               <span className="mr-1.5 font-semibold">내 계정</span>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={IG_COMPONENTS}
+              <span
+                className={
+                  captionExpanded
+                    ? "whitespace-pre-line"
+                    : "line-clamp-2 whitespace-pre-line"
+                }
               >
-                {displayCaption}
-              </ReactMarkdown>
-              {isLongCaption && !captionExpanded && (
-                <button
-                  type="button"
-                  onClick={() => setCaptionExpanded(true)}
-                  className="ml-1 text-[#8c8c8c]"
-                >
-                  더 보기
-                </button>
-              )}
+                {caption}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCaptionExpanded((v) => !v)}
+                className="ml-1 text-[11px] text-[#8c8c8c] hover:text-[#555]"
+              >
+                {captionExpanded ? "접기" : "더 보기"}
+              </button>
             </div>
           )}
-
-          {/* Hashtags */}
           {hashtags.length > 0 && (
-            <p className="mt-1 text-[12px] leading-relaxed text-[#3b7aba]">
-              {hashtags
-                .slice(0, 20)
-                .map((t) => `#${t}`)
-                .join(" ")}
+            <p className="mt-1 text-[11.5px] leading-relaxed text-[#3b7aba]">
+              {hashtags.slice(0, 20).map((t) => `#${t}`).join(" ")}
             </p>
           )}
+          {payload.best_time && (
+            <p className="mt-1 text-[11px] text-[#8c7e66]">{payload.best_time}</p>
+          )}
         </div>
-
-        {/* Best time */}
-        {payload.best_time && (
-          <div className="border-t border-[#f0ece4] px-3 py-2 text-[11px] text-[#8c7e66]">
-            {payload.best_time}
-          </div>
-        )}
 
         {/* 피드에 게시 버튼 */}
         <div className="border-t border-[#f0ece4] px-3 py-2.5">

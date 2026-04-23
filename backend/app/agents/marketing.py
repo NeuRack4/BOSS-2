@@ -456,6 +456,51 @@ def _maybe_review_reply_card(reply: str) -> str:
     return f"\n\n[[REVIEW_REPLY]]{_json.dumps(payload, ensure_ascii=False)}[[/REVIEW_REPLY]]"
 
 
+def _parse_naver_blog_content(reply: str) -> dict:
+    """blog_post 마크다운에서 제목·본문·태그를 추출해 dict 반환."""
+    lines = reply.splitlines()
+    title = ""
+    tag_line = ""
+    content_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not title and stripped.startswith("# "):
+            title = stripped[2:].strip()
+        elif stripped.startswith("#") and " " not in stripped.lstrip("#"):
+            # 해시태그 줄 (#태그 형태)
+            tag_line = stripped
+        elif stripped.startswith("#") and all(
+            w.startswith("#") for w in stripped.split()
+        ):
+            tag_line = stripped
+        else:
+            content_lines.append(line)
+
+    tags = _re.findall(r"#([\w가-힣A-Za-z0-9]+)", tag_line)
+    content = "\n".join(content_lines).strip()
+    # [ARTIFACT] 블록 제거
+    content = _re.sub(r"\[ARTIFACT\].*?\[/ARTIFACT\]", "", content, flags=_re.DOTALL).strip()
+
+    return {"title": title, "content": content, "tags": tags}
+
+
+async def _maybe_naver_blog_preview(reply: str, image_urls: list[str] | None = None) -> str:
+    """blog_post 본문에서 [[NAVER_BLOG_POST]] 미리보기 마커를 생성."""
+    blog = _parse_naver_blog_content(reply)
+    # 제목이나 본문 중 하나라도 있으면 카드 생성
+    if not blog["title"] and not blog["content"]:
+        return ""
+
+    payload = {
+        "title": blog["title"],
+        "content": blog["content"],
+        "tags": blog["tags"],
+        "image_urls": image_urls or [],
+    }
+    return f"\n\n[[NAVER_BLOG_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/NAVER_BLOG_POST]]"
+
+
 async def _maybe_instagram_preview(reply: str) -> str:
     """sns_post / product_post 타입이거나 해시태그 5개 이상이면 [[INSTAGRAM_POST]] 마커를 반환."""
     from app.agents._artifact import _parse_block
@@ -560,8 +605,12 @@ async def run_sns_post(
     )
     reply = await run(synthetic, account_id, history, rag_context, long_term_context)
 
-    # Instagram 카드가 아직 없으면 강제 생성
-    if "[[INSTAGRAM_POST]]" not in reply:
+    # Instagram 플랫폼 선택 시에만 카드 생성
+    _needs_instagram = (
+        "instagram" in platform.lower()
+        or "인스타" in platform.lower()
+    )
+    if _needs_instagram and "[[INSTAGRAM_POST]]" not in reply:
         from app.agents._artifact import _parse_block
         caption, hashtags, best_time = _extract_sns_content(reply)
         if not caption:
@@ -592,11 +641,16 @@ async def run_blog_post(
     topic: str,
     keywords: list[str] | None = None,
     auto_upload: bool = False,
+    image_urls: list[str] | None = None,
+    tone: str | None = None,
     _preceding_reply: str | None = None,
+    **_kwargs,
 ) -> str:
     lines = [f"[주제] {topic}"]
     if keywords:
         lines.append(f"[주요 키워드] {', '.join(keywords)}")
+    if image_urls:
+        lines.append(f"[첨부 이미지 URL] {', '.join(image_urls)}")
     if _preceding_reply:
         lines.append(f"[참고 기획안 (앞 단계 결과)]\n{_preceding_reply[:1200]}")
     if auto_upload:
@@ -608,7 +662,14 @@ async def run_blog_post(
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    reply = await run(synthetic, account_id, history, rag_context, long_term_context, image_urls=image_urls, allow_naver_upload=auto_upload)
+
+    # 네이버 블로그 미리보기 카드 마커 추가
+    if "[[NAVER_BLOG_POST]]" not in reply:
+        preview = await _maybe_naver_blog_preview(reply, image_urls)
+        reply += preview
+
+    return reply
 
 
 async def run_review_reply(
@@ -694,6 +755,42 @@ async def run_campaign_plan(
         + f"\n\n원본 사용자 요청: {message}"
     )
     return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_sns_post_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """SNS 게시물 작성 폼 UI를 반환한다. 주제 없이 SNS 게시물 요청 시 즉시 호출."""
+    return "어떤 내용의 게시물을 만들까요? 아래 폼을 채워주세요.\n\n[[SNS_POST_FORM]][[/SNS_POST_FORM]]"
+
+
+async def run_blog_post_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """블로그 포스트 작성 폼 UI를 반환한다. 주제 없이 블로그 포스트 요청 시 즉시 호출."""
+    return "어떤 내용의 블로그 포스트를 작성할까요? 아래 폼을 채워주세요.\n\n[[BLOG_POST_FORM]][[/BLOG_POST_FORM]]"
+
+
+async def run_review_reply_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """리뷰 답글 입력 폼 UI를 반환한다. 리뷰 원문 없이 답글 요청 시 즉시 호출."""
+    return "답글을 달 리뷰를 알려주세요.\n\n[[REVIEW_REPLY_FORM]][[/REVIEW_REPLY_FORM]]"
 
 
 async def run_event_form(
@@ -1037,6 +1134,36 @@ async def run_schedule_post(
 def describe(account_id: str) -> list[dict]:
     return [
         {
+            "name": "mkt_blog_post_form",
+            "description": (
+                "블로그 포스트 작성 폼 UI를 열어 주제·방향·키워드·톤을 입력할 수 있게 한다. "
+                "'블로그 포스트 작성해줘', '네이버 블로그 써줘' 처럼 주제(topic)가 명시되지 않은 요청에 즉시 호출. "
+                "메시지에 '주제:' 또는 '바로 완성해줘' 가 있으면 mkt_blog_post 직접 호출."
+            ),
+            "handler": run_blog_post_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "mkt_review_reply_form",
+            "description": (
+                "리뷰 답글 작성 폼 UI를 열어 리뷰 원문·별점·플랫폼을 입력할 수 있게 한다. "
+                "'리뷰 답글 작성해줘', '리뷰에 답글 달아줘' 처럼 리뷰 원문이 없는 요청에 즉시 호출. "
+                "리뷰 원문이 메시지에 있으면 mkt_review_reply 직접 호출."
+            ),
+            "handler": run_review_reply_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "mkt_sns_post_form",
+            "description": (
+                "SNS 게시물 작성 폼 UI를 열어 사용자가 주제·제품·혜택·톤·플랫폼을 입력할 수 있게 한다. "
+                "'SNS 게시물 작성해줘', '인스타 포스트 만들어줘' 처럼 주제(topic) 가 명시되지 않은 요청에 즉시 호출. "
+                "주제·내용이 이미 메시지에 있으면 mkt_sns_post 를 직접 호출."
+            ),
+            "handler": run_sns_post_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
             "name": "mkt_sns_post",
             "description": (
                 "인스타그램·페이스북 등 SNS 피드 게시물을 작성한다. "
@@ -1068,6 +1195,7 @@ def describe(account_id: str) -> list[dict]:
                     "topic":       {"type": "string"},
                     "keywords":    {"type": "array", "items": {"type": "string"}},
                     "auto_upload": {"type": "boolean", "default": False, "description": "네이버 블로그 자동 업로드 여부"},
+                    "image_urls":  {"type": "array", "items": {"type": "string"}, "description": "포스트에 첨부할 이미지 URL 목록"},
                 },
                 "required": ["topic"],
             },
@@ -1252,6 +1380,8 @@ async def run(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
+    image_urls: list[str] | None = None,
+    allow_naver_upload: bool = False,
 ) -> str:
     system = SYSTEM_PROMPT + "\n\n" + today_context()
 
@@ -1295,8 +1425,8 @@ async def run(
     )
     # ────────────────────────────────────────────────────────────────────────
 
-    # [NAVER_UPLOAD] 마커 감지 → 업로드 실행 후 마커를 결과 메시지로 교체
-    wants_naver_upload = bool(_NAVER_UPLOAD_RE.search(reply))
+    # [NAVER_UPLOAD] 마커 감지 → allow_naver_upload=True일 때만 실제 업로드
+    wants_naver_upload = allow_naver_upload and bool(_NAVER_UPLOAD_RE.search(reply))
     reply = _NAVER_UPLOAD_RE.sub("", reply).rstrip()
 
     artifact_id = await save_artifact_from_reply(
@@ -1308,7 +1438,7 @@ async def run(
     )
 
     if wants_naver_upload:
-        reply += "\n\n" + await _try_naver_upload(reply)
+        reply += "\n\n" + await _try_naver_upload(reply, image_urls=image_urls)
     else:
         review_marker = _maybe_review_reply_card(reply)
         if review_marker:
@@ -1426,7 +1556,7 @@ async def _generate_blog_image(title: str, content_preview: str) -> str:
         return ""
 
 
-async def _try_naver_upload(reply: str) -> str:
+async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> str:
     """blog_post 본문을 파싱해 네이버 블로그에 업로드. 결과 문자열 반환."""
     import os as _os
     from app.core.config import settings
@@ -1451,8 +1581,7 @@ async def _try_naver_upload(reply: str) -> str:
             tags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
             break
 
-    # 대표 이미지 생성
-    image_path = await _generate_blog_image(title, blog_content[:300])
+    # 이미지: 사용자 첨부 이미지 URL을 그대로 전달 (다운로드 불필요)
 
     try:
         from app.services.naver_blog import upload_post
@@ -1462,7 +1591,7 @@ async def _try_naver_upload(reply: str) -> str:
             title=title,
             content=blog_content,
             tags=tags,
-            image_path=image_path,
+            image_urls=image_urls or [],
         )
         if post_url:
             return f"✅ 네이버 블로그에 업로드했어요!\n🔗 {post_url}"
@@ -1470,11 +1599,17 @@ async def _try_naver_upload(reply: str) -> str:
     except ImportError:
         return "⚠️ playwright가 설치되지 않았습니다. `pip install playwright && playwright install chromium`을 실행해 주세요."
     except Exception as e:
+        err = str(e)
+        if "naver_login_setup" in err or "쿠키" in err or "cookie" in err.lower():
+            return (
+                "⚠️ 네이버 블로그 자동 업로드를 사용하려면 최초 1회 로그인 설정이 필요해요.\n\n"
+                "터미널에서 아래 명령어를 실행해 주세요:\n"
+                "```\ncd backend\npython -m app.services.naver_login_setup\n```\n"
+                "브라우저가 열리면 네이버에 로그인 후 터미널에서 엔터를 누르면 설정이 완료됩니다."
+            )
+        if "세션 만료" in err:
+            return (
+                "⚠️ 네이버 로그인 세션이 만료됐어요. 아래 명령어로 다시 로그인해 주세요:\n"
+                "```\ncd backend\npython -m app.services.naver_login_setup\n```"
+            )
         return f"⚠️ 네이버 블로그 업로드 중 오류가 발생했어요: {e}"
-    finally:
-        # 임시 이미지 파일 정리
-        if image_path:
-            try:
-                _os.unlink(image_path)
-            except Exception:
-                pass

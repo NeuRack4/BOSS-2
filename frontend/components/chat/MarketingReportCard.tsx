@@ -49,6 +49,7 @@ interface YoutubeChannel {
 
 interface YoutubeVideo {
   video_id: string;
+  title: string;
   views: number;
   watch_minutes: number;
   likes: number;
@@ -121,7 +122,7 @@ export function MarketingReportCard({
 }: {
   payload: MarketingReportPayload;
 }) {
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const [tab, setTab] = useState<"overview" | "instagram" | "youtube">(
     "overview"
   );
@@ -212,15 +213,18 @@ export function MarketingReportCard({
           <div className="space-y-3">
             {/* 플랫폼 연결 상태 */}
             <div className="flex gap-2">
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full border ${
-                  igOk
-                    ? "border-pink-200 bg-pink-50 text-pink-600"
-                    : "border-neutral-200 bg-neutral-50 text-neutral-400"
-                }`}
-              >
-                {igOk ? "● Instagram 연결됨" : "○ Instagram 미연결"}
-              </span>
+              {igOk ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-full border border-pink-200 bg-pink-50 text-pink-600">
+                  ● Instagram 연결됨
+                </span>
+              ) : (
+                <span
+                  className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-300 bg-white text-neutral-500"
+                  title="관리자 설정에서 Meta 액세스 토큰을 등록하면 연결됩니다"
+                >
+                  ○ Instagram 미연결
+                </span>
+              )}
               {ytOk ? (
               <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600">
                 ● YouTube 연결됨
@@ -247,9 +251,15 @@ export function MarketingReportCard({
         {tab === "instagram" && (
           <div className="space-y-4">
             {!igOk ? (
-              <p className="text-[13px] text-neutral-500 text-center py-4">
-                {ig?.error || "Instagram 데이터를 불러올 수 없습니다."}
-              </p>
+              <div className="flex flex-col items-center gap-3 py-6">
+                <p className="text-[13px] text-neutral-500 text-center">
+                  {ig?.error || "Instagram 데이터를 불러올 수 없습니다."}
+                </p>
+                <p className="text-[11px] text-neutral-400 text-center">
+                  Instagram 연결은 Meta 비즈니스 계정의 액세스 토큰을<br />
+                  관리자 설정에서 등록하면 자동으로 활성화됩니다.
+                </p>
+              </div>
             ) : (
               <>
                 {/* 계정 통계 그리드 */}
@@ -394,8 +404,8 @@ export function MarketingReportCard({
                             {i + 1}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[12px] text-neutral-600 truncate group-hover:text-neutral-800 font-mono">
-                              {v.video_id}
+                            <p className="text-[12px] text-neutral-700 truncate group-hover:text-neutral-900">
+                              {v.title || v.video_id}
                             </p>
                             <p className="text-[11px] text-neutral-400 mt-0.5">
                               조회 {fmt(v.views)} · {fmt(v.watch_minutes)}분 · 좋아요 {fmt(v.likes)}

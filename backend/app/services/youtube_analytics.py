@@ -95,12 +95,32 @@ async def get_channel_analytics(
     }
 
 
+async def _fetch_video_titles(access_token: str, video_ids: list[str]) -> dict[str, str]:
+    """YouTube Data API v3 videos.list 로 영상 제목 일괄 조회."""
+    if not video_ids:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"part": "snippet", "id": ",".join(video_ids)},
+            )
+            data = r.json()
+        return {
+            item["id"]: item.get("snippet", {}).get("title", item["id"])
+            for item in data.get("items", [])
+        }
+    except Exception:
+        return {}
+
+
 async def get_top_videos(
     account_id: str,
     days: int = 30,
     limit: int = 5,
 ) -> list[dict]:
-    """조회수 기준 상위 영상 목록."""
+    """조회수 기준 상위 영상 목록 (제목 포함)."""
     from app.services.youtube import get_valid_token
 
     end_date = date.today().isoformat()
@@ -141,11 +161,18 @@ async def get_top_videos(
         video_id = item.get("video", "")
         results.append({
             "video_id": video_id,
+            "title": "",  # filled below
             "views": int(item.get("views", 0)),
             "watch_minutes": int(item.get("estimatedMinutesWatched", 0)),
             "likes": int(item.get("likes", 0)),
             "url": f"https://youtu.be/{video_id}" if video_id else "",
         })
+
+    # 제목 일괄 조회
+    video_ids = [r["video_id"] for r in results if r["video_id"]]
+    title_map = await _fetch_video_titles(access_token, video_ids)
+    for r in results:
+        r["title"] = title_map.get(r["video_id"], r["video_id"])
 
     return results
 
