@@ -282,7 +282,7 @@ export const WorkRecordPanel = ({ employeeId, accountId }: Props) => {
               size="sm"
               variant="outline"
               onClick={() => setShowAdd(false)}
-              className="h-6 border-[#d4a588] text-[10px] text-[#d4a588] hover:bg-[#d4a588]/10"
+              className="h-6 bg-[color:var(--kb-surface-hover)] text-[10px] hover:bg-[color:var(--kb-border)]"
             >
               Cancel
             </Button>
