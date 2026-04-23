@@ -36,7 +36,13 @@ const formatPeriod = (item: SubsidyItem): string => {
 
 const POLL_INTERVAL_MS = 3000;
 
-export const SubsidyMatchCard = ({ accountId }: { accountId: string }) => {
+export const SubsidyMatchCard = ({
+  accountId,
+  bgColor,
+}: {
+  accountId: string;
+  bgColor?: string;
+}) => {
   const [items, setItems] = useState<SubsidyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SubsidyItem | null>(null);
@@ -101,7 +107,8 @@ export const SubsidyMatchCard = ({ accountId }: { accountId: string }) => {
           openModal();
         }
       }}
-      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#cfd9cc] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
+      style={{ backgroundColor: bgColor ?? "#cfd9cc" }}
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">

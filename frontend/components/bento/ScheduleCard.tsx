@@ -29,9 +29,10 @@ const urgencyClass = (iso: string): string => {
 
 type Props = {
   items: ScheduleItem[];
+  bgColor?: string;
 };
 
-export const ScheduleCard = ({ items }: Props) => {
+export const ScheduleCard = ({ items, bgColor }: Props) => {
   const shown = items.slice(0, 5);
   const openModal = () =>
     window.dispatchEvent(new CustomEvent("boss:open-schedule-modal"));
@@ -48,7 +49,8 @@ export const ScheduleCard = ({ items }: Props) => {
       tabIndex={0}
       onClick={openModal}
       onKeyDown={onKey}
-      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] bg-[#eee3c4] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
+      style={{ backgroundColor: bgColor ?? "#eee3c4" }}
+      className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left text-[#030303] shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
     >
       <div className="mb-3 flex items-center justify-between">
         <span className="text-base font-semibold tracking-tight text-[#030303]">

@@ -9,9 +9,10 @@ import { DOMAIN_META, type DomainKey, type DomainStats } from "./types";
 type Props = {
   domain: DomainKey;
   stats: DomainStats;
+  bgColor?: string;
 };
 
-export const DomainCard = ({ domain, stats }: Props) => {
+export const DomainCard = ({ domain, stats, bgColor }: Props) => {
   const meta = DOMAIN_META[domain];
   const { openDetail } = useNodeDetail();
 
@@ -21,10 +22,10 @@ export const DomainCard = ({ domain, stats }: Props) => {
   return (
     <Link
       href={`/${domain}`}
+      style={{ backgroundColor: bgColor ?? meta.bgHex }}
       className={cn(
         "group relative flex h-full flex-col overflow-hidden rounded-[5px] p-5 shadow-lg transition-all",
         "hover:scale-[1.015] hover:shadow-xl",
-        meta.bg,
         textClass,
       )}
     >
