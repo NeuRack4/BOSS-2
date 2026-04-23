@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_redirect_uri: str = "http://localhost:8000/api/marketing/youtube/oauth/callback"
 
+    # Square POS (optional)
+    square_app_id: str = ""
+    square_access_token: str = ""        # sandbox: EAAl... / prod: 교체
+    square_environment: str = "sandbox"  # sandbox | production
+
     # Bizinfo (기업마당 공공 API)
     bizinfo_api_key: str = ""
 
