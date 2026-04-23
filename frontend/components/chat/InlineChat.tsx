@@ -50,6 +50,15 @@ import {
   extractMenuChartPayload,
   type MenuAnalysisPayload,
 } from "./MenuAnalysisCard";
+import {
+  MarketingReportCard,
+  extractMarketingReportPayload,
+  type MarketingReportPayload,
+} from "./MarketingReportCard";
+import {
+  EventPlanFormCard,
+  extractEventPlanForm,
+} from "./EventPlanFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -92,6 +101,9 @@ type Message = {
   costAction?: CostActionData;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
+  instagram?: InstagramPayload;
+  marketingReport?: MarketingReportPayload;
+  eventPlanForm?: boolean;
   employeePicker?: EmployeePickerPayload;
   savedArtifactId?: string;
   savedDomain?: string;
@@ -492,18 +504,26 @@ export const InlineChat = () => {
               size_kb?: number | null;
               status?: "uploading" | "done" | "error";
             } | null;
-          }) => ({
-            role: m.role === "user" ? "user" : "assistant",
-            content: m.content,
-            choices: m.choices ?? undefined,
-            attachment: m.attachment?.filename
-              ? {
-                  status: m.attachment.status ?? "done",
-                  filename: m.attachment.filename,
-                  sizeKb: m.attachment.size_kb ?? undefined,
-                }
-              : undefined,
-          }),
+          }) => {
+            const { cleaned: afterMktReport, payload: mktReport } =
+              extractMarketingReportPayload(m.content ?? "");
+            const { cleaned: cleanedContent, payload: igPayload } =
+              extractInstagramPayload(afterMktReport);
+            return {
+              role: m.role === "user" ? "user" : "assistant",
+              content: cleanedContent,
+              choices: m.choices ?? undefined,
+              attachment: m.attachment?.filename
+                ? {
+                    status: m.attachment.status ?? "done",
+                    filename: m.attachment.filename,
+                    sizeKb: m.attachment.size_kb ?? undefined,
+                  }
+                : undefined,
+              marketingReport: mktReport ?? undefined,
+              instagram: igPayload ?? undefined,
+            };
+          },
         );
         // 마지막 assistant 메시지의 speaker 로 배지 복원
         const lastAssistant = [...msgs]
@@ -974,8 +994,14 @@ export const InlineChat = () => {
           extractShortsWizardPayload(afterCost);
         const { cleaned: afterMenu, payload: menuChart } =
           extractMenuChartPayload(afterShorts);
+        const { cleaned: afterMarketing, payload: marketingReport } =
+          extractMarketingReportPayload(afterMenu);
+        const { cleaned: afterInstagram, payload: instagram } =
+          extractInstagramPayload(afterMarketing);
+        const { cleaned: afterEventForm, hasForm: eventPlanForm } =
+          extractEventPlanForm(afterInstagram);
         const { cleaned: cleanReply, payload: employeePicker } =
-          extractEmployeePickerPayload(afterMenu);
+          extractEmployeePickerPayload(afterEventForm);
         setMessages((prev) => [
           ...prev,
           {
@@ -988,6 +1014,9 @@ export const InlineChat = () => {
             costAction,
             shortsWizard: shortsWizard ?? undefined,
             menuChart: menuChart ?? undefined,
+            marketingReport: marketingReport ?? undefined,
+            instagram: instagram ?? undefined,
+            eventPlanForm: eventPlanForm || undefined,
             employeePicker: employeePicker ?? undefined,
           },
         ]);
@@ -1401,6 +1430,18 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && menuChartPayload && (
                     <div className="ml-8 max-w-[85%]">
                       <MenuAnalysisCard payload={menuChartPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.marketingReport && (
+                    <div className="ml-8 max-w-[85%]">
+                      <MarketingReportCard payload={msg.marketingReport} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.eventPlanForm && (
+                    <div className="ml-8">
+                      <EventPlanFormCard
+                        onSubmit={(message) => send(message)}
+                      />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.choices && (

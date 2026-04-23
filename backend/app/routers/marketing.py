@@ -614,6 +614,30 @@ def _persist_shorts_artifact(
         log.exception("shorts artifact insert failed")
 
 
+# ── 마케팅 성과 리포트 ────────────────────────────────────────────────────────
+
+@router.get("/report/instagram")
+async def get_instagram_report(
+    account_id: str = Query(..., description="BOSS2 계정 ID"),
+    days: int = Query(default=30, ge=7, le=90, description="조회 기간(일)"),
+):
+    """Instagram 계정/게시물 성과 데이터 조회."""
+    from app.services.instagram_insights import collect_report_data
+    data = await collect_report_data(days=days)
+    return {"data": data, "error": data.get("error")}
+
+
+@router.get("/report/youtube")
+async def get_youtube_report(
+    account_id: str = Query(..., description="BOSS2 계정 ID"),
+    days: int = Query(default=30, ge=7, le=90, description="조회 기간(일)"),
+):
+    """YouTube Analytics 채널/영상 성과 데이터 조회."""
+    from app.services.youtube_analytics import collect_report_data
+    data = await collect_report_data(account_id=account_id, days=days)
+    return {"data": data, "error": data.get("channel", {}).get("error")}
+
+
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────
 
 @router.get("/subsidies")
