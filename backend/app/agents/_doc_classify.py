@@ -30,7 +30,7 @@ from app.core.llm import client as _openai_client
 
 log = logging.getLogger(__name__)
 
-Category = Literal["documents", "receipt", "invoice", "tax", "id", "other"]
+Category = Literal["documents", "receipt", "invoice", "tax", "id", "menu", "other"]
 
 CATEGORY_LABELS: dict[str, str] = {
     "documents": "문서",
@@ -38,6 +38,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "invoice":   "청구서",
     "tax":       "세금계산서",
     "id":        "신분증",
+    "menu":      "메뉴판",
     "other":     "기타",
 }
 
@@ -51,6 +52,7 @@ USER_DECLARED_TYPES: dict[str, tuple[Category, str]] = {
     "checklist":  ("documents", "체크리스트"),
     "guide":      ("documents", "가이드"),
     "receipt":    ("receipt",   "영수증"),
+    "menu":       ("menu",      "메뉴판"),
     "invoice":    ("invoice",   "청구서"),
     "tax":        ("tax",       "세금계산서"),
     "id":         ("id",        "신분증"),
@@ -90,10 +92,16 @@ _HEURISTICS: tuple[tuple[Category, str, tuple[str, ...]], ...] = (
     # documents — 가이드
     ("documents", "가이드", ("가이드", "매뉴얼", "사용 설명서", "운영 지침")),
 
-    # receipt
+    # receipt — 영수증
     ("receipt", "영수증", (
         "영수증", "receipt", "승인번호", "승인 번호", "카드번호", "일시불",
         "가맹점", "매출전표", "신용카드 매출", "할부 개월",
+    )),
+    # menu — 메뉴판
+    ("menu", "메뉴판", (
+        "메뉴판", "menu board", "오늘의 메뉴", "today's menu", "today's special",
+        "our menu", "메뉴 안내",
+        "menu", "메뉴", "매뉴",
     )),
     # invoice
     ("invoice", "청구서", (
@@ -194,18 +202,6 @@ async def _llm_classify(text_sample: str, filename: str) -> ClassificationResult
 
 async def classify_document(text: str, filename: str) -> ClassificationResult:
     """업로드 문서 분류 진입점 (async — LLM fallback 때문에)."""
-    # 이미지 파일은 sales 에이전트 경로로 라우팅
-    # 이미지 컨텐츠가 영수증인지 메뉴판인지 등의 판단은 sales 에이전트(플래너)가 담당
-    _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic")
-    if (filename or "").lower().endswith(_IMAGE_EXTS):
-        return ClassificationResult(
-            category="receipt",
-            doc_type="이미지",
-            confidence=0.9,
-            reason="이미지 파일 → sales 에이전트 라우팅",
-            source="heuristic",
-        )
-
     text_sample = (text or "")[:3000]
     rows = _score_heuristics(text_sample, filename or "")
 

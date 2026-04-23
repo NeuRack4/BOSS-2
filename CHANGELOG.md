@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] — feature/sales-menu-ocr (메뉴 이미지 분류 구조 개선 + InlineChat 메뉴 라우팅)
+
+### Added — Backend
+
+- **`backend/app/agents/_doc_classify.py`** — `menu` 독립 category 신설. `Category` 타입·`CATEGORY_LABELS`·`USER_DECLARED_TYPES`·`_HEURISTICS`에 `"menu"` 추가. 키워드: `메뉴판`, `menu board`, `오늘의 메뉴`, `today's menu`, `menu`, `메뉴`, `매뉴` 등. 영수증과 분리된 독립 라우팅 경로 확보.
+
+### Changed — Backend
+
+- **`backend/app/agents/sales.py`** — `describe()` 내 `_is_menu_image` 파일명 기반 필터 추가. 파일명에 `menu/메뉴` 포함 시 `sales_parse_receipt` 제외 → `sales_menu_ocr`만 광고.
+
+### Changed — Frontend
+
+- **`frontend/components/chat/InlineChat.tsx`**
+  - `UploadCategory` 타입에 `"menu"` 추가
+  - `CATEGORY_LABEL`, `UPLOAD_TYPES` 드롭다운에 `"메뉴"` 항목 추가
+  - `menuItems` 필터 신규: `final_category === "menu"` 이미지 → `setPendingReceipt` + `"메뉴로 등록해줘"` 자동 전송
+  - `otherNonDocs`에서 `menu` 제외
+  - `nonDocs` 필터 수정: ephemeral 업로드(`artifact_id === null`)는 `needs_confirmation` 무관하게 즉시 처리 (기존 버그 수정)
+
 ## [1.8.0] — feature/sales-menu-ocr (메뉴판 이미지 OCR + 이미지 라우팅 구조 개선)
 
 ### Added — Backend

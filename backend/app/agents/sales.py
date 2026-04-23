@@ -1383,17 +1383,22 @@ def describe(account_id: str) -> list[dict]:
                 "parameters": {"type": "object", "properties": {}},
             })
         else:
-            caps.append({
-                "name": "sales_parse_receipt",
-                "description": (
-                    f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
-                    "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
-                    "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
-                    "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
-                ),
-                "handler": run_parse_receipt,
-                "parameters": {"type": "object", "properties": {}},
-            })
+            # 파일명에 "menu"/"메뉴" 포함 시 메뉴판 이미지로 판단 → 영수증 capability 제외
+            _is_menu_image = any(
+                kw in fname.lower() for kw in ("menu", "메뉴", "menuboard", "menu_board")
+            )
+            if not _is_menu_image:
+                caps.append({
+                    "name": "sales_parse_receipt",
+                    "description": (
+                        f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
+                        "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
+                        "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
+                        "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
+                    ),
+                    "handler": run_parse_receipt,
+                    "parameters": {"type": "object", "properties": {}},
+                })
 
     # 사용자 확정 항목 저장 (SalesInputTable/CostInputTable Save 버튼)
     pending_save = get_pending_save() or {}
