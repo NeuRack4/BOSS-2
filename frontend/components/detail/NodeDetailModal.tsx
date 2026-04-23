@@ -37,6 +37,7 @@ import {
   type MenuAnalysisPayload,
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
+import MenuListPanel from "@/components/sales/MenuListPanel";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -1096,6 +1097,16 @@ export const NodeDetailModal = () => {
                     <RevenueStatsPanel accountId={accountId} />
                   </Section>
                 )}
+
+                {/* PRICING 메뉴 목록 — Pricing 서브허브 상세에서 표시 */}
+                {artifact.kind === "domain" &&
+                  artifact.type === "category" &&
+                  artifact.title === "Pricing" &&
+                  accountId && (
+                    <Section>
+                      <MenuListPanel accountId={accountId} />
+                    </Section>
+                  )}
 
                 {/* CONTENT */}
                 <Section>

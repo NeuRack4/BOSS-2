@@ -15,6 +15,19 @@ type OverviewData = {
   profit: { total: number; prev_total: number; change_rate: number | null };
 };
 
+type BenchmarkData = {
+  vs_last_month: { change_rate: number | null; label: string };
+  vs_last_year:  { change_rate: number | null; label: string };
+  best_day_of_week: string | null;
+};
+
+type GoalData = {
+  monthly_goal:     number;
+  current_sales:    number;
+  achievement_rate: number | null;
+  remaining:        number | null;
+};
+
 type DayPoint = {
   date: string;
   day: number;
@@ -136,10 +149,12 @@ function DailyBarChart({ series }: { series: DayPoint[] }) {
 // ── 메인 패널 ─────────────────────────────────────────────────────────────────
 
 export function RevenueStatsPanel({ accountId }: { accountId: string }) {
-  const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [series, setSeries]     = useState<DayPoint[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(false);
+  const [overview,   setOverview]   = useState<OverviewData | null>(null);
+  const [series,     setSeries]     = useState<DayPoint[]>([]);
+  const [benchmark,  setBenchmark]  = useState<BenchmarkData | null>(null);
+  const [goal,       setGoal]       = useState<GoalData | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(false);
 
   useEffect(() => {
     if (!accountId) return;
@@ -149,10 +164,14 @@ export function RevenueStatsPanel({ accountId }: { accountId: string }) {
     Promise.all([
       fetch(`${API}/api/stats/overview?account_id=${accountId}`).then((r) => r.json()),
       fetch(`${API}/api/stats/daily?account_id=${accountId}`).then((r) => r.json()),
+      fetch(`${API}/api/stats/personal-benchmark?account_id=${accountId}`).then((r) => r.json()),
+      fetch(`${API}/api/stats/goal?account_id=${accountId}`).then((r) => r.json()),
     ])
-      .then(([ov, dv]) => {
+      .then(([ov, dv, bm, gl]) => {
         setOverview(ov.data ?? null);
         setSeries(dv.data?.series ?? []);
+        setBenchmark(bm.data ?? null);
+        setGoal(gl.data ?? null);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -237,12 +256,73 @@ export function RevenueStatsPanel({ accountId }: { accountId: string }) {
         <p className="mb-2 text-[12px] font-semibold text-[#5a5040]">일별 매출</p>
         <div className="rounded-[5px] border border-[#e8e3d8] bg-[#fdfcf8] p-3">
           <DailyBarChart series={series} />
-          {/* Y축 최대값 힌트 */}
           <p className="mt-1 text-right font-mono text-[10px] text-[#bbb]">
             최대 {fmt(Math.max(...series.map((d) => d.sales), 0))}원
           </p>
         </div>
       </div>
+
+      {/* 목표 달성률 게이지 */}
+      {goal && goal.monthly_goal > 0 && (
+        <div className="rounded-[5px] border border-[#e8e3d8] bg-white px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-mono text-[11px] uppercase text-[#999]">이번달 목표</span>
+            <span className="text-[13px] font-semibold text-[#2c2c2c]">
+              {fmt(goal.monthly_goal)}원
+            </span>
+          </div>
+          <div className="mb-1 h-2 w-full rounded-full bg-[#f0ede8]">
+            <div
+              className="h-2 rounded-full bg-[#7f8f54] transition-all"
+              style={{ width: `${Math.min(goal.achievement_rate ?? 0, 100)}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[#999]">
+              {goal.achievement_rate !== null ? `${goal.achievement_rate}% 달성` : "데이터 없음"}
+            </span>
+            {goal.remaining !== null && goal.remaining > 0 && (
+              <span className="text-[11px] text-[#999]">잔여 {fmt(goal.remaining)}원</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 개인 히스토리 벤치마킹 */}
+      {benchmark && (
+        <div className="rounded-[5px] border border-[#e8e3d8] bg-white px-4 py-3">
+          <p className="mb-3 font-mono text-[11px] uppercase text-[#999]">나 vs 과거의 나</p>
+          <div className="flex gap-3">
+            {[benchmark.vs_last_month, benchmark.vs_last_year].map((v) => (
+              <div
+                key={v.label}
+                className="flex flex-1 flex-col items-center gap-1 rounded-[5px] bg-[#f9f7f4] px-3 py-2"
+              >
+                <span className="text-[11px] text-[#999]">{v.label}</span>
+                <span
+                  className={`text-base font-semibold ${
+                    v.change_rate === null
+                      ? "text-[#bbb]"
+                      : v.change_rate >= 0
+                      ? "text-[#4a5c28]"
+                      : "text-[#8a3a28]"
+                  }`}
+                >
+                  {v.change_rate === null
+                    ? "—"
+                    : `${v.change_rate >= 0 ? "+" : ""}${v.change_rate}%`}
+                </span>
+              </div>
+            ))}
+          </div>
+          {benchmark.best_day_of_week && (
+            <p className="mt-2 text-center text-[11px] text-[#999]">
+              최근 8주 최고 요일:{" "}
+              <strong className="text-[#4a5c28]">{benchmark.best_day_of_week}요일</strong>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

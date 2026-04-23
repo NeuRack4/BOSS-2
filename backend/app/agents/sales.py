@@ -823,6 +823,75 @@ async def run_menu_analysis(
     return analysis_text
 
 
+@_traceable(name="sales.run_menu_upsert")
+async def run_menu_upsert(
+    *,
+    account_id: str,
+    name: str,
+    category: str = "기타",
+    price: int = 0,
+    cost_price: int = 0,
+    memo: str = "",
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    from app.agents._sales._menu_manager import upsert_menu
+    result = await upsert_menu(
+        account_id=account_id,
+        name=name,
+        category=category,
+        price=price,
+        cost_price=cost_price,
+        memo=memo,
+    )
+    action = result["action"]
+    menu = result["menu"]
+    verb = "등록" if action == "created" else "수정"
+    margin = ""
+    if menu["price"] > 0:
+        margin_pct = round((menu["price"] - menu["cost_price"]) / menu["price"] * 100, 1)
+        margin = f"\n- 마진: {menu['price'] - menu['cost_price']:,}원 ({margin_pct}%)"
+    return (
+        f"✅ **{menu['name']}** 메뉴를 {verb}했어요.\n\n"
+        f"- 카테고리: {menu['category']}\n"
+        f"- 판매가: {menu['price']:,}원\n"
+        f"- 원가: {menu['cost_price']:,}원"
+        f"{margin}\n\n"
+        "메뉴를 더 등록하거나 '메뉴 목록 보여줘'라고 해보세요."
+    )
+
+
+@_traceable(name="sales.run_menu_list")
+async def run_menu_list(
+    *,
+    account_id: str,
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    from app.agents._sales._menu_manager import list_menus_with_profit
+    data = await list_menus_with_profit(account_id=account_id)
+    if not data["menus"]:
+        return (
+            "등록된 메뉴가 없어요.\n\n"
+            "채팅에서 이렇게 입력해보세요:\n"
+            "- '아메리카노 4500원 등록해줘'\n"
+            "- '라떼 5000원, 원가 800원으로 추가해줘'"
+        )
+    lines = [f"📋 **메뉴판** (총 {data['total']}개)\n"]
+    for cat, items in data["by_category"].items():
+        lines.append(f"\n**{cat}**")
+        for m in items:
+            margin = (
+                f" — 마진 {m['margin_rate']}%" if m["margin_rate"] is not None else ""
+            )
+            lines.append(f"- {m['name']}: {m['price']:,}원{margin}")
+    return "\n".join(lines)
+
+
 @_traceable(name="sales.run_save_revenue")
 async def run_save_revenue(
     *,
@@ -1011,6 +1080,35 @@ def describe(account_id: str) -> list[dict]:
                 },
                 "required": ["topic"],
             },
+        },
+        {
+            "name": "sales_menu_upsert",
+            "description": (
+                "[카테고리: Pricing] 메뉴 등록 또는 수정. "
+                "'아메리카노 4500원 등록해줘', '라떼 가격 5000원으로 수정', "
+                "'메뉴 추가해줘', '메뉴 가격 바꿔줘' 등 메뉴 관리 요청 시 호출."
+            ),
+            "handler": run_menu_upsert,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name":       {"type": "string", "description": "메뉴 이름"},
+                    "category":   {"type": "string", "description": "음료|디저트|음식|기타"},
+                    "price":      {"type": "integer", "description": "판매가 (원)"},
+                    "cost_price": {"type": "integer", "description": "원가 (원, 선택)"},
+                    "memo":       {"type": "string", "description": "메모 (선택)"},
+                },
+                "required": ["name", "price"],
+            },
+        },
+        {
+            "name": "sales_menu_list",
+            "description": (
+                "[카테고리: Pricing] 등록된 메뉴 목록 조회 + 마진율 확인. "
+                "'메뉴판 보여줘', '메뉴 목록', '어떤 메뉴 있어', '마진율 확인해줘' 등 호출."
+            ),
+            "handler": run_menu_list,
+            "parameters": {"type": "object", "properties": {}},
         },
         {
             "name": "sales_menu_analysis",
