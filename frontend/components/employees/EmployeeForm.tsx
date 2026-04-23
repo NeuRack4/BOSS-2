@@ -74,25 +74,25 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
       className="rounded-[5px] border border-[#d4a588]/40 bg-[#f7e6da]/20 p-3"
     >
       <p className="mb-3 text-[12px] font-semibold text-[color:var(--kb-fg-strong)]">
-        {initial ? "직원 정보 수정" : "새 직원 추가"}
+        {initial ? "Edit Employee" : "Add Employee"}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
         {/* 이름 */}
         <div className="col-span-2">
-          <label className={labelCls}>이름 *</label>
+          <label className={labelCls}>Name *</label>
           <input
             className={inputCls}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="홍길동"
+            placeholder="Jane Doe"
             required
           />
         </div>
 
         {/* 고용형태 */}
         <div className="col-span-2">
-          <label className={labelCls}>고용형태 *</label>
+          <label className={labelCls}>Employment Type *</label>
           <div className="mt-1 flex gap-1.5">
             {EMPLOYMENT_TYPES.map((t) => (
               <button
@@ -114,7 +114,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
         {/* 시급 or 월급 */}
         {isHourly ? (
           <div>
-            <label className={labelCls}>시급 (원)</label>
+            <label className={labelCls}>Hourly Rate (₩)</label>
             <input
               className={inputCls}
               type="number"
@@ -126,7 +126,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
           </div>
         ) : (
           <div>
-            <label className={labelCls}>월급 (원)</label>
+            <label className={labelCls}>Monthly Salary (₩)</label>
             <input
               className={inputCls}
               type="number"
@@ -140,7 +140,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
 
         {/* 지급 예정일 */}
         <div>
-          <label className={labelCls}>지급 예정일</label>
+          <label className={labelCls}>Pay Day</label>
           <input
             className={inputCls}
             type="number"
@@ -154,29 +154,29 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
 
         {/* 부서 */}
         <div>
-          <label className={labelCls}>부서</label>
+          <label className={labelCls}>Department</label>
           <input
             className={inputCls}
             value={department}
             onChange={(e) => setDepartment(e.target.value)}
-            placeholder="홀"
+            placeholder="Floor"
           />
         </div>
 
         {/* 직책 */}
         <div>
-          <label className={labelCls}>직책</label>
+          <label className={labelCls}>Position</label>
           <input
             className={inputCls}
             value={position}
             onChange={(e) => setPosition(e.target.value)}
-            placeholder="알바"
+            placeholder="Part-timer"
           />
         </div>
 
         {/* 연락처 */}
         <div>
-          <label className={labelCls}>연락처</label>
+          <label className={labelCls}>Phone</label>
           <input
             className={inputCls}
             value={phone}
@@ -187,7 +187,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
 
         {/* 입사일 */}
         <div>
-          <label className={labelCls}>입사일</label>
+          <label className={labelCls}>Hire Date</label>
           <input
             className={inputCls}
             type="date"
@@ -204,7 +204,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
           disabled={saving}
           className="flex-1 text-[12px]"
         >
-          {saving ? "저장 중..." : "저장"}
+          {saving ? "Saving..." : "Save"}
         </Button>
         <Button
           type="button"
@@ -213,7 +213,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
           onClick={onCancel}
           className="text-[12px]"
         >
-          취소
+          Cancel
         </Button>
       </div>
     </form>
