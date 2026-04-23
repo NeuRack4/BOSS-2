@@ -16,19 +16,34 @@ async def upsert_menu(
     cost_price: int = 0,
     memo: str = "",
 ) -> dict:
-    """메뉴 등록(신규) 또는 수정(기존 동일 이름)."""
+    """메뉴 등록(신규) 또는 수정(기존 동일 이름).
+
+    중복 검사: 이름에서 '[MOCK] ' 등 테스트 프리픽스를 제거한 뒤 대소문자 무관 비교.
+    """
     sb = get_supabase()
 
-    existing = (
+    # 전체 메뉴 로드 후 정규화 이름으로 비교 (PostgREST ilike + strip 조합)
+    all_menus = (
         sb.table("menus")
-        .select("id")
+        .select("id, name, price, cost_price, category")
         .eq("account_id", account_id)
-        .eq("name", name)
+        .eq("is_active", True)
         .execute()
     )
 
-    if existing.data:
-        menu_id = existing.data[0]["id"]
+    def _normalize(n: str) -> str:
+        """'[MOCK] ' 같은 테스트 프리픽스 제거 + 공백 정규화 + 소문자."""
+        import re
+        return re.sub(r"^\[.*?\]\s*", "", n).strip().lower()
+
+    target = _normalize(name)
+    existing = next(
+        (m for m in (all_menus.data or []) if _normalize(m["name"]) == target),
+        None,
+    )
+
+    if existing:
+        menu_id = existing["id"]
         result = (
             sb.table("menus")
             .update({
@@ -40,7 +55,11 @@ async def upsert_menu(
             .eq("id", menu_id)
             .execute()
         )
-        return {"action": "updated", "menu": result.data[0]}
+        return {
+            "action":    "updated",
+            "menu":      result.data[0],
+            "old_price": existing["price"],
+        }
 
     result = (
         sb.table("menus")
@@ -54,7 +73,7 @@ async def upsert_menu(
         })
         .execute()
     )
-    return {"action": "created", "menu": result.data[0]}
+    return {"action": "created", "menu": result.data[0], "old_price": None}
 
 
 async def list_menus_with_profit(account_id: str) -> dict:

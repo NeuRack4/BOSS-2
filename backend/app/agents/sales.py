@@ -846,15 +846,31 @@ async def run_menu_upsert(
         cost_price=cost_price,
         memo=memo,
     )
-    action = result["action"]
-    menu = result["menu"]
-    verb = "등록" if action == "created" else "수정"
+    action    = result["action"]
+    menu      = result["menu"]
+    old_price = result.get("old_price")
+
     margin = ""
-    if menu["price"] > 0:
+    if menu["price"] > 0 and menu["cost_price"] > 0:
         margin_pct = round((menu["price"] - menu["cost_price"]) / menu["price"] * 100, 1)
         margin = f"\n- 마진: {menu['price'] - menu['cost_price']:,}원 ({margin_pct}%)"
+
+    if action == "updated":
+        price_note = (
+            f" ({old_price:,}원 → {menu['price']:,}원)" if old_price and old_price != menu["price"]
+            else ""
+        )
+        return (
+            f"⚠️ **{menu['name']}** 메뉴가 이미 등록되어 있어요.\n\n"
+            f"가격을 업데이트했어요.\n"
+            f"- 카테고리: {menu['category']}\n"
+            f"- 판매가: {menu['price']:,}원{price_note}\n"
+            f"- 원가: {menu['cost_price']:,}원"
+            f"{margin}"
+        )
+
     return (
-        f"✅ **{menu['name']}** 메뉴를 {verb}했어요.\n\n"
+        f"✅ **{menu['name']}** 메뉴를 새로 등록했어요.\n\n"
         f"- 카테고리: {menu['category']}\n"
         f"- 판매가: {menu['price']:,}원\n"
         f"- 원가: {menu['cost_price']:,}원"
