@@ -2,7 +2,7 @@
 
 ![Dashboard](./docs/dashboard-layout.png)
 
-![version](https://img.shields.io/badge/version-1.6.0-blue)
+![version](https://img.shields.io/badge/version-2.2.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. Planner 기반 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
@@ -60,7 +60,10 @@ Celery Beat (60s tick) → 실행 / D-7·D-3·D-1·D-0 알림
 - **표준 서브허브 18종** — 모든 계정 가입 시 자동 부트스트랩. Recruitment 4 + Documents 4(`Review · Tax&HR · Legal · Operations` — 024 에서 `Contracts → Review` 재명명) + Sales 5(`Revenue · Costs · Pricing · Customers · Reports` — 021 에서 Revenue 추가) + Marketing 5. `ensure_standard_sub_hubs(account_id)` 가 idempotent.
 - **메모리 CRUD + Boost v1.2** — `/api/memory/long/{id}` PATCH·DELETE + `/api/memory/boost` (artifact 요약을 장기 기억에 pin, importance 0.2-1.0). Long-Term Memory 모달에서 직접 편집.
 - **Bento 대시보드 + Domain Kanban v1.0** — `/dashboard` 12-컬럼 Bento Grid (`ChatCenterCard` / `ProfileMemorySidebar` / 4개 `DomainCard` / `ScheduleCard` / `ActivityCard` / `PreviousChatCard`). `/[domain]` 은 서브허브를 컬럼으로 펼친 Kanban — 카드 드래그로 `artifact_edges.contains` 부모 교체.
-- **Inline Chat** — `ChatCenterCard` 안에 항상 마운트. 파일 업로드(20MB), 이미지 OCR, `[CHOICES]` 버튼, `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 인라인 테이블, `[ACTION:OPEN_NODE_DETAIL]` 상세 모달, Markdown 렌더, `ReviewResultCard` / `InstagramPostCard` / `ReviewReplyCard` / `ShortsWizardCard` / `PhotoLibraryModal`. 빈 상태에서 도메인당 10문항 풀에서 랜덤 4개 샘플링된 제안 프롬프트.
+- **채팅 아바타 v2.2** — AI 답변 왼쪽에 **부장님** SVG(회색 가르마·안경·정장), 사용자 메시지 오른쪽에 **직원** SVG. `ProfileModal > Chat Icon` 섹션에서 커스텀 사진 업로드(JPG/PNG/WebP, 2MB) 가능 — Supabase Storage `avatars/` 버킷 저장, 전역 `ChatContext.avatarUrl` 실시간 반영.
+- **채팅 전역 상태 리프팅 v2.2** — `messages` / `loading` / `userId` / `avatarUrl` 를 `ChatProvider` 전역으로 이동. 페이지 이동 시 채팅 중단 없음.
+- **급여 명세서 2-턴 플로우 v2.2** — 직원 선택 → 월 선택 순서로 분리. `WorkTableCard` 인라인 근무 기록 편집 후 `records` 배열 직접 파싱으로 기본급 계산 정확도 개선.
+- **Inline Chat** — `ChatCenterCard` 안에 항상 마운트. 파일 업로드(20MB), 이미지 OCR, `[CHOICES]` 버튼, `[ACTION:OPEN_SALES_TABLE]` / `[ACTION:OPEN_COST_TABLE]` 인라인 테이블, `[ACTION:OPEN_NODE_DETAIL]` 상세 모달, Markdown 렌더, `ReviewResultCard` / `InstagramPostCard` / `ReviewReplyCard` / `ShortsWizardCard` / `WorkTableCard` / `PhotoLibraryModal`. 빈 상태에서 도메인당 10문항 풀에서 랜덤 4개 샘플링된 제안 프롬프트.
 - **로그인 브리핑** — 직전 접속 이후 자동 실행·알림·실패·오늘 추천을 헤드라인 3줄 + 상세 섹션으로 요약해 채팅창에 자동 오픈. 프로필이 비어있으면 하나씩 부드럽게 수집.
 - **닉네임 + 사업 프로필 자동 학습** — Planner 가 매 턴 `profile_updates` 로 직접 추출 저장 + legacy `[SET_NICKNAME]`/`[SET_PROFILE]` 블록도 유지. 모든 도메인 에이전트 응답에 닉네임·프로필 컨텍스트 주입.
 - **진짜 작동하는 Celery 스케쥴러** — Beat 60s 주기 `tick` 태스크가 `metadata.schedule_enabled=true` 인 artifact 실행 + `start_date`/`due_date` D-7·D-3·D-1·D-0 알림을 `activity_logs.schedule_notify` 로 기록. 실행 결과는 `kind='log'` artifact + `logged_from` 엣지로 자동 추가.
@@ -81,7 +84,7 @@ BOSS-2/
 │   │   ├── marketing/
 │   │   ├── sales/
 │   │   ├── documents/
-│   │   └── providers.tsx          # <NodeDetailProvider> 전역 래핑
+│   │   └── providers.tsx          # <ChatProvider> + <NodeDetailProvider> 전역 래핑
 │   ├── components/
 │   │   ├── bento/                 # BentoGrid / ChatCenterCard / DomainCard / ScheduleCard
 │   │   │                          # / ActivityCard / PreviousChatCard / ProfileMemorySidebar
@@ -89,8 +92,8 @@ BOSS-2/
 │   │   ├── chat/                  # InlineChat + ChatContext + 카드 렌더러들
 │   │   │                          # (SpeakerBadge / ReviewResultCard / InstagramPostCard
 │   │   │                          #  / ReviewReplyCard / ShortsWizardCard / PhotoLibraryModal
-│   │   │                          #  / SalesInputTable / CostInputTable / MarkdownMessage
-│   │   │                          #  / BriefingLoader)
+│   │   │                          #  / SalesInputTable / CostInputTable / WorkTableCard
+│   │   │                          #  / ChatAvatars / MarkdownMessage / BriefingLoader)
 │   │   ├── detail/                # NodeDetailContext + NodeDetailModal (v1.2 통합 상세)
 │   │   ├── layout/                # Header + 대시보드 모달 6종
 │   │   ├── search/                # SearchPalette (⌘K)
@@ -233,6 +236,17 @@ cp frontend/.env.example frontend/.env.local
 #   022_cost_records.sql                       cost_records
 #   023_chat_messages_speaker.sql              chat_messages.speaker text[]
 #   024_rename_contracts_to_review.sql         Documents 서브허브 Contracts → Review 재명명
+#   025_memory_long_rrf_digest.sql             장기 기억 RRF digest
+#   026_instagram_dm_campaigns.sql             인스타그램 DM 캠페인
+#   026_subsidy_forms.sql                      지원사업 서식 파일
+#   027_search_subsidy_programs.sql            지원사업 하이브리드 검색 RPC
+#   028_subsidy_cache.sql                      지원사업 추천 캐시
+#   029_employee_management.sql                직원 관리 테이블
+#   029_menus.sql                              메뉴 테이블
+#   030_dashboard_layouts.sql                  대시보드 레이아웃
+#   030_sales_timeslot.sql                     매출 시간대 슬롯
+#   031_profile_avatar.sql                     profiles.avatar_url 컬럼
+#   032_avatars_storage_rls.sql                avatars 버킷 + RLS 4개 정책
 #
 # (선택) mock 데이터 — 020 이후로 schedule 노드 포함 시드는 재작성 필요
 #   supabase/seed/seed_mock_data.sql
@@ -289,7 +303,7 @@ npm run dev
 
 ## Version
 
-현재 버전: **1.2.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.
+현재 버전: **2.2.0** — 자세한 변경 내역은 [CHANGELOG.md](./CHANGELOG.md) 참고.
 
 ## Branch Policy
 

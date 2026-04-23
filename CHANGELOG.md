@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] — feature-rec (채용 UX 개선 · 채팅 아바타 · 전역 채팅 상태 리프팅)
+
+### Added — 채팅 아바타 시스템 (`frontend/components/chat/ChatAvatars.tsx`)
+
+- **`BossAvatar`** — AI 답변 아이콘. 회색 가르마·안경·정장·넥타이를 갖춘 부장님 캐릭터 SVG.
+- **`EmployeeAvatar`** — 사용자 메시지 기본 아이콘. 짧은 머리·미소·캐주얼 셔츠 직원 캐릭터 SVG.
+- InlineChat: AI 메시지 왼쪽 `Bot` 아이콘 → `BossAvatar`, 사용자 메시지 오른쪽에 `EmployeeAvatar` 신규 추가. 커스텀 사진 업로드 시 `avatarUrl` 이미지로 자동 대체.
+- 로딩 버블(타이핑 인디케이터)도 `BossAvatar` 로 통일.
+
+### Added — 프로필 사진 업로드 (`frontend/components/layout/ProfileModal.tsx`)
+
+- `ProfileModal` 상단에 **Chat Icon** 섹션 추가 — 현재 아바타 미리보기(56px 원형) + "Upload photo" 버튼 + "Remove" 링크.
+- 이미지 선택 시 Supabase Storage `avatars/{userId}/avatar.{ext}` 에 `upsert` 업로드 후 `profiles.avatar_url` 저장, `ChatContext.avatarUrl` 전역 상태 즉시 반영.
+- 파일 크기 2MB 제한, 형식 JPG/PNG/WebP.
+
+### Added — Supabase Storage `avatars` 버킷 RLS (`supabase/migrations/032_avatars_storage_rls.sql`)
+
+- `avatars` 버킷 생성(public) + 4개 RLS 정책: 본인 폴더 업로드·수정·삭제, 전체 공개 읽기.
+
+### Added — `profiles.avatar_url` 컬럼 (`supabase/migrations/031_profile_avatar.sql`)
+
+- `profiles` 테이블에 `avatar_url text` 컬럼 추가.
+
+### Added — 근무시간 확인 테이블 + 직원 상세 모달 (`frontend/components/chat/WorkTableCard.tsx`)
+
+- `WorkTableCard` — 채팅 안에서 직원별 근무 기록을 직접 편집하는 인터랙티브 테이블 카드.
+  - 날짜·기본·연장·야간·휴일·메모 열 + 행 추가/삭제 + 합계 자동 계산.
+  - "Save & Calculate Pay" 클릭 시 `__WORK_TABLE_CONFIRMED__:{JSON}` 마커로 `records` 배열 포함 전송.
+  - UI 전체 영문화 (Date / Regular / Overtime / Night / Holiday / Memo / Total / Add Row / Cancel / Save & Calculate Pay).
+
+### Changed — 채팅 전역 상태 리프팅 (`frontend/components/chat/ChatContext.tsx`)
+
+- `messages` / `loading` / `userId` / `avatarUrl` 를 `ChatProvider` 전역으로 이동 — 페이지 이동 후에도 채팅 중단 없음.
+- `fetchSessions` / `setAvatarUrl` 도 컨텍스트로 노출.
+- `providers.tsx` 에서 `ChatProvider` 최상위 마운트, `dashboard/page.tsx` + `DomainPage.tsx` 로컬 `ChatProvider` 제거.
+
+### Changed — 급여 명세서 2-턴 플로우 (`backend/app/agents/recruitment.py`)
+
+- `run_payroll_preview` : 직원 선택 → 월 선택 순서로 2턴 분리. 직원 미지정 시 CHOICES 목록, 월 미지정 시 최근 3개월 CHOICES.
+- `__WORK_TABLE_CONFIRMED__` 페이로드에서 `records` 배열 직접 파싱 → 기본급 "—" 버그 수정.
+- capability schema `required: []` (pay_month 선택 옵션화).
+
+### Fixed
+
+- **채팅 네비게이션 중단** — `messages`/`loading` 전역 리프팅으로 페이지 이동 시 채팅 상태 유지.
+- **세션 FK 500 오류** (`backend/app/routers/chat.py`) — 삭제된 `session_id` 감지 후 신규 세션 자동 생성.
+- **Storage 한글 파일명 InvalidKey** (`backend/app/agents/documents.py`) — 스토리지 경로를 ASCII-only 로 sanitize.
+- **플래너 "송진우 사장님" 호칭 버그** (`backend/app/agents/_planner.py`) — 대화 내 직원·고객 이름을 호칭으로 쓰지 않도록 프롬프트 수정.
+- **artifact 삭제 후 Recent Activity 미갱신** — `artifacts.py` 삭제 시 관련 `activity_logs` 동시 삭제 + `ActivityModal` `boss:artifacts-changed` 이벤트 구독.
+- **세션 재로드 시 액션 카드 복원 누락** — `WorkTableCard` / `SalesInputTable` / `CostInputTable` 복원 로직 수정.
+
+---
+
 ## [2.1.0] — feature-marketing (마케팅 UX 개선 — 인스타그램 피드·네이버 블로그 미리보기·자동 업로드 이미지 삽입)
 
 ### Added — 네이버 블로그 미리보기 카드 (`frontend/components/chat/NaverBlogPostCard.tsx`)
