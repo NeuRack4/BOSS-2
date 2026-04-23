@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
 from app.core.supabase import get_supabase
 
@@ -117,3 +118,40 @@ async def dashboard_summary(account_id: str = Query(...)):
             "recent_activity": logs,
         }
     }
+
+
+class LayoutBody(BaseModel):
+    layout: list[dict]
+    hidden: list[str]
+
+
+@router.get("/layout")
+async def get_layout(account_id: str = Query(...)):
+    sb = get_supabase()
+    try:
+        row = (
+            sb.table("dashboard_layouts")
+            .select("layout, hidden")
+            .eq("account_id", account_id)
+            .single()
+            .execute()
+        )
+        if row.data:
+            return {"data": row.data}
+    except Exception:
+        pass
+    return {"data": {"layout": [], "hidden": []}}
+
+
+@router.put("/layout")
+async def save_layout(account_id: str = Query(...), body: LayoutBody = ...):
+    sb = get_supabase()
+    sb.table("dashboard_layouts").upsert(
+        {
+            "account_id": account_id,
+            "layout": body.layout,
+            "hidden": body.hidden,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ).execute()
+    return {"ok": True}
