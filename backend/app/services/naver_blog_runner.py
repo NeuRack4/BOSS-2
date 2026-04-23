@@ -32,9 +32,9 @@ def set_clipboard(text: str) -> None:
 
 def paste_text(page, text: str) -> None:
     set_clipboard(text)
-    time.sleep(0.3)
+    time.sleep(0.6)
     page.keyboard.press("Control+v")
-    time.sleep(0.4)
+    time.sleep(0.6)
 
 
 def strip_markdown(text: str) -> str:
@@ -228,7 +228,34 @@ def insert_image_by_file(page, image_url: str) -> bool:
                 }""")
             file_chooser = fc_info.value
             file_chooser.set_files(tmp_path)
-            time.sleep(2.5)
+            # 이미지 업로드 완료 대기
+            time.sleep(4.0)
+
+            # 이미지 중앙정렬 시도 (SE One 이미지 선택 상태에서 툴바 노출)
+            page.evaluate("""() => {
+                const centerSelectors = [
+                    'button[data-name="alignCenter"]',
+                    'button[title*="가운데"]',
+                    'button[title*="중앙"]',
+                    'button[title*="center" i]',
+                    '.se-image-toolbar button[data-value="center"]',
+                    '.se-toolbar-item-align-center',
+                ];
+                for (const sel of centerSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el) { el.click(); return sel; }
+                }
+                const btns = [...document.querySelectorAll(
+                    '.se-component-toolbar button, .se-image-toolbar button, .se-float-toolbar button'
+                )];
+                const btn = btns.find(b => {
+                    const t = (b.title || b.getAttribute('data-name') || b.innerText || '').toLowerCase();
+                    return t.includes('center') || t.includes('가운데') || t.includes('중앙');
+                });
+                if (btn) { btn.click(); return 'found'; }
+                return null;
+            }""")
+            time.sleep(0.5)
             return True
         except PWTimeout:
             # file chooser 타임아웃 → 팝업 닫기
@@ -359,45 +386,52 @@ def main():
                 page.mouse.click(640, 420)
                 page.wait_for_timeout(600)
 
+            def focus_body_area():
+                """본문 텍스트 영역에 포커스를 확실히 가져온다."""
+                for sel in BODY_SELECTORS:
+                    loc = page.locator(sel)
+                    if loc.count() > 0:
+                        loc.last.click(force=True)
+                        page.wait_for_timeout(500)
+                        return
+                # 셀렉터 미매칭 시 에디터 중앙 클릭
+                page.mouse.click(640, 500)
+                page.wait_for_timeout(500)
+
             # 이미지 삽입 (본문 첫 단락 앞, 파일 업로드 방식)
             if image_urls:
                 for img_url in image_urls:
                     inserted = insert_image_by_file(page, img_url)
-                    page.wait_for_timeout(600)
+                    page.wait_for_timeout(800)
                     if inserted:
-                        # 삽입 후 본문 영역 재포커스
-                        for sel in BODY_SELECTORS:
-                            loc = page.locator(sel)
-                            if loc.count() > 0:
-                                loc.last.click(force=True)
-                                page.wait_for_timeout(400)
-                                break
-                        page.keyboard.press("Enter")
-                        page.wait_for_timeout(200)
+                        # 이미지 컴포넌트 바깥(아래 빈 단락)을 클릭해 텍스트 커서로 전환
+                        focus_body_area()
+                        page.keyboard.press("End")
+                        page.wait_for_timeout(300)
 
             prev_kind = None
             for kind, text in segments:
                 if kind == "blank":
                     if prev_kind == "body":
                         page.keyboard.press("Enter")
-                        page.wait_for_timeout(80)
+                        page.wait_for_timeout(150)
                     prev_kind = "blank"
                     continue
                 elif kind == "subheading":
                     page.keyboard.press("Control+b")
-                    time.sleep(0.15)
+                    time.sleep(0.2)
                     paste_text(page, text)
-                    time.sleep(0.1)
+                    time.sleep(0.2)
                     page.keyboard.press("Control+b")
                     page.keyboard.press("Enter")
-                    page.wait_for_timeout(150)
+                    page.wait_for_timeout(300)
                 else:
                     paste_text(page, text)
                     page.keyboard.press("Enter")
-                    page.wait_for_timeout(120)
+                    page.wait_for_timeout(300)
                 prev_kind = kind
 
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(800)
 
             if tags:
                 TAG_SELECTORS = [
