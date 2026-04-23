@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import {
   ArrowUpIcon,
@@ -33,6 +34,11 @@ import {
   extractInstagramPayload,
   type InstagramPayload,
 } from "./InstagramPostCard";
+import {
+  NaverBlogPostCard,
+  extractNaverBlogPayload,
+  type NaverBlogPayload,
+} from "./NaverBlogPostCard";
 import {
   ReviewReplyCard,
   extractReviewReplyPayload,
@@ -65,6 +71,18 @@ import {
   EventPlanFormCard,
   extractEventPlanForm,
 } from "./EventPlanFormCard";
+import {
+  SnsPostFormCard,
+  extractSnsPostForm,
+} from "./SnsPostFormCard";
+import {
+  BlogPostFormCard,
+  extractBlogPostForm,
+} from "./BlogPostFormCard";
+import {
+  ReviewReplyFormCard,
+  extractReviewReplyForm,
+} from "./ReviewReplyFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -96,6 +114,7 @@ type Message = {
   choices?: string[];
   review?: ReviewPayload;
   instagram?: InstagramPayload;
+  naverBlog?: NaverBlogPayload;
   reviewReply?: ReviewReplyPayload;
   attachment?: {
     status: "uploading" | "done" | "error";
@@ -109,9 +128,11 @@ type Message = {
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
   salesInsight?: SalesInsightPayload;
-  instagram?: InstagramPayload;
   marketingReport?: MarketingReportPayload;
   eventPlanForm?: boolean;
+  snsPostForm?: boolean;
+  blogPostForm?: boolean;
+  reviewReplyForm?: boolean;
   employeePicker?: EmployeePickerPayload;
   savedArtifactId?: string;
   savedDomain?: string;
@@ -171,7 +192,7 @@ const DOMAIN_CAPABILITIES: Array<{
   label: string;
   accent: string;
   bg: string;
-  items: Array<{ name: string; prompt: string }>;
+  items: Array<{ name: string; prompt: string; icon?: ReactNode }>;
 }> = [
   {
     label: "Sales",
@@ -214,16 +235,53 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#c78897",
     bg: "#f0d7df",
     items: [
-      { name: "SNS 포스트", prompt: "인스타 포스트 3개 기획해줘" },
-      { name: "블로그 포스트", prompt: "블로그 포스트 작성해줘" },
-      { name: "광고 카피", prompt: "광고 카피 3가지 버전 만들어줘" },
-      { name: "마케팅 플랜", prompt: "마케팅 플랜 짜줘" },
+      {
+        name: "Instagram 포스트",
+        prompt: "인스타그램 피드 기획해줘.",
+        icon: (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+            <defs>
+              <linearGradient id="ig-grad" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"   stopColor="#FFDC80" />
+                <stop offset="15%"  stopColor="#FCAF45" />
+                <stop offset="35%"  stopColor="#F77737" />
+                <stop offset="50%"  stopColor="#FD1D1D" />
+                <stop offset="70%"  stopColor="#E1306C" />
+                <stop offset="85%"  stopColor="#833AB4" />
+                <stop offset="100%" stopColor="#405DE6" />
+              </linearGradient>
+            </defs>
+            <rect width="24" height="24" rx="6" fill="url(#ig-grad)" />
+            <rect x="5" y="5" width="14" height="14" rx="4" stroke="white" strokeWidth="1.8" fill="none" />
+            <circle cx="12" cy="12" r="3.3" stroke="white" strokeWidth="1.8" fill="none" />
+            <circle cx="17" cy="7" r="1.1" fill="white" />
+          </svg>
+        ),
+      },
+      {
+        name: "네이버 Blog 포스트",
+        prompt: "블로그 포스트 작성해줘",
+        icon: (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+            <rect width="24" height="24" rx="4" fill="#03C75A" />
+            <path d="M13.8 12.6L10.8 7.5H8.5v9h2.2v-5.1l3 5.1H16v-9h-2.2z" fill="white" />
+          </svg>
+        ),
+      },
+      {
+        name: "YouTube Shorts",
+        prompt: "유튜브 Shorts 영상 만들어줘",
+        icon: (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
+            <rect width="24" height="24" rx="5" fill="#FF0000" />
+            <polygon points="9.5,7.5 18,12 9.5,16.5" fill="white" />
+          </svg>
+        ),
+      },
       { name: "이벤트 기획", prompt: "프로모션 이벤트 기획해줘" },
-      { name: "캠페인 전략", prompt: "캠페인 전략 세워줘" },
       { name: "리뷰 답글", prompt: "리뷰 답글 작성해줘" },
-      { name: "공지사항", prompt: "공지사항 작성해줘" },
-      { name: "상품 포스트", prompt: "신상품 포스트 만들어줘" },
-      { name: "YouTube Shorts", prompt: "유튜브 Shorts 영상 만들어줘" },
+      { name: "성과 리포트", prompt: "인스타그램·유튜브 성과 리포트 보여줘" },
+      { name: "자동화 스케줄", prompt: "매주 월요일 인스타 포스트 자동으로 올려줘" },
     ],
   },
   {
@@ -1030,10 +1088,18 @@ export const InlineChat = () => {
           extractMarketingReportPayload(afterMenu);
         const { cleaned: afterInstagram, payload: instagram } =
           extractInstagramPayload(afterMarketing);
+        const { cleaned: afterNaverBlog, payload: naverBlog } =
+          extractNaverBlogPayload(afterInstagram);
         const { cleaned: afterEventForm, hasForm: eventPlanForm } =
-          extractEventPlanForm(afterInstagram);
+          extractEventPlanForm(afterNaverBlog);
+        const { cleaned: afterSnsForm, hasForm: snsPostForm } =
+          extractSnsPostForm(afterEventForm);
+        const { cleaned: afterBlogForm, hasForm: blogPostForm } =
+          extractBlogPostForm(afterSnsForm);
+        const { cleaned: afterReviewForm, hasForm: reviewReplyForm } =
+          extractReviewReplyForm(afterBlogForm);
         const { cleaned: cleanReply, payload: employeePicker } =
-          extractEmployeePickerPayload(afterEventForm);
+          extractEmployeePickerPayload(afterReviewForm);
         setMessages((prev) => [
           ...prev,
           {
@@ -1049,7 +1115,11 @@ export const InlineChat = () => {
             salesInsight: salesInsight ?? undefined,
             marketingReport: marketingReport ?? undefined,
             instagram: instagram ?? undefined,
+            naverBlog: naverBlog ?? undefined,
             eventPlanForm: eventPlanForm || undefined,
+            snsPostForm: snsPostForm || undefined,
+            blogPostForm: blogPostForm || undefined,
+            reviewReplyForm: reviewReplyForm || undefined,
             employeePicker: employeePicker ?? undefined,
           },
         ]);
@@ -1294,8 +1364,9 @@ export const InlineChat = () => {
                           type="button"
                           disabled={loading}
                           onClick={() => send(item.prompt)}
-                          className="rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
+                          className="flex items-center gap-1.5 rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
                         >
+                          {item.icon}
                           {item.name}
                         </button>
                       ))}
@@ -1319,6 +1390,8 @@ export const InlineChat = () => {
               let reviewPayload: ReviewPayload | null = msg.review ?? null;
               let instagramPayload: InstagramPayload | null =
                 msg.instagram ?? null;
+              let naverBlogPayload: NaverBlogPayload | null =
+                msg.naverBlog ?? null;
               let reviewReplyPayload: ReviewReplyPayload | null =
                 msg.reviewReply ?? null;
               let menuChartPayload: MenuAnalysisPayload | null =
@@ -1346,6 +1419,10 @@ export const InlineChat = () => {
                 const igExtracted = extractInstagramPayload(displayText || "");
                 displayText = igExtracted.cleaned;
                 if (igExtracted.payload) instagramPayload = igExtracted.payload;
+
+                const nbExtracted = extractNaverBlogPayload(displayText || "");
+                displayText = nbExtracted.cleaned;
+                if (nbExtracted.payload) naverBlogPayload = nbExtracted.payload;
 
                 const rvExtracted = extractReviewPayload(displayText || "");
                 displayText = rvExtracted.cleaned;
@@ -1423,8 +1500,13 @@ export const InlineChat = () => {
                     </div>
                   )}
                   {instagramPayload && msg.role === "assistant" && (
-                    <div className="ml-8">
+                    <div className="flex justify-center w-full py-1">
                       <InstagramPostCard payload={instagramPayload} />
+                    </div>
+                  )}
+                  {naverBlogPayload && msg.role === "assistant" && (
+                    <div className="flex justify-center w-full py-1">
+                      <NaverBlogPostCard payload={naverBlogPayload} />
                     </div>
                   )}
                   {reviewReplyPayload && msg.role === "assistant" && (
@@ -1480,6 +1562,27 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && msg.eventPlanForm && (
                     <div className="ml-8">
                       <EventPlanFormCard
+                        onSubmit={(message) => send(message)}
+                      />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.snsPostForm && (
+                    <div className="ml-8">
+                      <SnsPostFormCard
+                        onSubmit={(message) => send(message)}
+                      />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.blogPostForm && (
+                    <div className="ml-8">
+                      <BlogPostFormCard
+                        onSubmit={(message) => send(message)}
+                      />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.reviewReplyForm && (
+                    <div className="ml-8">
+                      <ReviewReplyFormCard
                         onSubmit={(message) => send(message)}
                       />
                     </div>

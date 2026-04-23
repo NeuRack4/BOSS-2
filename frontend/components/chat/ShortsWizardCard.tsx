@@ -41,6 +41,7 @@ type Step = "upload" | "subtitles" | "settings" | "generate";
 type GenState = "idle" | "generating" | "uploading" | "done" | "error";
 
 type SlideItem = {
+  uid: string;
   file: File;
   preview: string;
   subtitle: string;
@@ -66,6 +67,7 @@ export const ShortsWizardCard = ({
   );
   const [slides, setSlides] = useState<SlideItem[]>([]);
   const [loadingSubtitles, setLoadingSubtitles] = useState(false);
+  const [subtitleError, setSubtitleError] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -123,6 +125,7 @@ export const ShortsWizardCard = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     const newSlides: SlideItem[] = files.map((f) => ({
+      uid: `${Date.now()}-${Math.random()}`,
       file: f,
       preview: URL.createObjectURL(f),
       subtitle: "",
@@ -162,6 +165,7 @@ export const ShortsWizardCard = ({
   const handleGenerateSubtitles = async () => {
     if (slides.length < 2) return;
     setLoadingSubtitles(true);
+    setSubtitleError("");
     try {
       const accountId = await getAccountId();
       const form = new FormData();
@@ -180,7 +184,6 @@ export const ShortsWizardCard = ({
       setSlides((prev) =>
         prev.map((s, i) => ({ ...s, subtitle: subs[i] ?? s.subtitle })),
       );
-      // AI 추천 제목·설명·태그 자동 적용
       if (json.data?.title) setTitle(json.data.title);
       if (json.data?.description) setDescription(json.data.description);
       if (json.data?.tags?.length)
@@ -188,7 +191,7 @@ export const ShortsWizardCard = ({
       if (json.data?.title || json.data?.description) setAiMetaFilled(true);
       goToStep("subtitles");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "자막 생성 실패");
+      setSubtitleError(err instanceof Error ? err.message : "자막 생성에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setLoadingSubtitles(false);
     }
@@ -337,7 +340,7 @@ export const ShortsWizardCard = ({
               <div className="grid grid-cols-3 gap-2">
                 {slides.map((s, i) => (
                   <div
-                    key={i}
+                    key={s.uid}
                     draggable
                     onDragStart={() => handleDragStart(i)}
                     onDragOver={(e) => handleDragOver(e, i)}
@@ -384,6 +387,11 @@ export const ShortsWizardCard = ({
               </div>
             )}
 
+            {subtitleError && (
+              <div className="rounded-lg bg-[#fff5f5] border border-[#ffd0d0] px-3 py-2 text-[12px] text-[#8a3a28]">
+                {subtitleError}
+              </div>
+            )}
             <button
               type="button"
               onClick={handleGenerateSubtitles}
@@ -412,7 +420,7 @@ export const ShortsWizardCard = ({
             </p>
             <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
               {slides.map((s, i) => (
-                <div key={i} className="flex items-center gap-2">
+                <div key={s.uid} className="flex items-center gap-2">
                   <div className="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-[#f0ece4]">
                     <Image
                       src={s.preview}

@@ -156,59 +156,99 @@ def parse_content(raw: str) -> tuple[str, list[tuple[str, str]], list[str]]:
     return title, segments, tags
 
 
-def insert_image(page, image_path: str) -> bool:
-    """SE One 에디터 본문에 로컬 이미지 파일을 삽입."""
-    # 이미지 삽입 툴바 버튼 클릭
-    clicked = page.evaluate("""() => {
-        const selectors = [
-            'button[data-name="image"]',
-            '.se-toolbar button[title*="사진"]',
-            '.se-toolbar button[title*="Image"]',
-            '.se-toolbar button[title*="이미지"]',
-        ];
-        for (const sel of selectors) {
-            const el = document.querySelector(sel);
-            if (el) { el.dispatchEvent(new MouseEvent('click', {bubbles:true})); return sel; }
-        }
-        // 아이콘 클래스로 탐색
-        const btns = [...document.querySelectorAll('.se-toolbar button')];
-        const btn = btns.find(b =>
-            b.querySelector('svg[class*="image"]') ||
-            b.querySelector('i[class*="image"]') ||
-            b.querySelector('span[class*="image"]') ||
-            b.title?.toLowerCase().includes('image') ||
-            b.title?.includes('사진') || b.title?.includes('이미지')
-        );
-        if (btn) { btn.dispatchEvent(new MouseEvent('click', {bubbles:true})); return 'icon-found'; }
-        return null;
-    }""")
-    if not clicked:
-        return False
-    time.sleep(1.5)
+def insert_image_by_file(page, image_url: str) -> bool:
+    """이미지 URL을 임시 파일로 다운로드 후 SE One 에디터에 파일 업로드 방식으로 삽입.
+    Playwright expect_file_chooser()로 OS 파일 다이얼로그를 인터셉트하므로 팝업이 사용자에게 보이지 않는다.
+    """
+    import tempfile
+    import urllib.request
+    import os
 
-    # 파일 업로드 input 찾기
-    file_input = page.locator("input[type='file']").first
-    if file_input.count() == 0:
+    # 1. URL에서 이미지 다운로드
+    suffix = ".png" if image_url.lower().endswith(".png") else ".jpg"
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(tmp_fd)
+    try:
+        req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            with open(tmp_path, "wb") as f:
+                f.write(resp.read())
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
         return False
 
-    file_input.set_input_files(image_path)
-    time.sleep(3)  # 업로드 완료 대기
+    try:
+        # 2. 이미지 툴바 버튼 클릭
+        clicked = page.evaluate("""() => {
+            const selectors = [
+                'button[data-name="image"]',
+                '.se-toolbar button[title*="사진"]',
+                '.se-toolbar button[title*="이미지"]',
+                '.se-toolbar button[title*="Image"]',
+            ];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el) { el.dispatchEvent(new MouseEvent('click', {bubbles:true})); return sel; }
+            }
+            const btns = [...document.querySelectorAll('.se-toolbar button')];
+            const btn = btns.find(b =>
+                b.title?.includes('사진') || b.title?.includes('이미지') ||
+                b.title?.toLowerCase().includes('image')
+            );
+            if (btn) { btn.dispatchEvent(new MouseEvent('click', {bubbles:true})); return 'found'; }
+            return null;
+        }""")
+        if not clicked:
+            return False
+        time.sleep(1.2)
 
-    # 팝업 확인/삽입 버튼 클릭
-    for sel in [
-        "button:has-text('삽입')",
-        "button:has-text('확인')",
-        ".se-popup-button-confirm",
-        ".se-popup button",
-    ]:
-        loc = page.locator(sel)
-        if loc.count() > 0:
-            loc.first.click(force=True)
-            time.sleep(1)
-            break
+        # 3. 파일 선택 인터셉트 → '내 컴퓨터' or file input 클릭
+        from playwright.sync_api import TimeoutError as PWTimeout
+        try:
+            with page.expect_file_chooser(timeout=8000) as fc_info:
+                page.evaluate("""() => {
+                    // '내 컴퓨터' 탭/버튼 클릭
+                    const popupEls = [...document.querySelectorAll(
+                        '.se-popup button, .se-popup li, .se-popup [role="tab"], .se-popup label'
+                    )];
+                    const pcBtn = popupEls.find(el => {
+                        const t = (el.innerText || el.textContent || '').trim();
+                        return t.includes('내 컴퓨터') || t === 'PC' || t.includes('파일');
+                    });
+                    if (pcBtn) { pcBtn.click(); return; }
+                    // 팝업 내 file input 직접 클릭
+                    const fi = document.querySelector('.se-popup input[type="file"]');
+                    if (fi) { fi.click(); return; }
+                    // 전체 페이지에서 file input 탐색
+                    const allFi = document.querySelector('input[type="file"]');
+                    if (allFi) { allFi.click(); }
+                }""")
+            file_chooser = fc_info.value
+            file_chooser.set_files(tmp_path)
+            time.sleep(2.5)
+            return True
+        except PWTimeout:
+            # file chooser 타임아웃 → 팝업 닫기
+            for close_sel in [".se-popup-button-cancel", "button:has-text('취소')", ".se-popup-close"]:
+                try:
+                    cl = page.locator(close_sel)
+                    if cl.count() > 0:
+                        cl.first.click(force=True)
+                        break
+                except Exception:
+                    pass
+            return False
 
-    page.wait_for_timeout(1000)
-    return True
+    except Exception:
+        return False
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
 
 
 def main():
@@ -217,7 +257,7 @@ def main():
     blog_id = data["blog_id"]
     title_override = data.get("title", "")
     tags_override = data.get("tags", [])
-    image_path = data.get("image_path", "")
+    image_urls = data.get("image_urls", [])
 
     parsed_title, segments, parsed_tags = parse_content(content)
     title = title_override or parsed_title
@@ -319,17 +359,21 @@ def main():
                 page.mouse.click(640, 420)
                 page.wait_for_timeout(600)
 
-            # 이미지 삽입 (본문 첫 단락 앞)
-            if image_path:
-                insert_image(page, image_path)
-                page.wait_for_timeout(800)
-                # 본문 영역 재포커스
-                for sel in BODY_SELECTORS:
-                    loc = page.locator(sel)
-                    if loc.count() > 0:
-                        loc.last.click(force=True)
-                        page.wait_for_timeout(400)
-                        break
+            # 이미지 삽입 (본문 첫 단락 앞, 파일 업로드 방식)
+            if image_urls:
+                for img_url in image_urls:
+                    inserted = insert_image_by_file(page, img_url)
+                    page.wait_for_timeout(600)
+                    if inserted:
+                        # 삽입 후 본문 영역 재포커스
+                        for sel in BODY_SELECTORS:
+                            loc = page.locator(sel)
+                            if loc.count() > 0:
+                                loc.last.click(force=True)
+                                page.wait_for_timeout(400)
+                                break
+                        page.keyboard.press("Enter")
+                        page.wait_for_timeout(200)
 
             prev_kind = None
             for kind, text in segments:

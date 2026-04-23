@@ -49,6 +49,8 @@ export function EventPlanFormCard({
       channelInstructions.push("인스타그램 게시물(캡션+해시태그+이미지)도 바로 작성해줘");
     if (channels.includes("네이버 블로그"))
       channelInstructions.push("네이버 블로그 포스트도 바로 작성해서 업로드해줘");
+    if (channels.includes("오프라인 포스터"))
+      channelInstructions.push("오프라인 포스터용 문구(제목·본문·CTA)도 함께 작성해줘");
 
     const lines: string[] = [
       "이벤트 기획해줘.",

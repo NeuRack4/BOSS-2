@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — feature-marketing (마케팅 UX 개선 — 인스타그램 피드·네이버 블로그 미리보기·자동 업로드 이미지 삽입)
+
+### Added — 네이버 블로그 미리보기 카드 (`frontend/components/chat/NaverBlogPostCard.tsx`)
+
+- **`NaverBlogPostCard`** — 채팅창에 실제 네이버 블로그처럼 보이는 미리보기 카드 렌더. 구성:
+  - 상단 녹색 NAVER Blog 헤더 바 (N 로고 + "AI 미리보기" 배지)
+  - 블로거 프로필 행 (아바타·날짜·조회수)
+  - 16:9 커버 이미지 슬라이더 (복수 이미지 시 이전/다음 버튼 + 인덱스 표시)
+  - 제목 + `BlogBody` 컴포넌트 (`##`/`###` 소제목 볼드 렌더)
+  - 10줄 초과 시 "▼ 더 보기 / ▲ 접기" 토글
+  - 녹색 태그 배지, 공감·댓글·공유·저장 액션 바, "네이버 블로그에 게시하기" CTA 버튼
+- **`extractNaverBlogPayload()`** — `[[NAVER_BLOG_POST]]` 마커 파싱 후 제거. `InlineChat` 추출 체인에 통합.
+
+### Added — SNS·블로그 폼 카드 브랜드 컬러 (`frontend/components/chat/`)
+
+- **`SnsPostFormCard.tsx`** — Instagram 브랜드 컬러 적용: 테두리 `#f0d0e8`, 헤더 그라디언트(`#fff5f0→#fdf0f8`), 선택 pill `#c13584`, 제출 버튼 오렌지→핑크 그라디언트. 헤더에 Instagram 카메라 SVG 로고 추가.
+- **`BlogPostFormCard.tsx`** — Naver 브랜드 컬러 적용: 테두리 `#c8f0d8`, 헤더 `#f0fff6`, 선택 pill·버튼 `#03C75A`. 헤더 Naver N 로고 추가. 토글 버튼 오버플로 수정 (`overflow-hidden` + `translate-x-[18px]`). 이미지 첨부 기능 추가 (최대 10장, `/api/marketing/photos/upload` 업로드, 썸네일 그리드 + 삭제 버튼).
+
+### Changed — 인스타그램 피드 카드 UX (`frontend/components/chat/InstagramPostCard.tsx`)
+
+- 카드 너비 `260px → 300px`, 이미지 비율 `aspect-[4/5] → aspect-square` (한 화면에 다 보임).
+- 캡션 기본 접힘(60자 초과 시 "더 보기") + "접기" 토글.
+- **`normalizeCaption()`** — 이모티콘만 있는 줄을 바로 앞 줄 끝에 붙여 단독 줄 차지 방지.
+- InlineChat 래퍼: `ml-8 → flex justify-center w-full py-1` (가운데 정렬).
+
+### Changed — 인스타그램 이미지 업로드 (`backend/app/services/instagram.py`)
+
+- **`_crop_to_portrait()`** 추가 — DALL-E 1024×1024 이미지를 4:5(1080×1350)로 센터 크롭 후 Supabase Storage에 저장. 피드 업로드 시 블랙 바(필러박스) 제거.
+
+### Changed — 네이버 블로그 자동 업로드 이미지 삽입 (`backend/app/services/naver_blog_runner.py`)
+
+- **`insert_image_by_file()`** — 기존 URL 입력 방식(`insert_image_by_url`) 대체. Supabase URL에서 이미지를 임시 파일로 다운로드 → Playwright `expect_file_chooser()`로 OS 파일 다이얼로그 인터셉트 → 실제 파일을 Naver 서버에 업로드. 업로드 후 임시 파일 자동 삭제.
+
+### Fixed — 네이버 블로그 업로드 제어 (`backend/app/agents/marketing.py`)
+
+- **`allow_naver_upload` 플래그** — 폼의 자동 업로드 토글 OFF 시 `[[NAVER_UPLOAD]]` 마커를 처리하지 않아 미리보기만 표시하고 실제 업로드는 건너뜀.
+- **`run_blog_post()` 파라미터 수정** — Planner가 전달하는 `tone` 및 기타 미지정 파라미터를 `**_kwargs`로 흡수해 `TypeError` 방지.
+- **`_maybe_naver_blog_preview()`** — `[ARTIFACT]` 블록의 `type=blog_post` 조건 제거. `run_blog_post` 호출 시 항상 `[[NAVER_BLOG_POST]]` 미리보기 마커 생성.
+- **사용자 이미지 우선** — 폼에서 첨부한 이미지 URL을 직접 사용 (기존 DALL-E AI 이미지 생성 제거).
+
+---
+
 ## [2.0.0] — feature/sales-ai-insights (AI 매출 인사이트 4섹션 + MenuAnalysisCard UI 개선)
 
 ### Added — Backend
