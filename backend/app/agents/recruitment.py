@@ -285,36 +285,6 @@ async def _save_posting_set(account_id: str, parsed: dict) -> str | None:
         except Exception:
             pass
 
-    # 3종 자식 저장 + contains 엣지
-    for platform in VALID_PLATFORMS:
-        body = (sections.get(platform) or "").strip()
-        if not body:
-            continue
-        child_title = f"{title} — {PLATFORM_LABELS[platform]}"
-        child_meta = {"platform": platform, **metadata}
-        try:
-            c = sb.table("artifacts").insert({
-                "account_id": account_id,
-                "domains":    ["recruitment"],
-                "kind":       "artifact",
-                "type":       "job_posting",
-                "title":      child_title[:180],
-                "content":    body,
-                "status":     "draft",
-                "metadata":   child_meta,
-            }).execute()
-            if not c.data:
-                continue
-            child_id = c.data[0]["id"]
-            sb.table("artifact_edges").insert({
-                "account_id": account_id,
-                "parent_id":  parent_id,
-                "child_id":   child_id,
-                "relation":   "contains",
-            }).execute()
-        except Exception:
-            log.exception("posting child insert failed (platform=%s)", platform)
-
     # activity_logs + embedding (best-effort)
     try:
         sb.table("activity_logs").insert({
@@ -397,42 +367,70 @@ def _find_recent_posting_set(account_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def _list_posting_sets(account_id: str, limit: int = 10) -> list[dict]:
+    sb = get_supabase()
+    return (
+        sb.table("artifacts")
+        .select("id,title,created_at")
+        .eq("account_id", account_id)
+        .eq("kind", "artifact")
+        .eq("type", "job_posting_set")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+        or []
+    )
+
+
 async def _maybe_dispatch_poster(account_id: str, reply: str) -> str:
     marker = _parse_poster_marker(reply)
     if not marker:
         return reply
     cleaned = _strip_poster_marker(reply)
 
-    target = _find_recent_posting_set(account_id)
-    if not target:
-        return cleaned + (
-            "\n\n---\n_(아직 저장된 채용공고 세트가 없어요. 공고를 먼저 만들어주세요 — 그 다음 포스터를 만들어드릴게요.)_"
-        )
+    posting_set_id = (marker.get("posting_set_id") or "").strip()
+    if not posting_set_id:
+        target = _find_recent_posting_set(account_id)
+        if not target:
+            return cleaned + "\n\n---\n_(아직 저장된 채용공고 세트가 없어요. 공고를 먼저 만들어주세요.)_"
+        posting_set_id = target["id"]
 
-    platform = (marker.get("platform") or "karrot").lower()
-    if platform not in VALID_PLATFORMS:
-        platform = "karrot"
+    platforms_raw = (marker.get("platforms") or "karrot").lower()
+    platforms = [p.strip() for p in platforms_raw.split(",") if p.strip() in VALID_PLATFORMS]
+    if not platforms:
+        platforms = ["karrot"]
+
     style = marker.get("style") or ""
 
-    try:
-        from app.core.poster_gen import generate_job_posting_poster
-        poster_artifact = await generate_job_posting_poster(
-            account_id=account_id,
-            posting_set_id=target["id"],
-            platform=platform,
-            style_prompt=style,
-        )
-    except Exception as exc:
-        log.exception("poster generation failed")
-        return cleaned + f"\n\n---\n_(포스터 생성 실패: {str(exc)[:160]})_"
+    from app.core.poster_gen import generate_job_posting_poster
+    results: list[str] = []
+    errors: list[str] = []
 
-    url = poster_artifact.get("public_url") or ""
-    link = f"\n\n[포스터 미리보기]({url})" if url else ""
-    return cleaned + (
-        f"\n\n---\n"
-        f"_(채용공고 HTML 포스터 생성 완료 — artifact `{poster_artifact['artifact_id']}`, 플랫폼 **{PLATFORM_LABELS[platform]}**)_"
-        f"{link}"
-    )
+    for platform in platforms:
+        try:
+            poster_artifact = await generate_job_posting_poster(
+                account_id=account_id,
+                posting_set_id=posting_set_id,
+                platform=platform,
+                style_prompt=style,
+            )
+            url = poster_artifact.get("public_url") or ""
+            link = f"[미리보기]({url})" if url else ""
+            results.append(
+                f"**{PLATFORM_LABELS[platform]}** — `{poster_artifact['artifact_id']}`  {link}"
+            )
+        except Exception as exc:
+            log.exception("poster generation failed for platform=%s", platform)
+            errors.append(f"{PLATFORM_LABELS[platform]}: {str(exc)[:120]}")
+
+    notice = "\n\n---\n"
+    if results:
+        notice += "_(포스터 생성 완료)_\n" + "\n".join(f"- {r}" for r in results)
+    if errors:
+        notice += "\n_(실패)_\n" + "\n".join(f"- {e}" for e in errors)
+
+    return cleaned + notice
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -509,12 +507,18 @@ async def run_posting_set(
         missing.append("급여(시급/월급/연봉)")
     if not location:
         missing.append("근무지(매장 주소)")
-    if not (work_days or weekly_hours):
-        missing.append("근무 요일/시간")
+    if not work_days:
+        missing.append("근무 요일")
+    if not work_start or not work_end:
+        missing.append("근무 시작·종료 시각")
     if not employment_type:
         missing.append("고용 형태(정규·계약·알바)")
     if not headcount:
         missing.append("모집 인원")
+    if not start_date:
+        missing.append("모집 시작일")
+    if not end_date:
+        missing.append("모집 마감일")
 
     if missing:
         synthetic = (
@@ -545,17 +549,50 @@ async def run_posting_poster(
     history: list[dict],
     long_term_context: str = "",
     rag_context: str = "",
-    platform: str = "karrot",
+    posting_set_id: str | None = None,
+    platforms: list[str] | None = None,
     style: str = "",
 ) -> str:
-    """최근 job_posting_set 을 근거로 HTML 포스터 1장 생성."""
-    if platform not in VALID_PLATFORMS:
-        platform = "karrot"
+    """선택한 job_posting_set 을 근거로 HTML 포스터 생성 (복수 플랫폼 지원)."""
+    valid_platforms = [p for p in (platforms or []) if p in VALID_PLATFORMS]
+
+    # 공고 선택이 필요한 경우
+    if not posting_set_id:
+        posting_sets = _list_posting_sets(account_id)
+        if not posting_sets:
+            return "아직 저장된 채용공고가 없어요. 공고를 먼저 작성해주세요."
+        if len(posting_sets) == 1:
+            posting_set_id = posting_sets[0]["id"]
+        else:
+            items = "\n".join(
+                f"- [{ps['title']}] (작성일: {ps['created_at'][:10]}, id: {ps['id']})"
+                for ps in posting_sets
+            )
+            synthetic = (
+                f"사용자가 채용공고 포스터 생성을 요청했습니다. 저장된 공고 목록:\n{items}\n\n"
+                "[CHOICES] 로 어느 공고로 포스터를 만들지 선택하게 해주세요. "
+                "목록에서 번호나 제목으로 선택할 수 있다고 안내하세요.\n\n"
+                f"원본 요청: {message}"
+            )
+            return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    # 플랫폼 선택이 필요한 경우
+    if not valid_platforms:
+        synthetic = (
+            "사용자가 채용공고 포스터 생성을 요청했습니다. 플랫폼을 선택해야 합니다.\n"
+            "[CHOICES] 로 당근알바·알바천국·사람인 중 선택하게 해주세요. "
+            "복수 선택도 가능하다고 안내하세요 (예: '당근알바 + 알바천국').\n\n"
+            f"원본 요청: {message}"
+        )
+        return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    # 포스터 생성 마커 출력
+    platforms_str = ",".join(valid_platforms)
     synthetic = (
-        "최근 작성한 채용공고 세트로 HTML 포스터 1장을 생성해주세요. "
-        "아래 마커를 그대로 출력하세요:\n\n"
+        "채용공고 포스터를 생성해주세요. 아래 마커를 그대로 출력하세요:\n\n"
         "[POSTING_POSTER_REQUEST]\n"
-        f"platform: {platform}\n"
+        f"posting_set_id: {posting_set_id}\n"
+        f"platforms: {platforms_str}\n"
         f"style: {style or '깔끔하고 모던한 톤, 따뜻한 브라운 계열'}\n"
         "[/POSTING_POSTER_REQUEST]"
     )
@@ -939,30 +976,34 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "recruit_posting_set",
             "description": (
-                "당근알바·알바천국·사람인 3종 플랫폼 채용공고를 한 번에 작성한다. "
-                "직종(position)은 필수. 시급/주근무시간/요일 등은 알면 채우고 모르면 생략."
+                "당근알바·알바천국·사람인 3종 플랫폼 채용공고를 하나의 카드로 작성한다. "
+                "모든 필수 정보(매장명·급여·근무지·고용형태·모집인원·근무요일·근무시각·모집기간)가 "
+                "확정된 경우에만 호출. 하나라도 미확정이면 [CHOICES] 로 되묻는다."
             ),
             "handler": run_posting_set,
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "position":       {"type": "string", "description": "직종 또는 포지션명 (예: 바리스타, 홀서빙)"},
-                    "wage_hourly":    {"type": "integer", "description": "시급(원). 최저임금 이상"},
-                    "wage_monthly":   {"type": "integer", "description": "월급(원)"},
-                    "annual_salary":  {"type": "integer", "description": "연봉(원)"},
-                    "weekly_hours":   {"type": "number", "description": "주 근무시간"},
-                    "work_days":      {"type": "array", "items": {"type": "string"}, "description": "근무 요일 (예: ['월','화','수'])"},
-                    "work_start":     {"type": "string", "description": "근무 시작 시각 HH:MM"},
-                    "work_end":       {"type": "string", "description": "근무 종료 시각 HH:MM"},
+                    "position":        {"type": "string", "description": "직종 또는 포지션명 (예: 바리스타, 홀서빙)"},
+                    "business_name":   {"type": "string", "description": "매장명/상호/가게 이름"},
+                    "location":        {"type": "string", "description": "근무지/매장 주소"},
                     "employment_type": {"type": "string", "enum": ["정규직", "계약직", "파트타임", "알바", "단기"]},
-                    "location":       {"type": "string", "description": "근무지/매장명/지역"},
-                    "headcount":      {"type": "integer", "description": "모집 인원"},
-                    "start_date":     {"type": "string", "description": "모집 시작일 YYYY-MM-DD"},
-                    "end_date":       {"type": "string", "description": "모집 마감일 YYYY-MM-DD"},
-                    "extra_note":     {"type": "string", "description": "자유 기술"},
-                    "business_name":  {"type": "string", "description": "매장명/상호/가게 이름 (예: '제빵왕김탁구')"},
+                    "headcount":       {"type": "integer", "description": "모집 인원"},
+                    "work_days":       {"type": "array", "items": {"type": "string"}, "description": "근무 요일 (예: ['월','화','수'])"},
+                    "work_start":      {"type": "string", "description": "근무 시작 시각 HH:MM"},
+                    "work_end":        {"type": "string", "description": "근무 종료 시각 HH:MM"},
+                    "wage_hourly":     {"type": "integer", "description": "시급(원). 최저임금 이상"},
+                    "wage_monthly":    {"type": "integer", "description": "월급(원)"},
+                    "annual_salary":   {"type": "integer", "description": "연봉(원)"},
+                    "start_date":      {"type": "string", "description": "모집 시작일 YYYY-MM-DD"},
+                    "end_date":        {"type": "string", "description": "모집 마감일 YYYY-MM-DD"},
+                    "weekly_hours":    {"type": "number", "description": "주 근무시간 (선택)"},
+                    "extra_note":      {"type": "string", "description": "자유 기술 (선택)"},
                 },
-                "required": ["position"],
+                "required": [
+                    "position", "business_name", "location", "employment_type",
+                    "headcount", "work_days", "work_start", "work_end", "start_date", "end_date",
+                ],
             },
         },
         {
@@ -1056,20 +1097,27 @@ def describe(account_id: str) -> list[dict]:
         },
     ]
 
-    # 포스터 capability 는 최근 posting_set 이 있을 때만 노출
+    # 포스터 capability 는 posting_set 이 있을 때만 노출
     if _find_recent_posting_set(account_id):
         caps.append({
             "name": "recruit_posting_poster",
             "description": (
-                "가장 최근 작성된 채용공고 세트를 근거로 GPT-4o 로 standalone HTML 포스터 1장을 생성한다. "
+                "저장된 채용공고 세트를 선택해 GPT-4o 로 standalone HTML 포스터를 생성한다. "
+                "플랫폼 복수 선택 가능(당근알바·알바천국·사람인). "
+                "posting_set_id 미확정 시 목록을 보여주고, platforms 미확정 시 선택을 요청한다. "
                 "사용자가 '이미지/포스터/배너/썸네일' 을 요청할 때만 호출."
             ),
             "handler": run_posting_poster,
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "platform": {"type": "string", "enum": list(VALID_PLATFORMS), "default": "karrot"},
-                    "style":    {"type": "string", "description": "자유 디자인 지시 (예: '따뜻한 브라운 톤, 미니멀')"},
+                    "posting_set_id": {"type": "string", "description": "포스터를 생성할 job_posting_set artifact ID. 미확정이면 생략."},
+                    "platforms":      {
+                        "type": "array",
+                        "items": {"type": "string", "enum": list(VALID_PLATFORMS)},
+                        "description": "포스터를 만들 플랫폼 목록 (복수 가능). 미확정이면 생략.",
+                    },
+                    "style":          {"type": "string", "description": "자유 디자인 지시 (예: '따뜻한 브라운 톤, 미니멀')"},
                 },
             },
         })
