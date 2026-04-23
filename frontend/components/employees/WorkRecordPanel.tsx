@@ -274,9 +274,9 @@ export const WorkRecordPanel = ({ employeeId, accountId }: Props) => {
               size="sm"
               disabled={saving || !newHours}
               onClick={handleAdd}
-              className="flex-1 h-6 text-[10px]"
+              className="h-6 flex-1 bg-[#d4a588] text-[10px] text-white hover:bg-[#c49578]"
             >
-              {saving ? "저장..." : "저장"}
+              {saving ? "Saving..." : "Save"}
             </Button>
             <Button
               size="sm"
@@ -284,7 +284,7 @@ export const WorkRecordPanel = ({ employeeId, accountId }: Props) => {
               onClick={() => setShowAdd(false)}
               className="h-6 text-[10px]"
             >
-              취소
+              Cancel
             </Button>
           </div>
         </div>

@@ -202,7 +202,7 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
           type="submit"
           size="sm"
           disabled={saving}
-          className="flex-1 text-[12px]"
+          className="flex-1 bg-[#d4a588] text-[12px] text-white hover:bg-[#c49578]"
         >
           {saving ? "Saving..." : "Save"}
         </Button>
