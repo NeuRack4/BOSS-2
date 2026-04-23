@@ -51,7 +51,7 @@ export const KanbanColumn = ({
         if (draggingId) onCardDrop(subHubId);
       }}
       className={cn(
-        "flex h-full min-w-[200px] flex-1 flex-col rounded-[5px] border bg-[color:var(--kb-surface)] transition-colors",
+        "flex flex-1 min-w-[200px] flex-col rounded-[5px] border bg-[color:var(--kb-surface)] transition-colors",
         "border-[color:var(--kb-border)]",
         isOver &&
           "border-[color:var(--kb-border-strong)] bg-[color:var(--kb-surface-hover)]",
