@@ -620,6 +620,24 @@ export const NodeDetailModal = () => {
   const [boosting, setBoosting] = useState(false);
   const [boostDone, setBoostDone] = useState(false);
 
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = useCallback(async () => {
+    if (!currentId || !accountId) return;
+    if (!confirm("이 항목을 삭제하시겠어요?")) return;
+    setDeleting(true);
+    try {
+      await fetch(`${API}/api/artifacts/${currentId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId }),
+      });
+      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+      closeDetail();
+    } finally {
+      setDeleting(false);
+    }
+  }, [currentId, accountId, closeDetail]);
+
   // Sales / cost records (revenue_entry · cost_report 노드 전용)
   const [records, setRecords] = useState<LedgerRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -1067,7 +1085,7 @@ export const NodeDetailModal = () => {
               </span>
               <span
                 className={cn(
-                  "ml-auto rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider text-[10px]",
+                  "rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider text-[10px]",
                   artifact.status === "active"
                     ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                     : artifact.status === "paused"
@@ -1087,6 +1105,18 @@ export const NodeDetailModal = () => {
                   {d}
                 </span>
               ))}
+              {artifact.kind !== "domain" &&
+                artifact.type !== "subsidy_recommendation" && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="ml-auto flex items-center gap-1 rounded-[4px] border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    <Trash2 size={11} />
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                )}
             </div>
 
             <ScrollArea className="min-h-0 flex-1 pr-1">

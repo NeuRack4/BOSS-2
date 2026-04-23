@@ -850,6 +850,17 @@ async def run_payroll_preview(
     emp_name = emp.get("name", "직원")
 
     if not records:
+        _YES = {"입력하기", "ㅇㅇ", "네", "응", "예", "yes", "입력", "직접입력", "직접 입력"}
+        _msg_clean = message.strip().lower().replace(" ", "")
+        if any(kw.replace(" ", "") in _msg_clean for kw in _YES):
+            empty_payload = _json.dumps(
+                {"employee_id": employee_uuid, "employee_name": emp_name, "pay_month": month, "records": []},
+                ensure_ascii=False,
+            )
+            return (
+                f"{emp_name} {month} 근무 기록 입력 화면을 열어드릴게요.\n\n"
+                f"[ACTION:OPEN_WORK_TABLE:{empty_payload}]"
+            )
         return (
             f"{emp_name}의 {month} 근무 기록이 없어요. 직접 입력하시겠어요?\n\n"
             "[CHOICES]\n입력하기\n취소\n[/CHOICES]"

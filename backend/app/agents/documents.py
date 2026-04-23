@@ -1549,7 +1549,9 @@ async def run_payroll_doc(
             )
 
         _BUCKET = "documents-uploads"
-        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
+        _safe_month = confirmed_month.replace("-", "")
+        _slip_filename = f"{emp_name}_{_safe_month}_급여명세서.xlsx"
+        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{_slip_filename}"
 
         def _upload_from_preview():
             try:
@@ -1717,7 +1719,7 @@ async def run_payroll_doc(
 
     # Supabase Storage 업로드
     _BUCKET = "documents-uploads"
-    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
+    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{filename}"
 
     def _upload_excel() -> str:
         try:

@@ -98,6 +98,7 @@ type Message = {
   salesAction?: SalesActionData;
   costAction?: CostActionData;
   workAction?: WorkActionData;
+  workConfirmed?: boolean;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
   instagram?: InstagramPayload;
@@ -1956,8 +1957,13 @@ export const InlineChat = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={loading}
+                          disabled={loading || msg.workConfirmed}
                           onClick={() => {
+                            setMessages((prev) =>
+                              prev.map((m, idx) =>
+                                idx === i ? { ...m, workConfirmed: true } : m,
+                              ),
+                            );
                             sendRef.current?.(
                               `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: msg.workAction!.employee_id, pay_month: msg.workAction!.pay_month })}`,
                             );
@@ -1969,6 +1975,7 @@ export const InlineChat = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={msg.workConfirmed}
                           onClick={() => {
                             setWorkTableData(msg.workAction!);
                             setShowWorkTable(true);

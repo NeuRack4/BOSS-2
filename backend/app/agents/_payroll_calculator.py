@@ -177,12 +177,12 @@ def calculate_payroll(
         # 월급제 연장·야간·휴일 수당: 통상시급 = 월급 / 209h (법정)
         통상시급 = int(monthly_salary / 209) if monthly_salary else 0
         r.overtime_pay  = int(통상시급 * overtime_hours * 1.5)
-        r.night_pay     = int(통상시급 * night_hours * 0.5)
+        r.night_pay     = int(통상시급 * night_hours * 1.5)
         r.holiday_pay   = int(통상시급 * holiday_hours * 1.5)
     else:
         r.base_pay     = int(hourly_rate * hours_worked)
         r.overtime_pay  = int(hourly_rate * overtime_hours * 1.5)
-        r.night_pay     = int(hourly_rate * night_hours * 0.5)
+        r.night_pay     = int(hourly_rate * night_hours * 1.5)
         r.holiday_pay   = int(hourly_rate * holiday_hours * 1.5)
 
     r.meal_allowance = min(meal_allowance, _MEAL_NONTAX_CAP)
@@ -228,7 +228,7 @@ def format_preview_table(r: PayrollResult, emp_name: str, pay_month: str) -> str
     if r.overtime_pay:
         lines.append(f"| 연장수당 ({r.overtime_hours}h × {'1.5배'}) | {won(r.overtime_pay)} |")
     if r.night_pay:
-        lines.append(f"| 야간수당 ({r.night_hours}h × {'0.5배 가산'}) | {won(r.night_pay)} |")
+        lines.append(f"| 야간수당 ({r.night_hours}h × {'1.5배'}) | {won(r.night_pay)} |")
     if r.holiday_pay:
         lines.append(f"| 휴일수당 ({r.holiday_hours}h × {'1.5배'}) | {won(r.holiday_pay)} |")
     if r.meal_allowance:
