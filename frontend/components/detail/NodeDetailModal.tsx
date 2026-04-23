@@ -38,6 +38,10 @@ import {
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
 import MenuListPanel from "@/components/sales/MenuListPanel";
+import {
+  SalesInsightCard,
+  type SalesInsightPayload,
+} from "@/components/chat/SalesInsightCard";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -1121,6 +1125,19 @@ export const NodeDetailModal = () => {
 
             <ScrollArea className="min-h-0 flex-1 pr-1">
               <div className="flex flex-col gap-2">
+                {/* SALES INSIGHT 카드 — sales_report 상세에서 표시 */}
+                {artifact.type === "sales_report" &&
+                  Boolean(artifact.metadata?.sales_insight) && (
+                    <Section>
+                      <SalesInsightCard
+                        payload={
+                          artifact.metadata!
+                            .sales_insight as SalesInsightPayload
+                        }
+                      />
+                    </Section>
+                  )}
+
                 {/* REVENUE 통계 패널 — revenue_entry 카드 상세에서 표시 */}
                 {artifact.type === "revenue_entry" && accountId && (
                   <Section>
