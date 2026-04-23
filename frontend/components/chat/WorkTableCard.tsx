@@ -81,7 +81,7 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
         <div className="flex shrink-0 items-center justify-between border-b border-[#030303]/[0.08] px-4 py-3">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-[#030303]">
-              근무 기록 편집
+              Work Records
             </h3>
             <span className="font-mono text-[11px] text-[#030303]/60">
               {data.employee_name} · {data.pay_month}
@@ -102,12 +102,12 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-[#030303]/10 text-left font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
-                  <th className="px-3 py-2 font-medium">날짜</th>
-                  <th className="px-3 py-2 text-right font-medium">기본</th>
-                  <th className="px-3 py-2 text-right font-medium">연장</th>
-                  <th className="px-3 py-2 text-right font-medium">야간</th>
-                  <th className="px-3 py-2 text-right font-medium">휴일</th>
-                  <th className="px-3 py-2 font-medium">메모</th>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 text-right font-medium">Regular</th>
+                  <th className="px-3 py-2 text-right font-medium">Overtime</th>
+                  <th className="px-3 py-2 text-right font-medium">Night</th>
+                  <th className="px-3 py-2 text-right font-medium">Holiday</th>
+                  <th className="px-3 py-2 font-medium">Memo</th>
                   <th className="w-8 px-2 py-2" />
                 </tr>
               </thead>
@@ -154,7 +154,7 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
                       <input
                         value={r.memo}
                         onChange={(e) => update(i, "memo", e.target.value)}
-                        placeholder="메모"
+                        placeholder="Memo"
                         className="w-full bg-transparent text-[#030303]/70 placeholder:text-[#030303]/25 focus:outline-none"
                       />
                     </td>
@@ -173,7 +173,7 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
               <tfoot>
                 <tr className="border-t border-[#030303]/10 bg-[#f4f1ed]">
                   <td className="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#030303]/60">
-                    합계
+                    Total
                   </td>
                   <td
                     colSpan={4}
@@ -191,7 +191,8 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
             onClick={addRow}
             className="mt-3 flex items-center gap-1 rounded-[4px] px-2 py-1 text-[11px] text-[#030303]/60 hover:bg-[#030303]/[0.05] hover:text-[#030303]"
           >
-            <Plus className="h-3 w-3" />행 추가
+            <Plus className="h-3 w-3" />
+            Add Row
           </button>
         </div>
 
@@ -203,7 +204,7 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
             onClick={onClose}
             className="rounded-[4px] border-[#030303]/15 bg-white text-[#030303]/70 hover:bg-[#030303]/[0.05] hover:text-[#030303]"
           >
-            취소
+            Cancel
           </Button>
           <Button
             size="sm"
@@ -214,7 +215,7 @@ export const WorkTableCard = ({ data, onClose, onConfirm }: Props) => {
             disabled={rows.length === 0}
             className="rounded-[4px] bg-[#030303] text-white hover:bg-[#030303]/85 disabled:opacity-50"
           >
-            저장 후 급여 계산
+            Save & Calculate Pay
           </Button>
         </div>
       </div>

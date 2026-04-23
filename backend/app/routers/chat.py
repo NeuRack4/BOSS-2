@@ -54,12 +54,18 @@ async def chat(req: ChatRequest):
     account_id = req.account_id
     session_id = req.session_id
 
-    # 세션 없으면 새로 생성
+    # 세션 없거나 삭제된 경우 새로 생성
     session_created = False
     if not session_id:
         sess = await sessions.create_session(account_id)
         session_id = sess["id"]
         session_created = True
+    else:
+        existing = await sessions.get_session(account_id, session_id)
+        if not existing:
+            sess = await sessions.create_session(account_id)
+            session_id = sess["id"]
+            session_created = True
 
     # 1. 단기 메모리 (세션 스코프)
     history = await short_term.get_messages(session_id)

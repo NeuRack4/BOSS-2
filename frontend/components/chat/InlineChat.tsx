@@ -6,7 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type KeyboardEvent,
+  type SetStateAction,
 } from "react";
 import {
   ArrowUpIcon,
@@ -20,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useChat } from "./ChatContext";
 import {
   ReviewResultCard,
@@ -101,7 +102,6 @@ type Message = {
   workConfirmed?: boolean;
   shortsWizard?: ShortsWizardPayload;
   menuChart?: MenuAnalysisPayload;
-  instagram?: InstagramPayload;
   marketingReport?: MarketingReportPayload;
   eventPlanForm?: boolean;
   employeePicker?: EmployeePickerPayload;
@@ -381,24 +381,31 @@ export const InlineChat = () => {
     registerSender,
     currentSessionId,
     setCurrentSessionId,
-    setSessions,
     newSessionTick,
     loadSessionTick,
     pendingLoadSessionId,
     pendingBriefing,
     consumeBriefing,
     setLastSpeaker,
+    messages: _messages,
+    setMessages: _setMessages,
+    loading,
+    setLoading,
+    userId,
+    fetchSessions,
   } = useChat();
+  const messages = _messages as Message[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setMessages = _setMessages as any as Dispatch<
+    SetStateAction<Message[]>
+  >;
 
-  const [messages, setMessages] = useState<Message[]>(emptyMessages);
   const [initialSuggestions, setInitialSuggestions] = useState<string[]>(() =>
     pickSuggested(),
   );
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<string>("auto");
-  const [userId, setUserId] = useState<string | null>(null);
   const [showSalesTable, setShowSalesTable] = useState(false);
   const [salesTableData, setSalesTableData] = useState<SalesActionData | null>(
     null,
@@ -472,35 +479,11 @@ export const InlineChat = () => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth
-      .getUser()
-      .then(({ data }) => setUserId(data.user?.id ?? null));
-  }, []);
-
-  useEffect(() => {
     const viewport = scrollViewportRef.current;
     if (viewport) {
       viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
     }
   }, [messages]);
-
-  const fetchSessions = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(
-        `${apiBase}/api/chat/sessions?account_id=${userId}&limit=50`,
-      );
-      const json = await res.json();
-      setSessions(json?.data ?? []);
-    } catch {
-      /* noop */
-    }
-  }, [apiBase, userId, setSessions]);
-
-  useEffect(() => {
-    if (userId) fetchSessions();
-  }, [userId, fetchSessions]);
 
   useEffect(() => {
     if (pendingBriefing) {
@@ -1325,7 +1308,7 @@ export const InlineChat = () => {
           onConfirm={(confirmed) => {
             setShowWorkTable(false);
             sendRef.current?.(
-              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: confirmed.employee_id, pay_month: confirmed.pay_month })}`,
+              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: confirmed.employee_id, pay_month: confirmed.pay_month, records: confirmed.records })}`,
             );
           }}
         />
@@ -1404,7 +1387,7 @@ export const InlineChat = () => {
 
               if (msg.role === "assistant") {
                 displayText = (displayText || "")
-                  .replace(/\[PAYROLL_PREVIEW_DATA:[^\]]*\]/gs, "")
+                  .replace(/\[PAYROLL_PREVIEW_DATA:[^\]]*\]/g, "")
                   .trim();
 
                 const rrExtracted = extractReviewReplyPayload(
@@ -2007,7 +1990,7 @@ export const InlineChat = () => {
                               ),
                             );
                             sendRef.current?.(
-                              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: msg.workAction!.employee_id, pay_month: msg.workAction!.pay_month })}`,
+                              `__WORK_TABLE_CONFIRMED__:${JSON.stringify({ employee_id: msg.workAction!.employee_id, pay_month: msg.workAction!.pay_month, records: msg.workAction!.records })}`,
                             );
                           }}
                           className="w-full rounded-[5px] border-[#547244] bg-[#edf2e8] text-[#547244] hover:bg-[#dde9d1] text-xs font-medium disabled:opacity-40"

@@ -814,8 +814,28 @@ async def run_payroll_preview(
         except Exception:
             pass
 
-    if not month:
-        return "급여 미리보기를 위해 급여월 정보가 필요합니다."
+    # ── Step A: 직원 정보가 없으면 먼저 직원 선택 질문 ──────────────────────────
+    if not emp_id and not emp_name_hint:
+        try:
+            _sb = get_supabase()
+            _rows = (
+                _sb.table("employees")
+                .select("name")
+                .eq("account_id", account_id)
+                .order("name")
+                .execute()
+                .data or []
+            )
+            _names = [r["name"] for r in _rows if r.get("name")]
+        except Exception:
+            _names = []
+        if _names:
+            _choices = "\n".join(_names[:8])
+            return (
+                "누구의 급여명세서인가요?\n\n"
+                f"[CHOICES]\n{_choices}\n직접 입력\n[/CHOICES]"
+            )
+        return "누구의 급여명세서를 만들까요? 직원 이름을 알려주세요."
 
     # ── 2. 직원 조회 ──────────────────────────────────────────────────────────
     try:
@@ -826,19 +846,43 @@ async def run_payroll_preview(
         log.exception("[payroll_preview] employee lookup failed: %s", _e)
         emp = {}
 
-    if not emp_id and not emp_name_hint:
-        return "급여 미리보기를 위해 직원 정보가 필요합니다."
     if not emp:
-        return "직원 정보를 찾을 수 없어요."
+        return f"'{emp_name_hint or emp_id}' 직원을 찾을 수 없어요. 이름을 다시 확인해 주세요."
 
     employee_uuid = emp["id"]
+    emp_display = emp.get("name", "직원")
+
+    # ── Step B: 월 정보가 없으면 월 선택 질문 ────────────────────────────────
+    if not month:
+        from datetime import date as _date
+        _today = _date.today()
+        _y, _m = _today.year, _today.month
+        _month_opts = []
+        for _ in range(3):
+            _month_opts.append(f"{_y}-{_m:02d}")
+            _m -= 1
+            if _m == 0:
+                _m, _y = 12, _y - 1
+        _choices = "\n".join(_month_opts)
+        return (
+            f"{emp_display}의 몇 월 급여명세서를 만들까요?\n\n"
+            f"[CHOICES]\n{_choices}\n직접 입력\n[/CHOICES]"
+        )
 
     # ── 3. Save 확인 마커 → 즉시 급여 계산 ───────────────────────────────────
     if _WORK_TABLE_CONFIRMED_PREFIX in message:
+        records = []
         try:
-            records = _fetch_work_records(account_id, employee_uuid, month)
+            raw = message[message.index(_WORK_TABLE_CONFIRMED_PREFIX) + len(_WORK_TABLE_CONFIRMED_PREFIX):]
+            confirmed_data = _json.loads(raw.strip())
+            records = confirmed_data.get("records") or []
         except Exception:
-            records = []
+            pass
+        if not records:
+            try:
+                records = _fetch_work_records(account_id, employee_uuid, month)
+            except Exception:
+                records = []
         return _build_payroll_reply(emp, month, records)
 
     # ── 4. 근무 기록 조회 → 표 확인 단계 ─────────────────────────────────────
@@ -1007,7 +1051,7 @@ def describe(account_id: str) -> list[dict]:
                     "employee_name": {"type": "string", "description": "직원 이름 (예: 송진우). employee_id UUID를 모를 때 사용."},
                     "pay_month": {"type": "string", "description": "급여 정산 월 YYYY-MM (예: 2026-04)"},
                 },
-                "required": ["pay_month"],
+                "required": [],
             },
         },
     ]

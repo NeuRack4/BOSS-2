@@ -105,9 +105,10 @@ async def delete_artifact(artifact_id: str, req: DeleteArtifactRequest):
             if to_insert:
                 sb.table("artifact_edges").insert(to_insert).execute()
 
-    # artifact와 관련된 엣지 삭제
+    # artifact와 관련된 엣지 및 activity_logs 삭제
     sb.table("artifact_edges").delete().eq("child_id", artifact_id).execute()
     sb.table("artifact_edges").delete().eq("parent_id", artifact_id).execute()
+    sb.table("activity_logs").delete().eq("account_id", req.account_id).eq("metadata->>artifact_id", artifact_id).execute()
     sb.table("artifacts").delete().eq("id", artifact_id).execute()
 
     return ScheduleResponse(
