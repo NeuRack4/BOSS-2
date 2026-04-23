@@ -199,7 +199,10 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
                 className="flex min-h-[300px] flex-1 min-w-[260px] flex-col rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)]"
               >
                 <div className="flex items-center gap-2 border-b border-[color:var(--kb-border)] px-4 py-3">
-                  <span className="h-2 w-2 rounded-full bg-[#d4a588]" aria-hidden />
+                  <span
+                    className="h-2 w-2 rounded-full bg-[#d4a588]"
+                    aria-hidden
+                  />
                   <span className="text-[13px] font-semibold tracking-tight text-[color:var(--kb-fg-strong)]">
                     Managing
                   </span>

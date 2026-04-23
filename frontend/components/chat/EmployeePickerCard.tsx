@@ -36,7 +36,11 @@ type Props = {
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
-export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => {
+export const EmployeePickerCard = ({
+  payload,
+  accountId,
+  onConfirm,
+}: Props) => {
   const { employees, pay_month } = payload;
   const [selected, setSelected] = useState<string | null>(null);
   const [summary, setSummary] = useState<WorkRecordSummary | null>(null);
@@ -44,7 +48,10 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    if (!selected) { setSummary(null); return; }
+    if (!selected) {
+      setSummary(null);
+      return;
+    }
     setLoadingSummary(true);
     fetch(
       `${apiBase}/api/employees/${selected}/work-records?account_id=${accountId}&month=${pay_month}`,
@@ -59,7 +66,12 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
             night_hours: acc.night_hours + (r.night_hours ?? 0),
             holiday_hours: acc.holiday_hours + (r.holiday_hours ?? 0),
           }),
-          { hours_worked: 0, overtime_hours: 0, night_hours: 0, holiday_hours: 0 },
+          {
+            hours_worked: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            holiday_hours: 0,
+          },
         );
         setSummary(agg);
       })
@@ -72,14 +84,14 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
   const handleConfirm = () => {
     if (!selected) return;
     setConfirmed(true);
-    const confirmMsg = `__PAYROLL_CONFIRM__:${JSON.stringify({ employee_id: selected, pay_month })}`;
+    const confirmMsg = `__PAYROLL_PREVIEW_REQUEST__:${JSON.stringify({ employee_id: selected, pay_month })}`;
     onConfirm(confirmMsg);
   };
 
   if (confirmed) {
     return (
       <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] px-4 py-3 text-[12px] text-[color:var(--kb-fg-muted)]">
-        급여명세서를 생성하는 중입니다...
+        급여 미리보기를 불러오는 중입니다...
       </div>
     );
   }
@@ -117,8 +129,12 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
               </div>
               <div className="text-[10px] text-[color:var(--kb-fg-subtle)]">
                 {emp.employment_type}
-                {emp.hourly_rate ? ` · ${emp.hourly_rate.toLocaleString()}원/h` : ""}
-                {emp.monthly_salary ? ` · 월 ${emp.monthly_salary.toLocaleString()}원` : ""}
+                {emp.hourly_rate
+                  ? ` · ${emp.hourly_rate.toLocaleString()}원/h`
+                  : ""}
+                {emp.monthly_salary
+                  ? ` · 월 ${emp.monthly_salary.toLocaleString()}원`
+                  : ""}
               </div>
             </div>
           </button>
@@ -145,12 +161,15 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
               </div>
               {summary.hours_worked === 0 && (
                 <p className="mt-1.5 text-[10px] text-amber-600">
-                  ⚠️ 이 달 근무 기록이 없어요. 직원 관리 탭에서 먼저 입력해 주세요.
+                  ⚠️ 이 달 근무 기록이 없어요. 직원 관리 탭에서 먼저 입력해
+                  주세요.
                 </p>
               )}
             </>
           ) : (
-            <span className="text-[color:var(--kb-fg-muted)]">근무 기록 없음</span>
+            <span className="text-[color:var(--kb-fg-muted)]">
+              근무 기록 없음
+            </span>
           )}
         </div>
       )}
@@ -161,7 +180,9 @@ export const EmployeePickerCard = ({ payload, accountId, onConfirm }: Props) => 
         onClick={handleConfirm}
         className="w-full text-[12px]"
       >
-        {selectedEmp ? `${selectedEmp.name} 급여명세서 생성` : "직원을 선택해 주세요"}
+        {selectedEmp
+          ? `${selectedEmp.name} 급여명세서 생성`
+          : "직원을 선택해 주세요"}
       </Button>
     </div>
   );
@@ -181,7 +202,10 @@ export const extractEmployeePickerPayload = (
     if (text[i] === "{") depth++;
     else if (text[i] === "}") {
       depth--;
-      if (depth === 0) { jsonEnd = i; break; }
+      if (depth === 0) {
+        jsonEnd = i;
+        break;
+      }
     }
   }
   if (jsonEnd === -1) return { cleaned: text, payload: undefined };
@@ -193,7 +217,9 @@ export const extractEmployeePickerPayload = (
   let payload: EmployeePickerPayload | undefined;
   try {
     payload = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const cleaned = (text.slice(0, start) + text.slice(markerEnd)).trim();
   return { cleaned, payload };

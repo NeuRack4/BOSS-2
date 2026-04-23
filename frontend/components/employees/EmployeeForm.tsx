@@ -27,8 +27,12 @@ const EMPLOYMENT_TYPES = ["초단시간", "시급제", "월급제"] as const;
 export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
   const [name, setName] = useState(initial?.name ?? "");
   const [empType, setEmpType] = useState(initial?.employment_type ?? "시급제");
-  const [hourlyRate, setHourlyRate] = useState(String(initial?.hourly_rate ?? ""));
-  const [monthlySalary, setMonthlySalary] = useState(String(initial?.monthly_salary ?? ""));
+  const [hourlyRate, setHourlyRate] = useState(
+    String(initial?.hourly_rate ?? ""),
+  );
+  const [monthlySalary, setMonthlySalary] = useState(
+    String(initial?.monthly_salary ?? ""),
+  );
   const [payDay, setPayDay] = useState(String(initial?.pay_day ?? "25"));
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [department, setDepartment] = useState(initial?.department ?? "");
@@ -47,7 +51,8 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
         name: name.trim(),
         employment_type: empType,
         hourly_rate: isHourly && hourlyRate ? parseInt(hourlyRate) : null,
-        monthly_salary: !isHourly && monthlySalary ? parseInt(monthlySalary) : null,
+        monthly_salary:
+          !isHourly && monthlySalary ? parseInt(monthlySalary) : null,
         pay_day: payDay ? parseInt(payDay) : null,
         phone: phone || null,
         department: department || null,
@@ -193,7 +198,12 @@ export const EmployeeForm = ({ initial, onSave, onCancel }: Props) => {
       </div>
 
       <div className="mt-3 flex gap-2">
-        <Button type="submit" size="sm" disabled={saving} className="flex-1 text-[12px]">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={saving}
+          className="flex-1 text-[12px]"
+        >
           {saving ? "저장 중..." : "저장"}
         </Button>
         <Button

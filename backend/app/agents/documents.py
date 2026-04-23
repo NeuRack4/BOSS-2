@@ -1478,109 +1478,69 @@ async def run_payroll_doc(
 
     # ── 급여명세서 — Excel 자동생성 경로 ──
 
-    _PAYROLL_CONFIRM_PREFIX = "__PAYROLL_CONFIRM__:"
+    import asyncio as _asyncio
+    from app.agents._payroll_excel import generate_payroll_excel
 
-    # ── Path A: 직원 DB에서 확정된 요청 ──────────────────────
-    if _PAYROLL_CONFIRM_PREFIX in message:
-        import asyncio as _asyncio
-        from app.agents._payroll_excel import generate_payroll_excel as _gen_excel
+    _PREVIEW_MARKER = "[PAYROLL_PREVIEW_DATA:"
 
-        try:
-            raw_confirm = message[message.index(_PAYROLL_CONFIRM_PREFIX) + len(_PAYROLL_CONFIRM_PREFIX):]
-            confirm_data = json.loads(raw_confirm.strip())
-            emp_id = confirm_data["employee_id"]
-            confirmed_month = confirm_data.get("pay_month", pay_month)
-        except Exception:
-            return "급여명세서 요청 데이터를 읽을 수 없어요. 다시 시도해 주세요."
+    # ── Path A: Recruitment 미리보기에서 확정된 계산 결과 재사용 ──
+    preview_data: dict | None = None
+    for h in reversed(history or []):
+        content = h.get("content", "") if isinstance(h, dict) else ""
+        if _PREVIEW_MARKER in content:
+            try:
+                idx = content.index(_PREVIEW_MARKER) + len(_PREVIEW_MARKER)
+                depth = 0
+                end = -1
+                for i in range(idx, len(content)):
+                    if content[i] == "{":
+                        depth += 1
+                    elif content[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+                if end != -1:
+                    preview_data = json.loads(content[idx:end + 1])
+            except Exception:
+                pass
+            break
 
-        # 직원 정보 조회
-        try:
-            emp_row = sb.table("employees").select("*").eq("id", emp_id).eq("account_id", account_id).maybe_single().execute()
-            emp = emp_row.data or {}
-        except Exception:
-            emp = {}
+    if preview_data:
+        emp_name = preview_data.get("employee_name", target)
+        confirmed_month = preview_data.get("pay_month", pay_month)
+        pay_day_num = preview_data.get("pay_day", 25)
+        emp_type = preview_data.get("employment_type", "시급제")
 
-        if not emp:
-            return "직원 정보를 찾을 수 없어요."
-
-        # 근무 기록 조회
-        try:
-            wr_res = (
-                sb.table("work_records")
-                .select("*")
-                .eq("employee_id", emp_id)
-                .eq("account_id", account_id)
-                .gte("work_date", f"{confirmed_month}-01")
-                .lte("work_date", f"{confirmed_month}-31")
-                .execute()
-            )
-            records = wr_res.data or []
-        except Exception:
-            records = []
-
-        total_hours = sum(float(r.get("hours_worked", 0)) for r in records)
-        total_ot = sum(float(r.get("overtime_hours", 0)) for r in records)
-        total_night = sum(float(r.get("night_hours", 0)) for r in records)
-        total_holiday = sum(float(r.get("holiday_hours", 0)) for r in records)
-
-        emp_type = emp.get("employment_type", "시급제")
-        hourly = int(emp.get("hourly_rate") or 0)
-        monthly = int(emp.get("monthly_salary") or 0)
-        pay_day_num = emp.get("pay_day") or 25
-        emp_name = emp.get("name", target)
-
-        # gpt-4o-mini로 공제 계산 포함 JSON 완성
-        _RATES_BLOCK_CONFIRM = (
-            "[2026년 4대보험 요율 — 근로자 부담]\n"
-            "- 국민연금: 4.5% (상한 590만원)\n"
-            "- 건강보험: 3.545%\n"
-            "- 장기요양보험: 건강보험료 × 12.95%\n"
-            "- 고용보험: 0.9%\n"
-            "- 소득세: 간이세액표 기준 (비과세 식대 월 20만원 공제 후)\n"
-            "- 초단시간(주 15h 미만): 4대보험 미적용, 소득세 3.3%(지방세 포함)\n"
-        )
-        json_system_confirm = (
-            "당신은 급여 계산 전문가입니다. 아래 직원 데이터로 공제액을 계산해 JSON만 반환하세요. 설명 없이 JSON만.\n\n"
-            + _RATES_BLOCK_CONFIRM
-            + 'JSON 스키마:\n'
-            '{"employment_type":"string","has_allowances":bool,'
-            '"name":"string","pay_date":"YYYY-MM-DD",'
-            '"hourly_rate":0,"hours_worked":0.0,"base_pay":0,'
-            '"overtime_hours":0.0,"overtime_pay":0,'
-            '"night_hours":0.0,"night_pay":0,'
-            '"holiday_hours":0.0,"holiday_pay":0,'
-            '"meal_allowance":0,"family_allowance":0,'
-            '"income_tax":0,"national_pension":0,"health_insurance":0,'
-            '"ltc_insurance":0,"employment_insurance":0,'
-            '"total_pay":0,"total_deductions":0,"net_pay":0}'
-        )
-        user_context_confirm = (
-            f"직원명: {emp_name}, 고용형태: {emp_type}, "
-            f"시급: {hourly}원, 월급: {monthly}원, "
-            f"근무시간: {total_hours}h, 연장: {total_ot}h, 야간: {total_night}h, 휴일: {total_holiday}h, "
-            f"지급월: {confirmed_month}, 지급일: {pay_day_num}일"
-        )
-        if extra_note:
-            user_context_confirm += f", 특이사항: {extra_note}"
-
-        json_resp_confirm = await chat_completion(
-            messages=[{"role": "system", "content": json_system_confirm}, {"role": "user", "content": user_context_confirm}],
-            model="gpt-4o-mini",
-            temperature=0,
-        )
-        raw_json_confirm = (json_resp_confirm.choices[0].message.content or "{}").strip()
-        try:
-            if raw_json_confirm.startswith("```"):
-                raw_json_confirm = re.sub(r"^```[a-z]*\n?", "", raw_json_confirm).rstrip("`").strip()
-            payroll_data = json.loads(raw_json_confirm)
-        except Exception:
-            payroll_data = {}
-
-        payroll_data.setdefault("name", emp_name)
-        payroll_data.setdefault("pay_date", f"{confirmed_month[:7]}-{pay_day_num:02d}")
+        payroll_data = {
+            "name": emp_name,
+            "employment_type": emp_type,
+            "pay_date": f"{confirmed_month}-{int(pay_day_num):02d}",
+            "hourly_rate": preview_data.get("hourly_rate", 0),
+            "hours_worked": preview_data.get("hours_worked", 0),
+            "base_pay": preview_data.get("base_pay", 0),
+            "overtime_hours": preview_data.get("overtime_hours", 0),
+            "overtime_pay": preview_data.get("overtime_pay", 0),
+            "night_hours": preview_data.get("night_hours", 0),
+            "night_pay": preview_data.get("night_pay", 0),
+            "holiday_hours": preview_data.get("holiday_hours", 0),
+            "holiday_pay": preview_data.get("holiday_pay", 0),
+            "meal_allowance": preview_data.get("meal_allowance", 0),
+            "family_allowance": 0,
+            "income_tax": preview_data.get("income_tax", 0),
+            "local_income_tax": preview_data.get("local_income_tax", 0),
+            "national_pension": preview_data.get("national_pension", 0),
+            "health_insurance": preview_data.get("health_insurance", 0),
+            "ltc_insurance": preview_data.get("ltc_insurance", 0),
+            "employment_insurance": preview_data.get("employment_insurance", 0),
+            "total_pay": preview_data.get("gross_pay", 0),
+            "total_deductions": preview_data.get("total_deductions", 0),
+            "net_pay": preview_data.get("net_pay", 0),
+            "has_allowances": bool(preview_data.get("meal_allowance", 0)),
+        }
 
         try:
-            excel_bytes, _ = _gen_excel(payroll_data)
+            excel_bytes, _ = generate_payroll_excel(payroll_data)
         except Exception as exc:
             log.exception("급여명세서 Excel 생성 실패: %s", exc)
             return (
@@ -1591,7 +1551,7 @@ async def run_payroll_doc(
         _BUCKET = "documents-uploads"
         storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_slip.xlsx"
 
-        def _upload_confirmed():
+        def _upload_from_preview():
             try:
                 sb.storage.from_(_BUCKET).upload(
                     path=storage_key,
@@ -1609,18 +1569,20 @@ async def run_payroll_doc(
                 log.warning("급여명세서 Storage 업로드 실패: %s", exc)
                 return ""
 
-        download_url = await _asyncio.to_thread(_upload_confirmed)
+        download_url = await _asyncio.to_thread(_upload_from_preview)
 
-        total_pay = payroll_data.get("total_pay", 0)
-        total_ded = payroll_data.get("total_deductions", 0)
-        net_pay_val = payroll_data.get("net_pay", 0)
+        net_pay_val = payroll_data["net_pay"]
+        gross_val = payroll_data["total_pay"]
+        total_ded = payroll_data["total_deductions"]
 
         lines_out = [f"**{emp_name}** ({confirmed_month}) 급여명세서를 생성했어요."]
         lines_out.append(f"- 고용 유형: {emp_type}")
-        if total_hours:
-            lines_out.append(f"- 근무시간: {total_hours}h (연장 {total_ot}h)")
-        if total_pay:
-            lines_out.append(f"- 지급액 합계: {total_pay:,}원")
+        hours = preview_data.get("hours_worked", 0)
+        if hours:
+            ot = preview_data.get("overtime_hours", 0)
+            lines_out.append(f"- 근무시간: {hours}h" + (f" (연장 {ot}h)" if ot else ""))
+        if gross_val:
+            lines_out.append(f"- 지급액 합계: {gross_val:,}원")
         if total_ded:
             lines_out.append(f"- 공제액 합계: {total_ded:,}원")
         if net_pay_val:
@@ -1648,8 +1610,6 @@ async def run_payroll_doc(
         return reply
 
     # ── Path B: 직원 DB 조회 → 선택 UI 반환 ─────────────────
-    import asyncio as _asyncio
-    from app.agents._payroll_excel import generate_payroll_excel
 
     try:
         emp_list_res = (
@@ -2080,9 +2040,8 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "doc_payroll_doc",
             "description": (
-                "급여명세서·원천징수영수증·4대보험 신고용 문서 초안. "
-                "'급여명세서 뽑아줘', '원천징수 영수증 만들어줘', '4대보험 신고서' 요청이면 이 tool. "
-                "4대보험 요율·소득세 간이세액·비과세 한도 반영. "
+                "급여명세서 Excel 최종 생성. recruit_payroll_preview 에서 미리보기를 확인하고 '급여명세서 생성' 을 선택한 뒤 호출. "
+                "원천징수영수증·4대보험 신고용 문서 초안도 담당. "
                 "[카테고리: Tax&HR — 세무 (채용 제외)]"
             ),
             "handler": run_payroll_doc,

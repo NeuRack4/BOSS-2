@@ -52,7 +52,9 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
     }
   }, [accountId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleSave = async (data: EmployeeFormData) => {
     if (editTarget) {
@@ -106,7 +108,12 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
         <span className="text-[12px] font-semibold text-[color:var(--kb-fg-strong)]">
           직원 ({employees.length}명)
         </span>
-        <Button size="sm" variant="outline" onClick={openNew} className="h-7 gap-1 text-[11px]">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openNew}
+          className="h-7 gap-1 text-[11px]"
+        >
           <Plus className="h-3.5 w-3.5" />
           직원 추가
         </Button>
@@ -116,7 +123,10 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
         <EmployeeForm
           initial={editTarget ?? undefined}
           onSave={handleSave}
-          onCancel={() => { setShowForm(false); setEditTarget(null); }}
+          onCancel={() => {
+            setShowForm(false);
+            setEditTarget(null);
+          }}
         />
       )}
 
@@ -130,7 +140,12 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
           <p className="text-[11px] text-[color:var(--kb-fg-muted)]">
             등록된 직원이 없어요.
           </p>
-          <Button size="sm" variant="outline" onClick={openNew} className="text-[11px]">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openNew}
+            className="text-[11px]"
+          >
             첫 직원 추가
           </Button>
         </div>
@@ -154,7 +169,8 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
                     <span
                       className={cn(
                         "rounded px-1.5 py-0.5 text-[9px] font-semibold",
-                        empTypeColor[emp.employment_type] ?? "bg-gray-100 text-gray-600",
+                        empTypeColor[emp.employment_type] ??
+                          "bg-gray-100 text-gray-600",
                       )}
                     >
                       {emp.employment_type}
@@ -162,8 +178,12 @@ export const EmployeeManagingPanel = ({ accountId }: Props) => {
                   </div>
                   <div className="text-[10px] text-[color:var(--kb-fg-subtle)]">
                     {[emp.department, emp.position].filter(Boolean).join(" · ")}
-                    {emp.hourly_rate ? ` · ${emp.hourly_rate.toLocaleString()}원/h` : ""}
-                    {emp.monthly_salary ? ` · 월 ${emp.monthly_salary.toLocaleString()}원` : ""}
+                    {emp.hourly_rate
+                      ? ` · ${emp.hourly_rate.toLocaleString()}원/h`
+                      : ""}
+                    {emp.monthly_salary
+                      ? ` · 월 ${emp.monthly_salary.toLocaleString()}원`
+                      : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
