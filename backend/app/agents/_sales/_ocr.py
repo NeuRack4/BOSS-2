@@ -32,6 +32,18 @@ from app.core.supabase import get_supabase
 log = logging.getLogger(__name__)
 
 
+_MENU_PROMPT = (
+    "이 이미지는 카페·식당·가게의 메뉴판입니다.\n"
+    "메뉴명과 가격을 모두 추출해 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 금지.\n\n"
+    '{"menus":[{"name":"메뉴명","category":"음료 또는 디저트 또는 음식 또는 기타","price":가격정수}]}\n\n'
+    "규칙:\n"
+    "- category: 음료(커피·차·주스·라떼 등) / 디저트(케이크·쿠키·빵 등) / 음식(밥·면·반찬 등) / 기타\n"
+    "- price: 숫자만 (원 단위 정수). 가격 없으면 0\n"
+    "- 섹션 제목·설명·재료 등 메뉴가 아닌 텍스트 제외\n"
+    "- 동일 메뉴 중복 제거\n"
+    '- 파싱 불가 시 {"menus":[]}'
+)
+
 _RECEIPT_PROMPT = (
     "이 이미지는 영수증, 판매 내역, 또는 비용 기록입니다.\n"
     "이미지에서 품목/항목 정보를 추출해 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 금지.\n\n"
@@ -88,6 +100,42 @@ async def parse_receipt_from_bytes(
             it["recorded_date"] = today
     kind = parsed.get("type") if parsed.get("type") in ("sales", "cost") else "sales"
     return {"type": kind, "items": items}
+
+
+@_traceable(name="sales._ocr.parse_menu_from_bytes")
+async def parse_menu_from_bytes(
+    file_bytes: bytes,
+    mime_type: str = "image/jpeg",
+) -> list[dict]:
+    """메뉴판 이미지 → [{"name", "category", "price"}, ...] 반환."""
+    b64 = base64.standard_b64encode(file_bytes).decode("ascii")
+    data_url = f"data:{mime_type};base64,{b64}"
+
+    try:
+        resp = await _openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text",      "text": _MENU_PROMPT},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=2000,
+        )
+    except Exception as e:
+        log.warning("menu vision call failed: %s", e)
+        return []
+
+    raw = resp.choices[0].message.content or "{}"
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+
+    return parsed.get("menus") or []
 
 
 async def parse_receipt_from_storage(
