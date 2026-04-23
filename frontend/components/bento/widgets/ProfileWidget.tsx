@@ -75,8 +75,11 @@ export const ProfileWidget = ({ bgColor }: { bgColor?: string }) => {
       }
     };
     run();
+    const handler = () => run();
+    window.addEventListener("boss:artifacts-changed", handler);
     return () => {
       cancelled = true;
+      window.removeEventListener("boss:artifacts-changed", handler);
     };
   }, []);
 

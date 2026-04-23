@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -186,6 +186,8 @@ const MARKETING_RICH_TYPES = new Set([
   "blog_post",
   "review_reply",
   "shorts_video",
+  "job_posting_set",
+  "job_posting_poster",
 ]);
 
 const HASHTAG_LINE_RE = /^(#[\w가-힣A-Za-z]+\s*)+$/;
@@ -405,6 +407,148 @@ const BlogPreview = ({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+const JobPostingPosterPreview = ({
+  content,
+  meta,
+}: {
+  content: string;
+  meta: Record<string, unknown> | null;
+}) => {
+  const platform = metaString(meta, "for_platform") ?? "";
+  const publicUrl = metaString(meta, "public_url") ?? "";
+  const [downloading, setDownloading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const platformLabel =
+    platform === "karrot"
+      ? "당근알바"
+      : platform === "albamon"
+        ? "알바천국"
+        : platform === "saramin"
+          ? "사람인"
+          : platform;
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const { toJpeg } = await import("html-to-image");
+      const container = document.createElement("div");
+      container.style.cssText =
+        "position:fixed;left:-9999px;top:0;width:600px;background:#fff;";
+      container.innerHTML = content;
+      document.body.appendChild(container);
+      const dataUrl = await toJpeg(container, { quality: 0.95, pixelRatio: 2 });
+      document.body.removeChild(container);
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `poster-${platform || "job"}.jpg`;
+      a.click();
+    } catch {
+      alert("이미지 저장에 실패했어요. 다시 시도해주세요.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        {platformLabel && (
+          <span className="rounded-full bg-[#030303]/[0.06] px-2.5 py-0.5 text-[11px] font-medium text-[#030303]/60">
+            {platformLabel}
+          </span>
+        )}
+        {publicUrl && (
+          <a
+            href={publicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-blue-500 underline hover:text-blue-700"
+          >
+            새 탭에서 열기
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={downloading}
+          className="ml-auto mr-6 flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium text-[#030303]/60 transition hover:bg-[#030303]/[0.06] disabled:opacity-40"
+        >
+          {downloading ? "Saving…" : "JPG Download"}
+        </button>
+      </div>
+      <iframe
+        ref={iframeRef}
+        srcDoc={content}
+        className="w-full rounded border border-[#030303]/10"
+        style={{ height: "560px" }}
+        sandbox="allow-same-origin"
+        title="채용공고 포스터"
+      />
+    </div>
+  );
+};
+
+const JOB_POSTING_PLATFORMS = [
+  { key: "당근알바", label: "당근알바" },
+  { key: "알바천국", label: "알바천국" },
+  { key: "사람인", label: "사람인" },
+];
+
+const parseJobPostingSections = (content: string) => {
+  const result: Record<string, string> = {};
+  const parts = content.split(/^##\s+/m);
+  for (const part of parts) {
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const heading = part.slice(0, nl).trim();
+    const body = part.slice(nl + 1).trim();
+    if (heading) result[heading] = body;
+  }
+  return result;
+};
+
+const JobPostingSetPreview = ({ content }: { content: string }) => {
+  const sections = parseJobPostingSections(content);
+  const tabs = JOB_POSTING_PLATFORMS.filter((p) => sections[p.key]);
+  const [active, setActive] = useState(tabs[0]?.key ?? "");
+
+  if (tabs.length === 0)
+    return (
+      <MarkdownMessage
+        content={content}
+        className="text-[13px] text-[#030303]"
+      />
+    );
+
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="flex border-b border-[#030303]/10">
+        {tabs.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => setActive(p.key)}
+            className={`px-4 py-2 text-[12px] font-medium transition-colors ${
+              active === p.key
+                ? "border-b-2 border-[#030303] text-[#030303]"
+                : "text-[#030303]/40 hover:text-[#030303]/70"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div className="pt-3">
+        <MarkdownMessage
+          content={sections[active] ?? ""}
+          className="text-[13px] text-[#030303]"
+        />
       </div>
     </div>
   );
@@ -1232,6 +1376,15 @@ export const NodeDetailModal = () => {
                             return (
                               <ShortsVideoPreview
                                 title={artifact.title}
+                                content={raw}
+                                meta={meta}
+                              />
+                            );
+                          if (t === "job_posting_set")
+                            return <JobPostingSetPreview content={raw} />;
+                          if (t === "job_posting_poster")
+                            return (
+                              <JobPostingPosterPreview
                                 content={raw}
                                 meta={meta}
                               />
