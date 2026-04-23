@@ -479,17 +479,44 @@ async def run_sales_report(
     kpi: list[str] | None = None,
 ) -> str:
     log.info("[SALES] run_sales_report 진입 | account=%s period=%s", account_id, period)
-    lines = [f"[분석 기간] {period}"]
-    if target:
-        lines.append(f"[대상] {target}")
-    if kpi:
-        lines.append(f"[핵심 KPI] {', '.join(kpi)}")
-    synthetic = (
-        "매출 분석 리포트(sales_report) 를 작성해주세요. [ARTIFACT] 블록(type=sales_report) 으로 저장.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    from app.agents._sales._insights import generate_sales_insight
+
+    result = await generate_sales_insight(
+        account_id=account_id,
+        period=period,
+        target=target,
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    title = f"{period} 매출 인사이트"
+    artifact_block = (
+        "\n\n[ARTIFACT]\n"
+        f"type: sales_report\n"
+        f"title: {title}\n"
+        f"sub_domain: Reports\n"
+        "[/ARTIFACT]"
+    )
+
+    # clean_content + [ARTIFACT] 블록으로 칸반 노드 저장 (run_menu_analysis 패턴 동일)
+    artifact_id = await save_artifact_from_reply(
+        account_id,
+        "sales",
+        result["clean_content"] + artifact_block,
+        default_title=title,
+        valid_types=VALID_TYPES,
+    )
+
+    # NodeDetailModal 시각화용 — metadata에 card_data 저장
+    if artifact_id and result.get("card_data"):
+        try:
+            from app.core.supabase import get_supabase
+            get_supabase().table("artifacts").update(
+                {"metadata": {"sales_insight": result["card_data"]}}
+            ).eq("id", artifact_id).execute()
+        except Exception as e:
+            log.warning("[SALES] sales_insight metadata patch failed: %s", e)
+
+    # 채팅에는 시각화 마커 포함 반환
+    return result["chat_text"]
 
 
 @_traceable(name="sales.run_price_strategy")

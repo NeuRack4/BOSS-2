@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — feature/sales-ai-insights (AI 매출 인사이트 4섹션 + MenuAnalysisCard UI 개선)
+
+### Added — Backend
+
+- **`backend/app/agents/_sales/_insights.py`** — 실데이터 기반 AI 인사이트 4섹션 생성 엔진. `_parse_period` (이번달/지난달/최근N일/YYYY-MM/분기 파싱) · DB 집계(sales_records + cost_records) · 전기 대비 변화율 · GPT-4o `response_format=json_object` 구조화 분석(핵심요약/good_factors/bad_factors/actions/marketing) · `[[SALES_INSIGHT:{...}]]` 마커 + clean_content 동시 반환.
+- **`backend/app/agents/sales.py`** — `run_sales_report` 전면 교체. 기존 LLM 텍스트 위임 → `generate_sales_insight` 직접 호출. `save_artifact_from_reply`로 Reports 서브허브에 노드 저장 + `metadata.sales_insight` 패치(NodeDetailModal 시각화용).
+
+### Added — Frontend
+
+- **`frontend/components/chat/SalesInsightCard.tsx`** — 4탭 시각화 카드. 📊 요약(매출·비용·순이익 3카드 + 상위품목 수평바차트) · 🔍 원인분석(잘된/아쉬운 요인 색상 배지) · ✅ 추천액션(번호 리스트) · 📣 마케팅(제안 카드). `extractInsightPayload` 마커 파서 포함. 모서리 `5px` 통일.
+
+### Changed — Frontend
+
+- **`frontend/components/chat/InlineChat.tsx`** — `SalesInsightCard` import + `extractInsightPayload` 처리 체인 추가. `Message` 타입에 `salesInsight` 필드 추가.
+- **`frontend/components/detail/NodeDetailModal.tsx`** — `artifact.type === "sales_report"` + `metadata.sales_insight` 조건 시 `SalesInsightCard` 렌더 (채팅과 동일 시각화).
+- **`frontend/components/chat/MenuAnalysisCard.tsx`**
+  - 탭2 범례: `ml-auto` 제거 → 카테고리명·%·금액 인접 배치 + 전체너비 바차트
+  - 탭3 인사이트: 헤더(가격 인상 또는 메뉴 재검토) → 메뉴명 목록(볼드) → 설명 구조로 재편. 글자 `9px→12~13px`, 실수치+평균값 포함 구체적 설명. 효자/재검토 그룹 카드로 통합.
+
 ## [1.9.0] — feature/sales-camera-receipt (모바일 카메라 영수증 촬영 기능)
 
 ### Added — Frontend
