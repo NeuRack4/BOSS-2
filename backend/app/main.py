@@ -38,6 +38,7 @@ from app.routers import (
     kanban,
     marketing,
     memory,
+    menus,
     memos,
     recruitment,
     reviews,
@@ -79,6 +80,7 @@ app.include_router(search.router)
 app.include_router(uploads.router)
 app.include_router(reviews.router)
 app.include_router(costs.router)
+app.include_router(menus.router)
 app.include_router(sales.router)
 app.include_router(subsidies.router)
 app.include_router(stats.router)

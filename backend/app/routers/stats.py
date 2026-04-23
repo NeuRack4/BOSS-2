@@ -12,6 +12,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, field_validator
 
 from app.core.supabase import get_supabase
 
@@ -312,4 +313,147 @@ async def top_items(
         },
         "error": None,
         "meta": {},
+    }
+
+
+# ── GET /api/stats/personal-benchmark ────────────────────────────────────────
+
+@router.get("/personal-benchmark")
+async def personal_benchmark(
+    account_id: str = Query(...),
+    year: int = Query(default=0),
+    month: int = Query(default=0),
+):
+    """이번달 vs 지난달 vs 전년 동월 비교 + 최근 8주 요일별 최고 매출 분석."""
+    today = date.today()
+    y = year or today.year
+    m = month or today.month
+
+    cur_start, cur_end   = _month_range(y, m)
+    py, pm               = _prev_month(y, m)
+    prev_start, prev_end = _month_range(py, pm)
+    ly_start, ly_end     = _month_range(y - 1, m)
+
+    sb = get_supabase()
+    try:
+        cur_sales  = _fetch_sales_total(sb, account_id, cur_start, cur_end)
+        prev_sales = _fetch_sales_total(sb, account_id, prev_start, prev_end)
+        ly_sales   = _fetch_sales_total(sb, account_id, ly_start, ly_end)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"집계 실패: {e}")
+
+    eight_weeks_ago = (today - timedelta(weeks=8)).isoformat()
+    try:
+        dow_res = (
+            sb.table("sales_records")
+            .select("recorded_date,amount")
+            .eq("account_id", account_id)
+            .gte("recorded_date", eight_weeks_ago)
+            .lte("recorded_date", today.isoformat())
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"요일 집계 실패: {e}")
+
+    DOW_KR = ["월", "화", "수", "목", "금", "토", "일"]
+    dow_totals: dict[int, int] = {i: 0 for i in range(7)}
+    dow_counts: dict[int, int] = {i: 0 for i in range(7)}
+    for r in (dow_res.data or []):
+        d = date.fromisoformat(r["recorded_date"])
+        dow_totals[d.weekday()] += r["amount"]
+        dow_counts[d.weekday()] += 1
+
+    dow_avg = {i: (dow_totals[i] // dow_counts[i] if dow_counts[i] else 0) for i in range(7)}
+    best_dow_idx = max(dow_avg, key=lambda i: dow_avg[i])
+    best_day = DOW_KR[best_dow_idx] if dow_avg[best_dow_idx] > 0 else None
+
+    return {
+        "data": {
+            "year":  y,
+            "month": m,
+            "vs_last_month": {
+                "current":     cur_sales,
+                "previous":    prev_sales,
+                "change_rate": _change_rate(cur_sales, prev_sales),
+                "label":       "지난달 대비",
+            },
+            "vs_last_year": {
+                "current":     cur_sales,
+                "previous":    ly_sales,
+                "change_rate": _change_rate(cur_sales, ly_sales),
+                "label":       "전년 동월 대비",
+            },
+            "best_day_of_week": best_day,
+            "dow_avg": [{"day": DOW_KR[i], "avg": dow_avg[i]} for i in range(7)],
+        },
+        "error": None,
+        "meta": {},
+    }
+
+
+# ── POST /api/stats/goal + GET /api/stats/goal ────────────────────────────────
+
+class GoalRequest(BaseModel):
+    account_id: str
+    monthly_goal: int
+
+    @field_validator("monthly_goal")
+    @classmethod
+    def validate_goal(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("목표 매출은 0보다 커야 합니다.")
+        return v
+
+
+@router.post("/goal", status_code=201)
+async def set_monthly_goal(req: GoalRequest):
+    """월 목표 매출 저장 (profiles.profile_meta.monthly_sales_goal)."""
+    sb = get_supabase()
+    try:
+        profile = sb.table("profiles").select("profile_meta").eq("id", req.account_id).execute()
+        meta = (profile.data or [{}])[0].get("profile_meta") or {}
+        meta["monthly_sales_goal"] = req.monthly_goal
+        sb.table("profiles").update({"profile_meta": meta}).eq("id", req.account_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"저장 실패: {e}")
+
+    return {"data": {"monthly_goal": req.monthly_goal}, "error": None, "meta": {}}
+
+
+@router.get("/goal")
+async def get_monthly_goal(
+    account_id: str = Query(...),
+    year: int = Query(default=0),
+    month: int = Query(default=0),
+):
+    """월 목표 대비 현재 달성률."""
+    today = date.today()
+    y = year or today.year
+    m = month or today.month
+
+    sb = get_supabase()
+    try:
+        profile = sb.table("profiles").select("profile_meta").eq("id", account_id).execute()
+        meta = (profile.data or [{}])[0].get("profile_meta") or {}
+        goal = int(meta.get("monthly_sales_goal", 0))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"목표 조회 실패: {e}")
+
+    cur_start, cur_end = _month_range(y, m)
+    try:
+        current = _fetch_sales_total(sb, account_id, cur_start, cur_end)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"매출 조회 실패: {e}")
+
+    achievement_rate = round(current / goal * 100, 1) if goal > 0 else None
+
+    return {
+        "data": {
+            "monthly_goal":     goal,
+            "current_sales":    current,
+            "achievement_rate": achievement_rate,
+            "remaining":        max(goal - current, 0) if goal > 0 else None,
+        },
+        "error": None,
+        "meta": {"period": f"{y}-{m:02d}"},
     }

@@ -37,6 +37,7 @@ import {
   type MenuAnalysisPayload,
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
+import MenuListPanel from "@/components/sales/MenuListPanel";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useNodeDetail } from "./NodeDetailContext";
@@ -1094,6 +1095,13 @@ export const NodeDetailModal = () => {
                 {artifact.type === "revenue_entry" && accountId && (
                   <Section>
                     <RevenueStatsPanel accountId={accountId} />
+                  </Section>
+                )}
+
+                {/* MENU LIST 패널 — menu_list artifact 카드 클릭 시 표시 */}
+                {artifact.type === "menu_list" && accountId && (
+                  <Section>
+                    <MenuListPanel accountId={accountId} />
                   </Section>
                 )}
 

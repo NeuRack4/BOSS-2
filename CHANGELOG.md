@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — feature/sales-menu-pricing (Sales 메뉴 마스터 + 벤치마킹 + 목표 달성률)
+
+### Added — DB
+
+- **`supabase/migrations/029_menus.sql`** — `menus` 테이블 신설. `account_id / name / category / price / cost_price / is_active / memo` + RLS + `unique(account_id, name)` 인덱스.
+- **`supabase/migrations/030_sales_timeslot.sql`** — `sales_records.time_slot` 컬럼 추가 (`오전 / 오후 / 저녁 / null`).
+
+### Added — Backend
+
+- **`backend/app/routers/menus.py`** — `/api/menus` CRUD 4종 (POST · GET · PATCH · DELETE). GET은 카테고리별 그룹화 + 마진율 자동 계산 포함.
+- **`backend/app/agents/_sales/_menu_manager.py`** — `upsert_menu` (정규화 이름 비교·기존 값 보존·카테고리 자동 추론) · `delete_menu` · `list_menus_with_profit` · `upsert_menu_list_artifact` (Pricing 서브허브에 `menu_list` artifact upsert — `_revenue.py` 패턴 동일).
+- **`backend/app/routers/stats.py`** — `/api/stats/personal-benchmark` (지난달·전년 동월 비교 + 최근 8주 요일별 분석) · `/api/stats/goal` POST/GET (월 목표 매출 설정 + 달성률).
+- **`backend/app/agents/sales.py`** — `sales_menu_upsert` · `sales_menu_list` · `sales_menu_delete` capability 3종 추가. `menu_list` 타입을 `VALID_TYPES` + `_TYPE_TO_SUBHUB("Pricing")` 에 등록. 원가 미입력 시 채팅 유도 문구 자동 삽입.
+
+### Added — Frontend
+
+- **`frontend/components/sales/MenuListPanel.tsx`** — Pricing 서브허브 `menu_list` artifact 카드 클릭 시 렌더. 카테고리 요약 헤더(개수 + 평균 마진율) · 마진율 게이지바(60%↑초록/40%↑노랑/이하빨강) · 원가 미입력 경고 뱃지 + 인라인 원가 입력(PATCH 즉시 반영) + 챗봇 유도 힌트.
+
+### Changed — Backend
+
+- **`backend/app/main.py`** — `menus` 라우터 등록.
+- **`backend/app/agents/sales.py`** — `run_menu_upsert` 응답 개선: 신규/수정/변경없음 3케이스 명확히 분리. 가격·원가 각각 변경 감지 후 `변경사항: 원가 0원 → 3,000원` 형식으로 표시.
+
+### Changed — Frontend
+
+- **`frontend/components/sales/RevenueStatsPanel.tsx`** — `personal-benchmark` + `goal` API 병렬 fetch 추가. 목표 달성률 게이지바 + 나 vs 과거의 나 비교 카드(지난달·전년 동월 %) + 최고 요일 표시.
+- **`frontend/components/detail/NodeDetailModal.tsx`** — `artifact.type === "menu_list"` 조건 추가 → `MenuListPanel` 렌더.
+
 ## [1.4.2] — feature-signinup (Sign up 페이지 신설 + Sign in·헤더·대시보드 UI 전면 리프레시)
 
 ### Added — Auth 페이지
