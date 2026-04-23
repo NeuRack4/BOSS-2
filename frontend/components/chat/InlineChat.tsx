@@ -331,18 +331,11 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#7977a0",
     bg: "#c8c7d6",
     items: [
-      { name: "근로계약서", prompt: "근로계약서 초안 작성해줘" },
-      { name: "임대차 계약서", prompt: "임대차 계약서 작성해줘" },
-      { name: "용역 계약서", prompt: "용역 계약서 작성해줘" },
-      { name: "NDA", prompt: "NDA 계약서 작성해줘" },
-      { name: "견적서", prompt: "견적서 만들어줘" },
-      { name: "제안서", prompt: "제안서 작성해줘" },
-      { name: "공지문", prompt: "공지문 작성해줘" },
-      { name: "계약서 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
+      { name: "서류 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
       { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
       { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
-      { name: "급여명세서", prompt: "급여명세서 만들어줘" },
-      { name: "세무 캘린더", prompt: "세무 캘린더 만들어줘" },
+      { name: "급여 명세서", prompt: "급여명세서 만들어줘" },
+      { name: "세무 자문", prompt: "세무 자문 받고 싶어" },
       { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
     ],
   },
@@ -352,7 +345,7 @@ const SUGGESTED_POOL: Record<string, string[]> = {
   recruitment: ["채용 공고 초안 작성해줘"],
   marketing: ["인스타 포스트 3개 기획해줘"],
   sales: ["이번 달 매출 요약 정리해줘"],
-  documents: ["근로계약서 초안 작성해줘"],
+  documents: ["업로드한 계약서 공정성 분석해줘"],
 };
 
 const DOMAIN_ORDER = [
