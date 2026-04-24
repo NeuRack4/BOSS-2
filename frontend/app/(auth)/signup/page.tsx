@@ -555,14 +555,7 @@ const SIGNUP_CSS = `
   background: currentColor;
   opacity: .7;
 }
-.boss-signup .tile[class*="tint-"] .agent-row {
-  background: color-mix(in oklab, #fff 35%, transparent);
-  border-color: color-mix(in oklab, currentColor 15%, transparent);
-}
-.boss-signup .tile[class*="tint-"] .agent-row .name { color: inherit; }
-.boss-signup .tile[class*="tint-"] .agent-row .avatar { background: currentColor; color: var(--bg-tile); }
-.boss-signup .tile[class*="tint-"] .agent-row .status { background: currentColor; }
-.boss-signup .tile[class*="tint-"] .agent-row .status.idle { background: color-mix(in oklab, currentColor 40%, transparent); }
+
 .boss-signup .tile[class*="tint-"] .pill { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
 .boss-signup .tile[class*="tint-"] .pill .dot { background: currentColor; }
 .boss-signup .tile[class*="tint-"] .glyph { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
@@ -592,7 +585,7 @@ const SIGNUP_CSS = `
 .boss-signup .t-form     { grid-column: span 5; grid-row: span 6; padding: 32px; display: flex; flex-direction: column; }
 .boss-signup .t-hero     { grid-column: span 7; grid-row: span 3; }
 .boss-signup .t-stats    { grid-column: span 3; grid-row: span 3; }
-.boss-signup .t-agents   { grid-column: span 4; grid-row: span 3; }
+.boss-signup .t-agents   { grid-column: span 4; grid-row: span 3; display: flex; flex-direction: column; }
 
 .boss-signup .form-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
@@ -870,40 +863,7 @@ const SIGNUP_CSS = `
   justify-content: space-between;
 }
 
-.boss-signup .agent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-}
-.boss-signup .agent-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  background: var(--bg-tile-2);
-  border-radius: 10px;
-  font-size: 12.5px;
-}
-.boss-signup .agent-row .avatar {
-  width: 20px; height: 20px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--bg);
-  display: grid; place-items: center;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.boss-signup .agent-row .name { font-weight: 500; color: var(--ink); }
-.boss-signup .agent-row .role { color: var(--muted); margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; }
-.boss-signup .agent-row .status {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--ink);
-  margin-left: 6px;
-}
-.boss-signup .agent-row .status.idle { background: var(--muted-2); }
+
 
 .boss-signup .pill {
   display: inline-flex;
