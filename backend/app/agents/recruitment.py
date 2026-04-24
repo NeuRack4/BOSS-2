@@ -21,8 +21,6 @@ from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
 from app.agents.orchestrator import (
     CLARIFY_RULE,
-    NICKNAME_RULE,
-    PROFILE_RULE,
     ARTIFACT_RULE,
 )
 from app.agents._feedback import feedback_context
@@ -142,7 +140,7 @@ style:    따뜻한 브라운 톤의 카페 분위기, 미니멀 타이포
 - type: onboarding_checklist | onboarding_plan | education_material 중 하나
 - 업종과 직책을 반영한 실용적 내용 (일반적 항목 + 업종 특화 항목 포함)
 
-""" + ARTIFACT_RULE + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
+""" + ARTIFACT_RULE + CLARIFY_RULE + """
 
 [채용공고 Placeholder 절대 금지 — 최우선]
 확정되지 않은 식별 정보(매장명·주소·연락처·가게명·회사명 등) 를 **임의 값으로 채우거나 환각하지 마세요**.
