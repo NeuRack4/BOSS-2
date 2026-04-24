@@ -643,6 +643,7 @@ async def run_cost_entry(
     history: list[dict],
     long_term_context: str = "",
     rag_context: str = "",
+    raw_text: str | None = None,
 ) -> str:
     """비용 입력 의도 → vague_cost 로직 직접 실행 (GPT 우회)."""
     log.info("[SALES] run_cost_entry 진입 | account=%s", account_id)
