@@ -230,23 +230,25 @@ export default function LoginPage() {
           </section>
 
           {/* WELCOME */}
-          <section className="tile t-welcome tint-peach">
-            <div className="welcome-top">
-              <span className="pill">
-                <span className="dot" />
+          <section className="tile t-welcome t-photo">
+            <div className="photo-overlay" />
+            <div className="photo-streak" />
+            <div className="photo-content">
+              <span className="pill pill-light">
+                <span className="dot-green" />
                 Returning member
               </span>
-              <div className="welcome-avatar">B</div>
-            </div>
-            <h2 className="welcome-title">
-              Welcome
-              <br />
-              <em>back.</em>
-            </h2>
-            <div className="welcome-bottom">
-              <div className="welcome-meta">
-                <b>BOSS</b> keeps your workspace ready —<br />
-                your agents, schedules and chats are right where you left them.
+              <div>
+                <h2 className="welcome-title">
+                  Welcome
+                  <br />
+                  <em>back.</em>
+                </h2>
+                <div className="welcome-meta">
+                  <b>BOSS</b> keeps your workspace ready —<br />
+                  your agents, schedules and chats are right where you left
+                  them.
+                </div>
               </div>
             </div>
           </section>
@@ -834,4 +836,55 @@ const SIGNIN_CSS = `
   .boss-signin .form-title { font-size: 26px; }
   .boss-signin .welcome-title { font-size: 30px; }
 }
+
+/* Photo background tile */
+.boss-signin .t-photo {
+  background: radial-gradient(ellipse at 75% 35%, #5a4030 0%, #3a2818 40%, #1c1008 100%);
+  border-color: transparent;
+  padding: 0;
+  display: block;
+}
+.boss-signin .t-photo::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(190,140,85,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(230,180,100,0.12) 0%, transparent 45%);
+  pointer-events: none;
+}
+.boss-signin .photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, rgba(16,10,6,0.75) 0%, rgba(16,10,6,0.35) 55%, rgba(16,10,6,0.08) 100%);
+  z-index: 0;
+}
+.boss-signin .photo-streak {
+  position: absolute; top: -30%; right: 18%;
+  width: 160px; height: 200%;
+  background: linear-gradient(168deg, rgba(255,200,100,0.07) 0%, transparent 55%);
+  transform: rotate(12deg);
+  pointer-events: none; z-index: 0;
+}
+.boss-signin .photo-content {
+  position: relative; z-index: 1;
+  padding: 24px; height: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.boss-signin .pill-light {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: rgba(255,253,249,0.65);
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px; letter-spacing: 0.04em;
+}
+.boss-signin .dot-green {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #28c840; flex-shrink: 0;
+}
+.boss-signin .t-welcome .welcome-title { color: #fffdf9; }
+.boss-signin .t-welcome .welcome-title em { color: rgba(255,218,150,0.88); }
+.boss-signin .t-welcome .welcome-meta {
+  color: rgba(255,253,249,0.38); margin-top: 8px;
+}
+.boss-signin .t-welcome .welcome-meta b { color: rgba(255,253,249,0.6); }
 `;
