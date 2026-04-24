@@ -745,6 +745,128 @@ async def run_resume_parse(
     )
 
 
+async def run_resume_interview(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    applicant_name: str,
+    count: int = 7,
+) -> str:
+    """저장된 이력서를 기반으로 맞춤 면접 질문 생성 후 artifact 저장."""
+    sb = get_supabase()
+
+    # account_id 필터 필수 — 최신 파싱 순으로 이름 매칭
+    rows = (
+        sb.table("resumes")
+        .select("*")
+        .eq("account_id", account_id)
+        .order("parsed_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+        or []
+    )
+    resume = next(
+        (r for r in rows if (r.get("applicant") or {}).get("name") == applicant_name),
+        None,
+    )
+    if resume is None:
+        # 이름 정확 매칭 실패 시 파일명으로 폴백
+        resume = next(
+            (r for r in rows if applicant_name in (r.get("file_name") or "")),
+            rows[0] if rows else None,
+        )
+    if resume is None:
+        return f"'{applicant_name}' 이력서를 찾을 수 없습니다. 먼저 이력서를 업로드해주세요."
+
+    applicant = resume.get("applicant") or {}
+    resume_id = resume["id"]
+    name = (applicant.get("name") or "").strip() or applicant_name
+
+    context_lines = [f"지원자 이름: {name}"]
+    if applicant.get("experience"):
+        for e in applicant["experience"]:
+            context_lines.append(
+                f"경력: {e.get('company','')} / {e.get('role','')} / {e.get('period','')} — {e.get('description','')}"
+            )
+    if applicant.get("education"):
+        for ed in applicant["education"]:
+            context_lines.append(f"학력: {ed.get('school','')} {ed.get('major','')} {ed.get('year','')}")
+    if applicant.get("skills"):
+        context_lines.append(f"기술: {', '.join(applicant['skills'])}")
+    if applicant.get("certifications"):
+        context_lines.append(f"자격증: {', '.join(applicant['certifications'])}")
+    if applicant.get("introduction"):
+        context_lines.append(f"자기소개: {applicant['introduction'][:500]}")
+    if applicant.get("desired_position"):
+        context_lines.append(f"희망직종: {applicant['desired_position']}")
+
+    context_text = "\n".join(context_lines)
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": _INTERVIEW_FROM_RESUME_SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"아래 지원자 이력서를 바탕으로 날카로운 면접 질문 {count}개를 생성해주세요.\n\n"
+                    f"{context_text}"
+                ),
+            },
+        ],
+        model="gpt-4o",
+    )
+    questions_text = (resp.choices[0].message.content or "").strip()
+
+    title = f"{name} 면접 질문"
+    payload: dict = {
+        "account_id": account_id,
+        "domains": ["recruitment"],
+        "kind": "artifact",
+        "type": "interview_questions",
+        "title": title,
+        "content": questions_text,
+        "status": "draft",
+        "metadata": {"resume_id": resume_id},
+    }
+    try:
+        result = sb.table("artifacts").insert(payload).execute()
+        if result.data:
+            artifact_id = result.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "recruitment")
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id,
+                        "parent_id": hub_id,
+                        "child_id": artifact_id,
+                        "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id,
+                    "type": "artifact_created",
+                    "domain": "recruitment",
+                    "title": title,
+                    "description": "interview_questions 생성됨",
+                    "metadata": {"artifact_id": artifact_id, "resume_id": resume_id},
+                }).execute()
+            except Exception:
+                pass
+    except Exception:
+        log.warning("[resume_interview] artifact insert failed for applicant=%s", name)
+
+    return (
+        f"**{name}** 이력서 기반 면접 질문 {count}개 생성 완료.\n\n{questions_text}"
+    )
+
+
 async def run_hiring_drive(
     *,
     account_id: str,
