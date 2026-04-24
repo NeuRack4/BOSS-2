@@ -247,62 +247,67 @@ export default function SignupPage() {
           </section>
 
           {/* HERO */}
-          <section className="tile t-hero tint-peach">
-            <div className="hero-top">
-              <span className="pill">
-                <span className="dot" />
-                Private Beta · 2,847 small businesses
-              </span>
-              <div className="glyph" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <rect
-                    x="3"
-                    y="3"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="16"
-                    y="3"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="3"
-                    y="16"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="16"
-                    y="16"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    fill="currentColor"
-                  />
-                </svg>
+          <section className="tile t-hero t-photo">
+            <div className="photo-overlay" />
+            <div className="photo-streak" />
+            <div className="photo-content">
+              <div className="hero-top">
+                <span className="pill pill-light">
+                  <span className="dot-green" />
+                  Private Beta · 2,847 small businesses
+                </span>
+                <div className="glyph glyph-light" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <rect
+                      x="3"
+                      y="3"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="16"
+                      y="3"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="3"
+                      y="16"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="16"
+                      y="16"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      fill="rgba(255,253,249,0.55)"
+                    />
+                  </svg>
+                </div>
               </div>
-            </div>
-            <h1 className="hero-title">
-              The operating layer
-              <br />
-              for <em>your entire</em> shop floor.
-            </h1>
-            <div className="hero-bottom">
-              <div className="hero-meta">
-                <b>BOSS</b> connects hiring, marketing, sales and paperwork
+              <h1 className="hero-title hero-title-light">
+                The operating layer
                 <br />
-                into one agentic workspace — built for owners, not enterprises.
+                for <em>your entire</em> shop floor.
+              </h1>
+              <div className="hero-bottom">
+                <div className="hero-meta hero-meta-light">
+                  <b>BOSS</b> connects hiring, marketing, sales and paperwork
+                  <br />
+                  into one agentic workspace — built for owners, not
+                  enterprises.
+                </div>
               </div>
             </div>
           </section>
@@ -976,4 +981,57 @@ const SIGNUP_CSS = `
   .boss-signup .form-title { font-size: 26px; }
   .boss-signup .hero-title { font-size: 32px; }
 }
+
+/* Photo background tile */
+.boss-signup .t-photo {
+  background: radial-gradient(ellipse at 75% 35%, #5a4030 0%, #3a2818 40%, #1c1008 100%);
+  border-color: transparent;
+  padding: 0;
+  display: block;
+}
+.boss-signup .t-photo::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(190,140,85,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(230,180,100,0.12) 0%, transparent 45%);
+  pointer-events: none;
+}
+.boss-signup .photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, rgba(16,10,6,0.75) 0%, rgba(16,10,6,0.35) 55%, rgba(16,10,6,0.08) 100%);
+  z-index: 0;
+}
+.boss-signup .photo-streak {
+  position: absolute; top: -30%; right: 18%;
+  width: 160px; height: 200%;
+  background: linear-gradient(168deg, rgba(255,200,100,0.07) 0%, transparent 55%);
+  transform: rotate(12deg);
+  pointer-events: none; z-index: 0;
+}
+.boss-signup .photo-content {
+  position: relative; z-index: 1;
+  padding: 24px; height: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.boss-signup .pill-light {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: rgba(255,253,249,0.65);
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px; letter-spacing: 0.04em;
+}
+.boss-signup .dot-green {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #28c840; flex-shrink: 0;
+}
+.boss-signup .glyph-light { border-color: rgba(255,255,255,0.15); }
+.boss-signup .hero-title-light { color: #fffdf9; }
+.boss-signup .hero-title-light em {
+  color: rgba(255,218,150,0.88);
+  font-style: italic;
+}
+.boss-signup .hero-meta-light { color: rgba(255,253,249,0.42); }
+.boss-signup .hero-meta-light b { color: rgba(255,253,249,0.6); }
 `;
