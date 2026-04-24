@@ -1,6 +1,6 @@
 # BOSS-2
 
-![Dashboard](./docs/dashboard-layout.png)
+![Dashboard](./docs/dashboard-layout-copy.png)
 
 ![version](https://img.shields.io/badge/version-2.7.0-blue)
 
