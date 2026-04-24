@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Bizinfo (기업마당 공공 API)
     bizinfo_api_key: str = ""
 
+    # PortOne V2 결제
+    portone_api_secret: str = ""          # PortOne 대시보드 → 결제연동 → API Keys
+    portone_store_id:   str = ""          # PortOne 대시보드 → 내 식별코드
+
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     memory_compress_threshold: int = 20  # 20턴 초과 시 압축

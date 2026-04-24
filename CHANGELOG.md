@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] — 2026-04-24
+
+### Added — Sales (feature/sales-rag-agentic-loop)
+
+- **Sales RAG Retriever** (`backend/app/agents/_sales/_retriever.py` 신규)
+  - `retrieve_sales_context()` — BAAI/bge-m3 1024차원 임베딩으로 질문 벡터화
+  - Supabase `match_sales_embeddings` RPC 호출 → `source_type='sales'` 임베딩 유사도 검색
+  - LangSmith `@traceable` 추적 포함
+- **Sales Agentic Loop** (`backend/app/agents/_sales/_graph.py` 신규)
+  - LangGraph `StateGraph` 기반 4노드 파이프라인:
+    - `fetch_data` — sales_records·cost_records DB 수집
+    - `check_data` — LLM 없이 Python 조건(≥3건)으로 데이터 충분 여부 판단 (비용 0)
+    - `retrieve_more` — 데이터 부족 시 RAG로 과거 유사 데이터 보강
+    - `generate` — generate_sales_insight() 호출
+  - 무한 루프 방지: iteration ≥ 2이면 강제 generate
+  - 각 노드 LangSmith `@traceable` 추적
+- **Supabase 함수** (`035_match_sales_embeddings.sql`)
+  - `match_sales_embeddings(vector(1024), uuid, int)` — 코사인 유사도 기반 검색
+  - `source_type = 'sales'` 필터 적용 (328건 인덱싱 확인)
+
+### Changed
+
+- `run_sales_report()` — LangGraph `ainvoke` 방식으로 전환. artifact 저장·Kanban·NodeDetailModal metadata 로직 완전 보존
+- `run()` — 오케스트레이터가 rag_context 미전달 시 `retrieve_sales_context()` 자동 호출
+
+---
+
+## [2.5.0] — 2026-04-24
+
+### Added — Sales (feature/sales-stats-enhancement)
+
+- **카테고리별 매출 비중** — `GET /api/stats/category-breakdown` 신규. 이번달 카테고리별 금액·비중(%) 집계. RevenueStatsPanel에 가로 바 차트로 표시.
+- **시간대별 매출** — `GET /api/stats/hourly` 신규. `created_at` KST 변환 후 0~23시별 합산, 피크 시간대 표시. 새벽·오전·점심·오후·저녁·심야 6구간 색상 구분 차트.
+- **요일별 매출 패턴** — 최근 8주 요일별 평균 수평 바 차트. 최고 요일 주황 강조 + "최근 8주 기준" 명시. 시간대별 매출 하단 독립 섹션으로 배치.
+- **나 vs 과거의 나 — AI 벤치마킹 전면 개편**
+  - `GET /api/stats/available-compare-periods` 신규 — 보유 데이터 기간 기반 비교 가능 기간 목록 (실제 연월 표시, 데이터 부족 ⚠️ 경고 포함)
+  - `GET /api/stats/personal-benchmark` 개편 — `compare_months_ago` 파라미터로 비교 기간 선택, 요일 패턴 집계 윈도우 adaptive 처리
+  - `GET /api/stats/benchmark-insight` 고도화 — 매출·비용·순이익·메뉴 TOP3·카테고리·목표 달성률 종합 데이터를 GPT-4o-mini에 전달, JSON 구조화 분석 출력 (`summary` / `highlights` 3항목 / `action`)
+  - 비교 기간 드롭박스 — 선택 시 비교 카드·AI 분석 즉시 재조회
+  - AI 인사이트 카드 — ✅ 잘 된 점 / ⚠️ 주의할 점 / 💡 발견한 패턴 타입별 소제목 + 배경색 구분
+  - 성장 단계 배지 — 🌱 창업 초기 / 📈 성장 중 / 💪 안정 운영 (데이터 보유 기간 기준)
+  - 평가 단계 기준 안내 — 접기/펼치기 토글, 현재 단계 강조 표시
+  - 전년 동월 비교 안내 팁 — 계절 요인 설명 + 1년치 미보유 시 활성화 안내
+- **통계 섹션 순서 재구성** — 이번달 목표 → 일별 매출 → 카테고리 비중 → 시간대별 → 요일 패턴 → 나 vs 과거의 나
+
+### Changed
+
+- `GET /api/stats/personal-benchmark` — 응답 포맷 변경 (`vs_last_month`/`vs_last_year` → `vs_compare` 단일 비교, `dow_reliable` 추가)
+- LangSmith `@traceable` 데코레이터 — `stats.benchmark_insight.llm` run 추적 추가
+- AI 분석 모델 — GPT-4o → **GPT-4o-mini** 변경 (비용 절감)
+
+### Fixed
+
+- 비교 기간 드롭박스 변경 시 재조회 미동작 버그 수정 (`prevPeriodRef` 방식으로 교체)
+- `personal-benchmark` 에러 시 `raise HTTPException` 대신 빈 데이터 반환으로 graceful 처리
+
+---
+
 ## [2.4.0] — 2026-04-24
 
 ### Added

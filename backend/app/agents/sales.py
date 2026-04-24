@@ -474,14 +474,30 @@ async def run_sales_report(
     target: str | None = None,
     kpi: list[str] | None = None,
 ) -> str:
-    log.info("[SALES] run_sales_report 진입 | account=%s period=%s", account_id, period)
-    from app.agents._sales._insights import generate_sales_insight
+    log.info("[SALES] run_sales_report 진입 (LangGraph) | account=%s period=%s",
+             account_id, period)
 
-    result = await generate_sales_insight(
-        account_id=account_id,
-        period=period,
-        target=target,
-    )
+    result: dict = {}
+    try:
+        from app.agents._sales._graph import build_sales_graph
+        graph = build_sales_graph()
+        final_state = await graph.ainvoke({
+            "account_id":   account_id,
+            "message":      message,
+            "period":       period,
+            "sales_data":   [],
+            "cost_data":    [],
+            "rag_context":  rag_context,
+            "iteration":    0,
+            "data_ok":      False,
+            "final_result": {},
+        })
+        result = final_state["final_result"]
+        log.info("[SALES] LangGraph 완료 | period=%s", period)
+    except Exception as _graph_err:
+        log.error("[SALES] LangGraph 실패 → 기존 방식으로 fallback: %s", _graph_err)
+        from app.agents._sales._insights import generate_sales_insight
+        result = await generate_sales_insight(account_id=account_id, period=period, target=target)
 
     title = f"{period} 매출 인사이트"
     artifact_block = (
@@ -1560,6 +1576,14 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
+    # RAG: 오케스트레이터가 컨텍스트를 넘기지 않은 경우 자동 검색
+    if not rag_context:
+        try:
+            from app.agents._sales._retriever import retrieve_sales_context
+            rag_context = await retrieve_sales_context(account_id, message)
+        except Exception as _e:
+            log.warning("[SALES] RAG 검색 실패 (무시하고 계속): %s", _e)
+
     # 비용 입력 모드: 직전 안내 후 사용자가 실제 데이터를 보낸 경우
     if _last_message_was_cost_prompt(history) and not _VAGUE_COST_RE.search(message):
         parsed_items = await _parse_cost_from_message(message)

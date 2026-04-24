@@ -30,6 +30,30 @@ log = logging.getLogger(__name__)
 _GRAPH_BASE = "https://graph.facebook.com/v19.0"
 
 
+def _get_instagram_credentials(account_id: str) -> dict:
+    """DB에서 account_id별 Instagram 자격증명 로드. 없으면 settings fallback."""
+    from app.core.supabase import get_supabase
+    from app.core.config import settings
+    try:
+        sb = get_supabase()
+        res = (
+            sb.table("platform_credentials")
+            .select("credentials")
+            .eq("account_id", account_id)
+            .eq("platform", "instagram")
+            .execute()
+        )
+        if res.data:
+            return res.data[0]["credentials"]
+    except Exception:
+        pass
+    return {
+        "meta_access_token":    settings.meta_access_token,
+        "meta_ig_access_token": settings.meta_ig_access_token,
+        "instagram_user_id":    settings.instagram_user_id,
+    }
+
+
 async def _download_image(url: str) -> bytes:
     """이미지 URL에서 바이트 다운로드."""
     async with httpx.AsyncClient(timeout=30) as client:
@@ -239,18 +263,15 @@ async def publish_reels(
         hashtags:      해시태그 리스트 (caption 뒤에 자동 append)
         share_to_feed: 피드에도 함께 노출할지 여부 (기본 True)
     """
-    from app.core.config import settings
+    creds = _get_instagram_credentials(account_id)
+    ig_user_id   = creds.get("instagram_user_id", "")
+    access_token = creds.get("meta_access_token", "")
 
-    if not settings.meta_access_token or not settings.instagram_user_id:
-        raise RuntimeError(
-            "META_ACCESS_TOKEN 또는 INSTAGRAM_USER_ID 환경변수가 설정되지 않았습니다."
-        )
+    if not access_token or not ig_user_id:
+        raise RuntimeError("Instagram 연결 설정이 없습니다. 플랫폼 연결 설정에서 Instagram을 연결해주세요.")
 
     tag_str = " ".join(f"#{t}" for t in hashtags) if hashtags else ""
     full_caption = f"{caption}\n\n{tag_str}".strip() if tag_str else caption
-
-    ig_user_id = settings.instagram_user_id
-    access_token = settings.meta_access_token
 
     log.info("[instagram] creating reels container: %s", video_url[:80])
     creation_id = await _create_reels_container(
@@ -289,12 +310,12 @@ async def publish_post(
         caption:    본문 캡션
         hashtags:   해시태그 리스트 (caption 뒤에 자동 append)
     """
-    from app.core.config import settings
+    creds = _get_instagram_credentials(account_id)
+    ig_user_id   = creds.get("instagram_user_id", "")
+    access_token = creds.get("meta_access_token", "")
 
-    if not settings.meta_access_token or not settings.instagram_user_id:
-        raise RuntimeError(
-            "META_ACCESS_TOKEN 또는 INSTAGRAM_USER_ID 환경변수가 설정되지 않았습니다."
-        )
+    if not access_token or not ig_user_id:
+        raise RuntimeError("Instagram 연결 설정이 없습니다. 플랫폼 연결 설정에서 Instagram을 연결해주세요.")
     if not image_urls:
         raise RuntimeError("이미지를 최소 1장 선택해주세요.")
     if len(image_urls) > 10:
@@ -302,9 +323,6 @@ async def publish_post(
 
     tag_str = " ".join(f"#{t}" for t in hashtags) if hashtags else ""
     full_caption = f"{caption}\n\n{tag_str}".strip() if tag_str else caption
-
-    ig_user_id = settings.instagram_user_id
-    access_token = settings.meta_access_token
 
     # 1) 모든 이미지를 4:5 portrait 크롭 후 Storage에 영구 저장
     log.info("[instagram] saving %d image(s) to storage", len(image_urls))
