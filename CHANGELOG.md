@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] — 2026-04-24
+
+### Changed — Sales (feature/sales_shortmenu)
+
+- **Sales 숏메뉴 정비** — 미구현 항목(비용 분석) 제거, 메뉴 관리·메뉴 수익성 분석·고객 분석 추가.
+
+---
+
 ## [2.9.0] — 2026-04-24
 
 ### Added — Recruitment (feature-rec)
