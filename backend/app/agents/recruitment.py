@@ -53,6 +53,7 @@ log = logging.getLogger("boss2.recruitment")
 _GENERIC_VALID_TYPES: tuple[str, ...] = (
     "job_posting",
     "interview_questions",
+    "interview_evaluation",
     "checklist",
     "guide",
     "hiring_drive",
@@ -719,7 +720,7 @@ async def run_interview(
     """직종·레벨별 면접 질문 세트 생성."""
     synthetic = (
         f"{position} 직무의 {level} 지원자용 면접 질문 {count}개를 생성해주세요. "
-        "추가 질문 없이 바로 [ARTIFACT] 블록을 type=interview_questions 로 저장하세요.\n\n"
+        "추가 질문 없이 바로 [ARTIFACT] 블록을 type=interview_questions, sub_domain=Interviews 로 저장하세요.\n\n"
         f"원본 사용자 요청: {message}"
     )
     return await run(synthetic, account_id, history, rag_context, long_term_context)
@@ -974,7 +975,7 @@ async def run_resume_interview(
         if result.data:
             artifact_id = result.data[0]["id"]
             record_artifact_for_focus(artifact_id)
-            hub_id = pick_sub_hub_id(sb, account_id, "recruitment")
+            hub_id = pick_sub_hub_id(sb, account_id, "recruitment", prefer_keywords=("Interviews",))
             if hub_id:
                 try:
                     sb.table("artifact_edges").insert({
@@ -1096,6 +1097,115 @@ async def run_onboarding(
             "불명확하면 [CHOICES] 로 먼저 물어보고, 명확하면 바로 [ARTIFACT] 블록(sub_domain=Onboarding)으로 저장하세요.\n\n"
             f"원본 사용자 요청: {message}"
         )
+    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+@traceable(name="recruitment.run_interview_evaluation", run_type="chain")
+async def run_interview_evaluation(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    applicant_name: str,
+    position: str | None = None,
+    custom_categories: list[str] | None = None,
+    weights: dict[str, int] | None = None,
+) -> str:
+    """이력서 기반 맞춤 면접 평가표 생성 (배점 커스터마이징 지원)."""
+    import json as _json
+
+    sb = get_supabase()
+    rows = (
+        sb.table("resumes")
+        .select("*")
+        .eq("account_id", account_id)
+        .order("parsed_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+        or []
+    )
+    resume = next(
+        (r for r in rows if (r.get("applicant") or {}).get("name") == applicant_name),
+        None,
+    )
+    if resume is None:
+        resume = next(
+            (r for r in rows if applicant_name in (r.get("file_name") or "")),
+            None,
+        )
+    if resume is None:
+        return (
+            f"'{applicant_name}' 이력서를 찾을 수 없습니다. "
+            "먼저 이력서를 업로드해주세요.\n\n"
+            "[CHOICES]\n이력서 파일 업로드할게요\n[/CHOICES]"
+        )
+
+    applicant = resume.get("applicant") or {}
+    name = (applicant.get("name") or "").strip() or applicant_name
+    pos_label = position or applicant.get("desired_position") or "해당 직종"
+
+    context_lines = [f"지원자: {name}", f"지원 직종: {pos_label}"]
+    for e in applicant.get("experience") or []:
+        context_lines.append(
+            f"경력: {e.get('company','')} / {e.get('role','')} / {e.get('period','')} — {e.get('description','')}"
+        )
+    for ed in applicant.get("education") or []:
+        context_lines.append(f"학력: {ed.get('school','')} {ed.get('major','')} {ed.get('year','')}")
+    if applicant.get("skills"):
+        context_lines.append(f"기술: {', '.join(applicant['skills'])}")
+    if applicant.get("certifications"):
+        context_lines.append(f"자격증: {', '.join(applicant['certifications'])}")
+    if applicant.get("introduction"):
+        context_lines.append(f"자기소개: {applicant['introduction'][:500]}")
+    context_text = "\n".join(context_lines)
+
+    default_categories = {"기술 역량": 50, "태도·성실성": 30, "소통 능력": 20}
+    if weights:
+        eval_weights = weights
+    elif custom_categories:
+        per = 100 // len(custom_categories)
+        remainder = 100 - per * len(custom_categories)
+        eval_weights = {c: per for c in custom_categories}
+        first = next(iter(eval_weights))
+        eval_weights[first] += remainder
+    else:
+        eval_weights = default_categories
+
+    weights_desc = "\n".join(f"- {cat}: {pct}%" for cat, pct in eval_weights.items())
+    custom_note = ""
+    if custom_categories:
+        custom_note = f"\n커스텀 평가 항목: {', '.join(custom_categories)}"
+
+    synthetic = (
+        f"아래 지원자의 면접 평가표를 작성해주세요.\n\n"
+        f"{context_text}\n\n"
+        f"평가 항목 및 배점:\n{weights_desc}{custom_note}\n\n"
+        "출력 형식 (반드시 준수):\n"
+        f"## 면접 평가표 — {name} / {pos_label}\n\n"
+        "**면접일:** ______  **면접관:** ______\n\n"
+        "### 종합 점수표\n\n"
+        "| 평가 항목 | 배점 | 점수(1-5점) | 가중 점수 | 메모 |\n"
+        "|---|---|---|---|---|\n"
+        "[각 항목 행 기입 — 점수/가중 점수 칸은 빈칸]\n\n"
+        "**총점:** ___ / 100점\n\n"
+        "---\n\n"
+        "[각 평가 항목별 섹션 반복]\n"
+        "### [항목명] ([배점]%)\n"
+        "**평가 기준** (5→1점 서술)\n"
+        "**이력서 기반 체크포인트** (이력서 내용 기반 구체적 확인 사항)\n"
+        "**면접관 코멘트:** ___________________________________________\n\n"
+        "---\n\n"
+        "### 종합 의견\n"
+        "**강점:** ___________________________________________\n"
+        "**우려사항:** ___________________________________________\n"
+        "**채용 추천도:** □ 강력 추천  □ 추천  □ 보류  □ 비추천\n\n"
+        "평가표를 [ARTIFACT] 블록의 type=interview_evaluation, sub_domain=Interviews 로 저장하세요.\n\n"
+        f"원본 요청: {message}"
+    )
+
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
@@ -1529,6 +1639,40 @@ def describe(account_id: str) -> list[dict]:
                         "default": 7,
                         "minimum": 3,
                         "maximum": 15,
+                    },
+                },
+                "required": ["applicant_name"],
+            },
+        },
+        {
+            "name": "recruit_interview_evaluation",
+            "description": (
+                "저장된 이력서를 바탕으로 지원자 맞춤 면접 평가표를 생성하고 artifact 로 저장한다. "
+                "상단 종합 점수표(배점·채점란)와 하단 역량별 평가 기준·코멘트란으로 구성. "
+                "평가 항목·배점 비율 커스터마이징 지원. Interviews 서브허브에 자동 분류. "
+                "사용자가 '면접 평가표/평가 시트/평가 양식' 을 요청할 때 호출."
+            ),
+            "handler": run_interview_evaluation,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "applicant_name": {
+                        "type": "string",
+                        "description": "평가표를 만들 지원자 이름 (이력서에서 파싱된 이름)",
+                    },
+                    "position": {
+                        "type": "string",
+                        "description": "지원 직종 (선택 — 이력서에 희망직종이 있으면 생략 가능)",
+                    },
+                    "custom_categories": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "커스텀 평가 항목 목록 (생략 시 기본 3항목 사용)",
+                    },
+                    "weights": {
+                        "type": "object",
+                        "description": "항목별 배점 비율 (예: {\"기술역량\": 50, \"태도\": 30, \"소통\": 20}, 합계 100)",
+                        "additionalProperties": {"type": "integer"},
                     },
                 },
                 "required": ["applicant_name"],
