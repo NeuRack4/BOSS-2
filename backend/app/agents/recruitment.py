@@ -736,9 +736,26 @@ async def run_resume_parse(
             exp_str = "경력 정보 없음"
         lines.append(f"- **{s['name']}**: {exp_str}")
 
-    choices_items = "\n".join(f"{s['name']} 면접 질문 생성" for s in saved)
     summary = "\n".join(lines)
 
+    # 사용자가 면접 질문을 원하면 파싱 직후 바로 생성 (2단계 → 1단계 통합)
+    interview_kw = ("면접", "질문", "인터뷰", "interview")
+    wants_interview = any(kw in message for kw in interview_kw)
+    if wants_interview:
+        parts = [f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n---\n"]
+        for s in saved:
+            questions = await run_resume_interview(
+                account_id=account_id,
+                message=message,
+                history=history,
+                long_term_context=long_term_context,
+                rag_context=rag_context,
+                applicant_name=s["name"],
+            )
+            parts.append(questions)
+        return "\n\n".join(parts)
+
+    choices_items = "\n".join(f"{s['name']} 면접 질문 생성" for s in saved)
     return (
         f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n"
         f"[CHOICES]\n{choices_items}\n다른 이력서도 올릴게요\n[/CHOICES]"

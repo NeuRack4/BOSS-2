@@ -659,10 +659,11 @@ async def _dispatch_via_planner(
     if _uploads:
         names = ", ".join(u.get("original_name") or u.get("title") or "파일" for u in _uploads)
         upload_hint = (
-            f"[첨부 파일 감지 — 라우팅 필수 힌트]\n"
+            f"[첨부 파일 감지 — 라우팅 OVERRIDE]\n"
             f"이번 요청에 파일 {len(_uploads)}개가 첨부돼 있습니다: {names}\n"
-            "사용자가 이력서·지원서·지원자 분석/파싱을 요청하면 **recruit_resume_parse** 를 즉시 dispatch 하세요. "
-            "required 파라미터 없음 — 파일 내용은 contextvar 로 이미 전달됩니다."
+            "⚠️ 파일이 첨부된 경우 사용자 메시지 내용과 무관하게 반드시 **recruit_resume_parse** 를 즉시 dispatch 하세요. "
+            "'면접 질문' 등 다른 의도가 있어도 파싱 없이 바로 interview 를 생성하면 안 됩니다. "
+            "recruit_resume_parse 는 required 파라미터 없음 — 파일 내용은 contextvar 로 이미 전달됩니다."
         )
 
     result = await _planner.plan(
