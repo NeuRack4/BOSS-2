@@ -898,6 +898,26 @@ async def run_resume_interview(
     resume_id = resume["id"]
     name = (applicant.get("name") or "").strip() or applicant_name
 
+    # 동일 resume_id 에 대해 2분 이내 중복 생성 방지 (planner 이중 dispatch 대응)
+    from datetime import datetime, timedelta, timezone as _tz
+    cutoff = (datetime.now(_tz.utc) - timedelta(minutes=2)).isoformat()
+    try:
+        dup = (
+            sb.table("artifacts")
+            .select("id,content")
+            .eq("account_id", account_id)
+            .eq("type", "interview_questions")
+            .filter("metadata->>resume_id", "eq", resume_id)
+            .gte("created_at", cutoff)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if dup:
+            return f"**{name}** 이력서 기반 면접 질문 {count}개 생성 완료.\n\n{dup[0]['content']}"
+    except Exception:
+        pass
+
     context_lines = [f"지원자 이름: {name}"]
     if applicant.get("experience"):
         for e in applicant["experience"]:
@@ -1469,7 +1489,9 @@ def describe(account_id: str) -> list[dict]:
             "description": (
                 "구직자 이력서 파일을 파싱해 DB에 저장한다. "
                 "사용자가 이력서 파일을 업로드하고 파싱/분석을 요청할 때 호출. "
-                "upload_payload 또는 upload_payloads contextvar 에 파일 내용이 있어야 한다."
+                "upload_payload 또는 upload_payloads contextvar 에 파일 내용이 있어야 한다. "
+                "⚠️ 사용자 메시지에 면접/질문 키워드가 있으면 파싱 후 내부에서 면접 질문까지 직접 생성하므로 "
+                "recruit_resume_interview 를 별도 dispatch 하지 말 것."
             ),
             "handler": run_resume_parse,
             "parameters": {
