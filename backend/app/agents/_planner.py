@@ -170,7 +170,8 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 [도메인 가이드]
 - recruitment  : 채용공고·면접·직원 관리 + 채용 포스터/이미지 생성
   → 파일(PDF/이미지)이 첨부된 상태에서 이력서·지원서·지원자·파싱·분석 관련 요청이면 **recruit_resume_parse** 즉시 dispatch (required 파라미터 없음, 파일 내용은 contextvar 로 전달됨).
-  → 이력서 파싱 완료 후 특정 지원자 면접 질문 요청이면 **recruit_resume_interview** dispatch (applicant_name 필수).
+  → ⚠️ **recruit_resume_parse 와 recruit_resume_interview 를 동시에 steps 에 넣지 말 것**: recruit_resume_parse 는 사용자 메시지에 "면접", "질문", "인터뷰" 키워드가 있으면 파싱 후 내부에서 면접 질문까지 자동 생성한다. 파일 첨부 + 면접 질문 요청이면 **recruit_resume_parse 하나만** dispatch. recruit_resume_interview 를 별도 추가하면 중복 생성됨.
+  → recruit_resume_interview 는 이력서 파싱이 이미 완료된 이후 별도 턴에서 특정 지원자 면접 질문을 다시 요청할 때만 단독 dispatch (applicant_name 필수).
 - marketing    : SNS·광고·캠페인·블로그·리뷰 답글·유튜브 쇼츠/숏폼 영상 + 광고 이미지/배너 + Instagram·YouTube 마케팅 성과 분석 리포트 + 마케팅 정기 자동화 스케줄 등록
   → SNS 게시물 요청 시: 주제(topic)가 불명확하면 mkt_sns_post_form 즉시 dispatch (폼 UI). 주제가 명확하면 mkt_sns_post.
   → 블로그 포스트 요청 시: 주제가 불명확하면 mkt_blog_post_form 즉시 dispatch. 주제가 있으면 mkt_blog_post.
