@@ -254,41 +254,37 @@ export default function LoginPage() {
           </section>
 
           {/* STATUS */}
-          <section className="tile t-status tint-sage">
-            <div>
-              <div className="eyebrow">
-                <span className="dot" />
-                All systems
-              </div>
+          <section className="tile t-status t-terminal">
+            <div className="term-chrome">
+              <span className="term-dot term-red" />
+              <span className="term-dot term-yellow" />
+              <span className="term-dot term-green" />
+              <span className="term-title-bar">boss — system</span>
             </div>
-            <div className="status-rows">
-              <div className="status-row">
-                <span className="name">Agents</span>
-                <span className="val">
-                  <span className="led" />
-                  OPERATIONAL
-                </span>
+            <div className="term-body">
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">agents</span>{" "}
+                <span className="term-g">OK</span>
               </div>
-              <div className="status-row">
-                <span className="name">NetSuite sync</span>
-                <span className="val">
-                  <span className="led" />
-                  0.8s
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">netsuite</span>{" "}
+                <span className="term-y">0.8s</span>
               </div>
-              <div className="status-row">
-                <span className="name">Slack bridge</span>
-                <span className="val">
-                  <span className="led" />
-                  LIVE
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">slack</span>{" "}
+                <span className="term-g">LIVE</span>
               </div>
-              <div className="status-row">
-                <span className="name">SSO · Okta</span>
-                <span className="val">
-                  <span className="led" />
-                  OK
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">sso·okta</span>{" "}
+                <span className="term-g">OK</span>
+              </div>
+              <div className="term-line term-prompt">
+                <span className="term-dim">$ </span>
+                <span className="term-cursor" />
               </div>
             </div>
           </section>
@@ -887,4 +883,53 @@ const SIGNIN_CSS = `
   color: rgba(255,253,249,0.38); margin-top: 8px;
 }
 .boss-signin .t-welcome .welcome-meta b { color: rgba(255,253,249,0.6); }
+
+/* Terminal tile */
+.boss-signin .t-terminal {
+  background: #1a1816;
+  border-color: transparent;
+  padding: 0;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.boss-signin .term-chrome {
+  background: #2a2724;
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.boss-signin .term-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.boss-signin .term-red    { background: #ff5f57; }
+.boss-signin .term-yellow { background: #febc2e; }
+.boss-signin .term-green  { background: #28c840; }
+.boss-signin .term-title-bar {
+  font-family: var(--font-mono); font-size: 10px;
+  color: rgba(255,253,249,0.28); margin-left: 6px;
+}
+.boss-signin .term-body {
+  padding: 12px 14px; flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  line-height: 1.85;
+}
+.boss-signin .term-line {
+  font-family: var(--font-mono); font-size: 11px;
+  color: rgba(255,253,249,0.8);
+}
+.boss-signin .term-g   { color: #28c840; }
+.boss-signin .term-y   { color: #febc2e; }
+.boss-signin .term-m   { color: rgba(255,253,249,0.42); }
+.boss-signin .term-dim { color: rgba(255,253,249,0.3); }
+.boss-signin .term-prompt { margin-top: 4px; }
+.boss-signin .term-cursor {
+  display: inline-block;
+  width: 7px; height: 13px;
+  background: rgba(255,253,249,0.4);
+  vertical-align: middle;
+  animation: boss-cursor-blink 1.2s step-end infinite;
+}
+@keyframes boss-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
 `;
