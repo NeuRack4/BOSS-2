@@ -1343,6 +1343,45 @@ def describe(account_id: str) -> list[dict]:
                 "required": [],
             },
         },
+        {
+            "name": "recruit_resume_parse",
+            "description": (
+                "구직자 이력서 파일을 파싱해 DB에 저장한다. "
+                "사용자가 이력서 파일을 업로드하고 파싱/분석을 요청할 때 호출. "
+                "upload_payload 또는 upload_payloads contextvar 에 파일 내용이 있어야 한다."
+            ),
+            "handler": run_resume_parse,
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+        {
+            "name": "recruit_resume_interview",
+            "description": (
+                "저장된 이력서를 바탕으로 날카로운 맞춤 면접 질문을 생성하고 artifact 로 저장한다. "
+                "이력서 파싱 완료 후 특정 지원자의 면접 질문을 요청할 때 호출."
+            ),
+            "handler": run_resume_interview,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "applicant_name": {
+                        "type": "string",
+                        "description": "면접 질문을 생성할 지원자 이름 (이력서에서 파싱된 이름)",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "생성할 면접 질문 수 (기본 7)",
+                        "default": 7,
+                        "minimum": 3,
+                        "maximum": 15,
+                    },
+                },
+                "required": ["applicant_name"],
+            },
+        },
     ]
 
     # 포스터 capability 는 posting_set 이 있을 때만 노출
