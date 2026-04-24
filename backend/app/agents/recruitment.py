@@ -1513,7 +1513,7 @@ async def run_evaluation_export_docx(
     safe_name = name.replace(" ", "_")
     filename = f"{safe_name}_면접평가표.docx"
     file_id = str(_uuid.uuid4()).replace("-", "")
-    storage_key = f"{account_id}/interview_evaluation/{file_id}/{filename}"
+    storage_key = f"{account_id}/interview_evaluation/{file_id}/evaluation.docx"
 
     try:
         sb.storage.from_(_BUCKET).upload(
@@ -1526,8 +1526,8 @@ async def run_evaluation_export_docx(
         )
         res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
         download_url = (res or {}).get("signedURL") or (res or {}).get("signed_url")
-    except Exception:
-        log.warning("[evaluation_export] storage upload failed for applicant=%s", name)
+    except Exception as _exc:
+        log.exception("[evaluation_export] storage upload failed for applicant=%s: %s", name, _exc)
         return "파일 업로드 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
 
     # 아티팩트 메타에 docx_url 업데이트
