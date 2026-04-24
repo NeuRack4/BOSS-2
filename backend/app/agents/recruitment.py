@@ -61,6 +61,38 @@ _GENERIC_VALID_TYPES: tuple[str, ...] = (
     "education_material",
 )
 
+_RESUME_PARSE_SYSTEM = (
+    "당신은 이력서 파싱 전문가입니다. "
+    "주어진 이력서 텍스트에서 정보를 추출해 JSON만 반환하세요. "
+    "없는 정보는 null로 설정하세요. 절대 정보를 추측하거나 만들어내지 마세요.\n\n"
+    "반환 형식 (JSON only, 설명 없이):\n"
+    "{\n"
+    '  "name": "이름 또는 null",\n'
+    '  "phone": "연락처 또는 null",\n'
+    '  "email": "이메일 또는 null",\n'
+    '  "age": 나이(정수) 또는 null,\n'
+    '  "address": "주소 또는 null",\n'
+    '  "education": [{"school":"","major":"","degree":"","year":""}],\n'
+    '  "experience": [{"company":"","role":"","period":"","description":""}],\n'
+    '  "skills": ["기술1"],\n'
+    '  "certifications": ["자격증1"],\n'
+    '  "desired_position": "희망직종 또는 null",\n'
+    '  "desired_salary": "희망급여 또는 null",\n'
+    '  "introduction": "자기소개 전문 또는 null",\n'
+    '  "raw_text": "이력서 원문 전체"\n'
+    "}"
+)
+
+_INTERVIEW_FROM_RESUME_SYSTEM = (
+    "당신은 소상공인 채용 전문가입니다. "
+    "지원자 이력서를 바탕으로 날카롭고 구체적인 면접 질문을 생성합니다.\n"
+    "규칙:\n"
+    "- 이력서의 구체적 내용(회사명, 기간, 역할)을 직접 인용해 질문\n"
+    "- 경력 공백, 짧은 재직기간, 직무 불일치는 파고드는 질문 포함\n"
+    "- 직무 적합성 / 성실성 / 상황 대응력 3축으로 골고루 구성\n"
+    "- 번호 목록 형식으로만 답변 (설명 없이 질문만)"
+)
+
 _JOB_POSTINGS_RE = re.compile(r"\[JOB_POSTINGS\](.*?)\[/JOB_POSTINGS\]", re.DOTALL)
 
 
@@ -616,6 +648,96 @@ async def run_interview(
         f"원본 사용자 요청: {message}"
     )
     return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+
+async def run_resume_parse(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    file_count: int = 1,
+) -> str:
+    """구직자 이력서 파일(복수 가능)을 파싱해 resumes 테이블에 저장."""
+    import json as _json
+    from app.agents._upload_context import get_pending_upload, get_pending_uploads
+
+    uploads = get_pending_uploads() or []
+    if not uploads:
+        single = get_pending_upload()
+        if single:
+            uploads = [single]
+
+    if not uploads:
+        return (
+            "이력서 파일을 첨부해주세요. 파일을 채팅창에 업로드한 후 다시 요청해주세요.\n\n"
+            "[CHOICES]\n이력서 파일 업로드할게요\n[/CHOICES]"
+        )
+
+    sb = get_supabase()
+    saved: list[dict] = []
+
+    for up in uploads:
+        content = (up.get("content") or "").strip()
+        file_name = up.get("original_name") or up.get("title") or "이력서"
+        if not content:
+            log.warning("[resume_parse] empty content for file=%s", file_name)
+            continue
+
+        parse_resp = await chat_completion(
+            messages=[
+                {"role": "system", "content": _RESUME_PARSE_SYSTEM},
+                {"role": "user", "content": f"다음 이력서를 파싱해주세요:\n\n{content[:6000]}"},
+            ],
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+        )
+        raw_json = parse_resp.choices[0].message.content or "{}"
+        try:
+            applicant = _json.loads(raw_json)
+        except Exception:
+            applicant = {"raw_text": content}
+
+        applicant["raw_text"] = applicant.get("raw_text") or content
+
+        row = (
+            sb.table("resumes")
+            .insert({
+                "account_id": account_id,
+                "file_name": file_name,
+                "applicant": applicant,
+            })
+            .execute()
+            .data
+        )
+        if row:
+            saved.append({
+                "id": row[0]["id"],
+                "name": (applicant.get("name") or "").strip() or file_name,
+                "applicant": applicant,
+            })
+
+    if not saved:
+        return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
+
+    lines = []
+    for s in saved:
+        exp = (s["applicant"].get("experience") or [])
+        if exp:
+            first = exp[0]
+            exp_str = f"{first.get('company','')} {first.get('role','')} {first.get('period','')}".strip()
+        else:
+            exp_str = "경력 정보 없음"
+        lines.append(f"- **{s['name']}**: {exp_str}")
+
+    choices_items = "\n".join(f"{s['name']} 면접 질문 생성" for s in saved)
+    summary = "\n".join(lines)
+
+    return (
+        f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n"
+        f"[CHOICES]\n{choices_items}\n다른 이력서도 올릴게요\n[/CHOICES]"
+    )
 
 
 async def run_hiring_drive(
