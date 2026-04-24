@@ -169,6 +169,8 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 
 [도메인 가이드]
 - recruitment  : 채용공고·면접·직원 관리 + 채용 포스터/이미지 생성
+  → 파일(PDF/이미지)이 첨부된 상태에서 이력서·지원서·지원자·파싱·분석 관련 요청이면 **recruit_resume_parse** 즉시 dispatch (required 파라미터 없음, 파일 내용은 contextvar 로 전달됨).
+  → 이력서 파싱 완료 후 특정 지원자 면접 질문 요청이면 **recruit_resume_interview** dispatch (applicant_name 필수).
 - marketing    : SNS·광고·캠페인·블로그·리뷰 답글·유튜브 쇼츠/숏폼 영상 + 광고 이미지/배너 + Instagram·YouTube 마케팅 성과 분석 리포트 + 마케팅 정기 자동화 스케줄 등록
   → SNS 게시물 요청 시: 주제(topic)가 불명확하면 mkt_sns_post_form 즉시 dispatch (폼 UI). 주제가 명확하면 mkt_sns_post.
   → 블로그 포스트 요청 시: 주제가 불명확하면 mkt_blog_post_form 즉시 dispatch. 주제가 있으면 mkt_blog_post.
@@ -333,6 +335,7 @@ async def plan(
     memos_context: str,
     tools_catalog: list[dict],
     choices_context: str | None = None,
+    upload_hint: str | None = None,
 ) -> PlanResult:
     """Planner 호출 — 실패 시 `{"mode": "error", "reason": ...}` 반환 (상위가 폴백)."""
     system_parts = [
@@ -346,6 +349,8 @@ async def plan(
         system_parts.append(memos_context.strip())
     if rag_context.strip():
         system_parts.append(rag_context.strip())
+    if upload_hint:
+        system_parts.append(upload_hint)
     if choices_context:
         system_parts.append(
             "[직전 CHOICES 컨텍스트 — 최우선 라우팅 힌트]\n"

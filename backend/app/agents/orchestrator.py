@@ -648,6 +648,23 @@ async def _dispatch_via_planner(
     # 미해결 CHOICES가 있으면 플래너에게 라우팅 힌트로 주입
     choices_ctx = _last_assistant_unresolved_choices(history)
 
+    # 업로드 파일이 있으면 플래너에게 힌트 주입 (recruit_resume_parse 라우팅용)
+    from app.agents._upload_context import get_pending_upload, get_pending_uploads
+    _uploads = get_pending_uploads() or []
+    if not _uploads:
+        _single = get_pending_upload()
+        if _single:
+            _uploads = [_single]
+    upload_hint: str | None = None
+    if _uploads:
+        names = ", ".join(u.get("original_name") or u.get("title") or "파일" for u in _uploads)
+        upload_hint = (
+            f"[첨부 파일 감지 — 라우팅 필수 힌트]\n"
+            f"이번 요청에 파일 {len(_uploads)}개가 첨부돼 있습니다: {names}\n"
+            "사용자가 이력서·지원서·지원자 분석/파싱을 요청하면 **recruit_resume_parse** 를 즉시 dispatch 하세요. "
+            "required 파라미터 없음 — 파일 내용은 contextvar 로 이미 전달됩니다."
+        )
+
     result = await _planner.plan(
         account_id=account_id,
         message=message,
@@ -658,6 +675,7 @@ async def _dispatch_via_planner(
         memos_context=memos_ctx,
         tools_catalog=tools,
         choices_context=choices_ctx,
+        upload_hint=upload_hint,
     )
     mode = result.get("mode")
     if mode == "error":
