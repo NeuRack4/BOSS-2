@@ -1100,6 +1100,176 @@ async def run_onboarding(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+_EVAL_CRITERIA_SYSTEM = """당신은 채용 전문가입니다. 지원자 이력서를 분석해 면접 평가 기준을 JSON으로만 반환하세요.
+
+반환 형식 (JSON only, 설명 없이):
+{
+  "<평가항목명>": {
+    "5": "매우 우수 기준 (구체적으로)",
+    "4": "우수 기준",
+    "3": "보통 기준",
+    "2": "미흡 기준",
+    "1": "부적합 기준",
+    "checkpoints": ["이력서 기반 확인 포인트1", "이력서 기반 확인 포인트2", "이력서 기반 확인 포인트3"]
+  }
+}
+
+각 항목의 checkpoints 는 이력서에서 실제로 발견한 구체적 내용을 기반으로 작성하세요."""
+
+
+def _build_evaluation_docx(
+    name: str,
+    pos_label: str,
+    eval_weights: dict[str, int],
+    criteria: dict[str, dict],
+) -> bytes:
+    """면접 평가표 DOCX 생성. python-docx 사용."""
+    import io
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_ALIGN_VERTICAL
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    doc = Document()
+
+    # 페이지 여백 설정
+    section = doc.sections[0]
+    section.top_margin = Cm(2)
+    section.bottom_margin = Cm(2)
+    section.left_margin = Cm(2.5)
+    section.right_margin = Cm(2.5)
+
+    def _set_para_format(para, alignment=WD_ALIGN_PARAGRAPH.LEFT, space_before=0, space_after=6):
+        para.alignment = alignment
+        para.paragraph_format.space_before = Pt(space_before)
+        para.paragraph_format.space_after = Pt(space_after)
+
+    def _add_heading(text, level=1):
+        p = doc.add_heading(text, level=level)
+        _set_para_format(p, space_before=12, space_after=6)
+        return p
+
+    def _shade_cell(cell, hex_color: str):
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), hex_color)
+        tcPr.append(shd)
+
+    # 제목
+    title = doc.add_heading("면접 평가표", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.paragraph_format.space_after = Pt(4)
+
+    sub = doc.add_paragraph(f"{name}  /  {pos_label}")
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub.paragraph_format.space_after = Pt(12)
+    for run in sub.runs:
+        run.font.size = Pt(12)
+        run.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+    # 기본 정보
+    info_table = doc.add_table(rows=1, cols=4)
+    info_table.style = "Table Grid"
+    info_cells = info_table.rows[0].cells
+    labels = ["면접일", "면접관", "면접 장소", "면접 시간"]
+    for i, label in enumerate(labels):
+        p = info_cells[i].paragraphs[0]
+        p.add_run(f"{label}: ").bold = True
+        p.add_run("_" * 10)
+        info_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    doc.add_paragraph()
+
+    # 종합 점수표
+    _add_heading("종합 점수표", level=2)
+    score_table = doc.add_table(rows=len(eval_weights) + 2, cols=5)
+    score_table.style = "Table Grid"
+
+    headers = ["평가 항목", "배점", "점수 (1–5점)", "가중 점수", "메모"]
+    header_row = score_table.rows[0]
+    for i, h in enumerate(headers):
+        cell = header_row.cells[i]
+        cell.text = h
+        cell.paragraphs[0].runs[0].bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _shade_cell(cell, "D9E1F2")
+
+    for row_idx, (cat, pct) in enumerate(eval_weights.items(), start=1):
+        row = score_table.rows[row_idx]
+        row.cells[0].text = cat
+        row.cells[1].text = f"{pct}%"
+        row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for ci in [2, 3, 4]:
+            row.cells[ci].text = ""
+
+    total_row = score_table.rows[-1]
+    total_row.cells[0].text = "합계"
+    total_row.cells[0].paragraphs[0].runs[0].bold = True
+    total_row.cells[1].text = "100%"
+    total_row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _shade_cell(total_row.cells[0], "FFF2CC")
+    _shade_cell(total_row.cells[1], "FFF2CC")
+    total_row.cells[3].text = "    / 100점"
+    doc.add_paragraph()
+
+    # 역량별 평가 기준
+    _add_heading("역량별 평가 기준 및 면접관 코멘트", level=2)
+
+    for cat, pct in eval_weights.items():
+        _add_heading(f"{cat}  ({pct}%)", level=3)
+        cat_criteria = criteria.get(cat, {})
+
+        if cat_criteria:
+            crit_table = doc.add_table(rows=6, cols=2)
+            crit_table.style = "Table Grid"
+            crit_header = crit_table.rows[0].cells
+            crit_header[0].text = "점수"
+            crit_header[1].text = "평가 기준"
+            for c in crit_header:
+                c.paragraphs[0].runs[0].bold = True
+                _shade_cell(c, "E2EFDA")
+
+            for i, score in enumerate(["5", "4", "3", "2", "1"], start=1):
+                row = crit_table.rows[i]
+                row.cells[0].text = f"{score}점"
+                row.cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                row.cells[1].text = cat_criteria.get(score, "")
+
+            checkpoints = cat_criteria.get("checkpoints") or []
+            if checkpoints:
+                doc.add_paragraph()
+                p = doc.add_paragraph()
+                p.add_run("이력서 기반 체크포인트").bold = True
+                for cp in checkpoints:
+                    doc.add_paragraph(f"• {cp}", style="List Bullet")
+
+        comment_p = doc.add_paragraph()
+        comment_p.add_run("면접관 코멘트: ").bold = True
+        comment_p.add_run("_" * 60)
+        doc.add_paragraph()
+
+    # 종합 의견
+    _add_heading("종합 의견", level=2)
+    for label in ["강점", "우려사항", "종합 평가"]:
+        p = doc.add_paragraph()
+        p.add_run(f"{label}: ").bold = True
+        p.add_run("_" * 55)
+        doc.add_paragraph()
+
+    # 채용 추천도
+    rec_p = doc.add_paragraph()
+    rec_p.add_run("채용 추천도:  ").bold = True
+    rec_p.add_run("□ 강력 추천   □ 추천   □ 보류   □ 비추천")
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
 @traceable(name="recruitment.run_interview_evaluation", run_type="chain")
 async def run_interview_evaluation(
     *,
@@ -1113,8 +1283,9 @@ async def run_interview_evaluation(
     custom_categories: list[str] | None = None,
     weights: dict[str, int] | None = None,
 ) -> str:
-    """이력서 기반 맞춤 면접 평가표 생성 (배점 커스터마이징 지원)."""
+    """이력서 기반 맞춤 면접 평가표 생성 → DOCX 저장 (배점 커스터마이징 지원)."""
     import json as _json
+    import uuid as _uuid
 
     sb = get_supabase()
     rows = (
@@ -1144,9 +1315,11 @@ async def run_interview_evaluation(
         )
 
     applicant = resume.get("applicant") or {}
+    resume_id = resume["id"]
     name = (applicant.get("name") or "").strip() or applicant_name
     pos_label = position or applicant.get("desired_position") or "해당 직종"
 
+    # 이력서 컨텍스트 구성
     context_lines = [f"지원자: {name}", f"지원 직종: {pos_label}"]
     for e in applicant.get("experience") or []:
         context_lines.append(
@@ -1162,6 +1335,7 @@ async def run_interview_evaluation(
         context_lines.append(f"자기소개: {applicant['introduction'][:500]}")
     context_text = "\n".join(context_lines)
 
+    # 배점 결정
     default_categories = {"기술 역량": 50, "태도·성실성": 30, "소통 능력": 20}
     if weights:
         eval_weights = weights
@@ -1174,39 +1348,133 @@ async def run_interview_evaluation(
     else:
         eval_weights = default_categories
 
-    weights_desc = "\n".join(f"- {cat}: {pct}%" for cat, pct in eval_weights.items())
-    custom_note = ""
-    if custom_categories:
-        custom_note = f"\n커스텀 평가 항목: {', '.join(custom_categories)}"
+    categories_desc = ", ".join(f"{c}({p}%)" for c, p in eval_weights.items())
 
-    synthetic = (
-        f"아래 지원자의 면접 평가표를 작성해주세요.\n\n"
-        f"{context_text}\n\n"
-        f"평가 항목 및 배점:\n{weights_desc}{custom_note}\n\n"
-        "출력 형식 (반드시 준수):\n"
+    # LLM으로 평가 기준 JSON 생성
+    criteria: dict = {}
+    try:
+        crit_resp = await chat_completion(
+            messages=[
+                {"role": "system", "content": _EVAL_CRITERIA_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        f"아래 지원자의 면접 평가 기준을 작성해주세요.\n\n"
+                        f"{context_text}\n\n"
+                        f"평가 항목: {categories_desc}"
+                    ),
+                },
+            ],
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+        )
+        criteria = _json.loads(crit_resp.choices[0].message.content or "{}")
+    except Exception:
+        log.warning("[interview_evaluation] criteria generation failed for applicant=%s", name)
+
+    # DOCX 빌드
+    try:
+        docx_bytes = _build_evaluation_docx(name, pos_label, eval_weights, criteria)
+    except Exception:
+        log.exception("[interview_evaluation] docx build failed")
+        docx_bytes = b""
+
+    # Supabase Storage 업로드
+    download_url: str | None = None
+    _BUCKET = "documents-uploads"
+    if docx_bytes:
+        try:
+            file_id = str(_uuid.uuid4()).replace("-", "")
+            safe_name = name.replace(" ", "_")
+            filename = f"{safe_name}_면접평가표.docx"
+            storage_key = f"{account_id}/interview_evaluation/{file_id}/{filename}"
+            sb.storage.from_(_BUCKET).upload(
+                path=storage_key,
+                file=docx_bytes,
+                file_options={
+                    "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "upsert": "false",
+                },
+            )
+            res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
+            download_url = (res or {}).get("signedURL") or (res or {}).get("signed_url")
+        except Exception:
+            log.warning("[interview_evaluation] storage upload failed for applicant=%s", name)
+
+    # 아티팩트 마크다운 본문 (캔버스 표시용)
+    weights_md = "\n".join(
+        f"| {cat} | {pct}% | | | |" for cat, pct in eval_weights.items()
+    )
+    criteria_md_parts = []
+    for cat, pct in eval_weights.items():
+        cat_c = criteria.get(cat, {})
+        cps = "\n".join(f"- {cp}" for cp in (cat_c.get("checkpoints") or []))
+        criteria_md_parts.append(
+            f"### {cat} ({pct}%)\n"
+            + "\n".join(f"- {s}점: {cat_c.get(str(s), '')}" for s in [5, 4, 3, 2, 1])
+            + (f"\n\n**체크포인트**\n{cps}" if cps else "")
+            + "\n\n**면접관 코멘트:** ___________________________________________"
+        )
+    criteria_md = "\n\n".join(criteria_md_parts)
+
+    content_md = (
         f"## 면접 평가표 — {name} / {pos_label}\n\n"
         "**면접일:** ______  **면접관:** ______\n\n"
         "### 종합 점수표\n\n"
         "| 평가 항목 | 배점 | 점수(1-5점) | 가중 점수 | 메모 |\n"
         "|---|---|---|---|---|\n"
-        "[각 항목 행 기입 — 점수/가중 점수 칸은 빈칸]\n\n"
-        "**총점:** ___ / 100점\n\n"
+        f"{weights_md}\n"
+        "| **합계** | **100%** | | ___ / 100점 | |\n\n"
         "---\n\n"
-        "[각 평가 항목별 섹션 반복]\n"
-        "### [항목명] ([배점]%)\n"
-        "**평가 기준** (5→1점 서술)\n"
-        "**이력서 기반 체크포인트** (이력서 내용 기반 구체적 확인 사항)\n"
-        "**면접관 코멘트:** ___________________________________________\n\n"
+        f"{criteria_md}\n\n"
         "---\n\n"
-        "### 종합 의견\n"
-        "**강점:** ___________________________________________\n"
-        "**우려사항:** ___________________________________________\n"
-        "**채용 추천도:** □ 강력 추천  □ 추천  □ 보류  □ 비추천\n\n"
-        "평가표를 [ARTIFACT] 블록의 type=interview_evaluation, sub_domain=Interviews 로 저장하세요.\n\n"
-        f"원본 요청: {message}"
+        "### 종합 의견\n\n"
+        "**강점:** ___________________________________________\n\n"
+        "**우려사항:** ___________________________________________\n\n"
+        "**채용 추천도:** □ 강력 추천  □ 추천  □ 보류  □ 비추천"
     )
+    if download_url:
+        content_md += f"\n\n---\n\n📄 **DOCX 다운로드:** [{safe_name}_면접평가표.docx]({download_url})"
 
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    title = f"{name} 면접 평가표"
+    artifact_meta: dict = {"resume_id": resume_id}
+    if download_url:
+        artifact_meta["docx_url"] = download_url
+
+    try:
+        result = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["recruitment"],
+            "kind": "artifact",
+            "type": "interview_evaluation",
+            "title": title,
+            "content": content_md,
+            "status": "draft",
+            "metadata": artifact_meta,
+        }).execute()
+        if result.data:
+            artifact_id = result.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "recruitment", prefer_keywords=("Interviews",))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id,
+                        "parent_id": hub_id,
+                        "child_id": artifact_id,
+                        "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+    except Exception:
+        log.warning("[interview_evaluation] artifact insert failed for applicant=%s", name)
+
+    reply = f"**{name}** 면접 평가표 생성 완료 ({categories_desc})."
+    if download_url:
+        reply += f"\n\n📄 DOCX 파일로 저장됐습니다. 캔버스에서 다운로드 링크를 확인하세요."
+    else:
+        reply += "\n\n(DOCX 파일 저장에 실패했습니다. 캔버스에서 마크다운 버전을 확인하세요.)"
+    return reply
 
 
 # ──────────────────────────────────────────────────────────────────────────
