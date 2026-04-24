@@ -50,7 +50,7 @@ const PLANS = [
   },
   {
     id: "business",
-    name: "Business",
+    name: "Enterprise",
     price: "99,900",
     priceNote: "원 / 월",
     description: "팀 단위 사용 및 기업 고객용",
@@ -63,7 +63,7 @@ const PLANS = [
       "SLA 보장 지원",
     ],
     limits: [],
-    cta: "Business 시작하기",
+    cta: "Enterprise 시작하기",
     current: false,
     highlight: false,
   },
@@ -166,9 +166,9 @@ const PLAN_INFO = {
     display: "29,900",
   },
   business: {
-    label: "Business",
+    label: "Enterprise",
     amount: 99900,
-    orderName: "BOSS2 Business 구독 (1개월)",
+    orderName: "BOSS2 Enterprise 구독 (1개월)",
     display: "99,900",
   },
 };
@@ -401,7 +401,7 @@ export const PaymentModal = ({ open, onClose }: Props) => {
             {currentPlan === "pro"
               ? "Pro"
               : currentPlan === "business"
-                ? "Business"
+                ? "Enterprise"
                 : "Free"}
           </strong>
           {subscription?.next_billing_date && (

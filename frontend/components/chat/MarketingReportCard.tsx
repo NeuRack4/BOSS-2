@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { createClient } from "@/lib/supabase/client";
 
 // ── 타입 정의 ──────────────────────────────────────────────────────────────
@@ -251,8 +252,11 @@ export function MarketingReportCard({
             </div>
 
             {/* AI 분석 텍스트 */}
-            <div className="text-[13px] text-neutral-700 leading-relaxed whitespace-pre-wrap">
-              {payload.analysis}
+            <div className="[&_p]:mb-3 [&_li]:mb-1 [&_ul]:mb-2 [&_ol]:mb-2">
+              <MarkdownMessage
+                content={payload.analysis}
+                className="text-[13px] text-neutral-700"
+              />
             </div>
           </div>
         )}

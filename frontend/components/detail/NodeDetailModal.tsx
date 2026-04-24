@@ -188,6 +188,7 @@ const MARKETING_RICH_TYPES = new Set([
   "shorts_video",
   "job_posting_set",
   "job_posting_poster",
+  "event_poster",
 ]);
 
 const HASHTAG_LINE_RE = /^(#[\w가-힣A-Za-z]+\s*)+$/;
@@ -1076,16 +1077,16 @@ export const NodeDetailModal = () => {
   const [savingRecord, setSavingRecord] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
-  // Auth hydration (once)
+  // Auth hydration — 모달이 열릴 때마다 재확인 (계정 전환 시 stale 방지)
   useEffect(() => {
-    const run = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setAccountId(user?.id ?? null);
-    };
-    run();
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setAccountId(data.user?.id ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setAccountId(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const reload = useCallback(async () => {
@@ -1670,6 +1671,28 @@ export const NodeDetailModal = () => {
                                 meta={meta}
                               />
                             );
+                          if (t === "event_poster") {
+                            const publicUrl =
+                              typeof meta?.public_url === "string"
+                                ? meta.public_url
+                                : "";
+                            return publicUrl ? (
+                              <iframe
+                                src={publicUrl}
+                                title="이벤트 포스터 미리보기"
+                                className="w-full rounded border border-[#030303]/10 bg-white"
+                                style={{ height: "600px" }}
+                              />
+                            ) : (
+                              <iframe
+                                srcDoc={raw}
+                                title="이벤트 포스터 미리보기"
+                                className="w-full rounded border border-[#030303]/10 bg-white"
+                                style={{ height: "600px" }}
+                                sandbox="allow-same-origin"
+                              />
+                            );
+                          }
                           return null;
                         })()
                       ) : artifact.type === "sales_report" &&

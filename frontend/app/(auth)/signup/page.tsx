@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { createClient } from "@/lib/supabase/client";
+import { PricingPreviewModal } from "@/components/layout/PricingPreviewModal";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -47,6 +48,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const score = password ? scorePassword(password) : 0;
   const meterLabel = STRENGTH_LABELS[score];
@@ -98,6 +100,7 @@ export default function SignupPage() {
     <div
       className={`${interTight.variable} ${jetbrainsMono.variable} boss-signup`}
     >
+      <PricingPreviewModal open={pricingOpen} onClose={() => setPricingOpen(false)} />
       <style>{SIGNUP_CSS}</style>
 
       <header className="topbar">
@@ -115,7 +118,7 @@ export default function SignupPage() {
         <nav>
           <a href="#">Product</a>
           <a href="#">Agents</a>
-          <a href="#">Pricing</a>
+          <button type="button" onClick={() => setPricingOpen(true)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "var(--muted)" }}>Pricing</button>
           <a href="#">Docs</a>
           <Link href="/login" className="signin">
             Sign in →

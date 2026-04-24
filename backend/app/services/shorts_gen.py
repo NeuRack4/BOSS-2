@@ -25,11 +25,22 @@ _FONT_PATH_ESC = _FONT_PATH.replace(":", r"\:")
 
 # ── 자막 생성 (GPT-4o Vision) ─────────────────────────────────────────────────
 
+def _detect_mime(image_bytes: bytes) -> str:
+    if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+        return "image/png"
+    if image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+        return "image/webp"
+    if image_bytes[:6] in (b'GIF87a', b'GIF89a'):
+        return "image/gif"
+    return "image/jpeg"
+
+
 async def _generate_subtitle_for_image(image_bytes: bytes, context: str = "") -> str:
     """이미지 한 장에 대한 Shorts 자막 1줄 생성."""
     from app.core.llm import client as openai_client
     from app.core.config import settings
 
+    mime = _detect_mime(image_bytes)
     b64 = base64.b64encode(image_bytes).decode()
     system = (
         "당신은 YouTube Shorts 자막 전문가입니다.\n"
@@ -38,13 +49,12 @@ async def _generate_subtitle_for_image(image_bytes: bytes, context: str = "") ->
     )
     user_text = f"비즈니스 맥락: {context}\n\n위 이미지에 어울리는 자막 1줄을 작성해주세요." if context else "위 이미지에 어울리는 자막 1줄을 작성해주세요."
 
-    resp = await asyncio.to_thread(
-        openai_client.chat.completions.create,
+    resp = await openai_client.chat.completions.create(
         model=settings.openai_chat_model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
                 {"type": "text", "text": user_text},
             ]},
         ],
@@ -92,8 +102,7 @@ async def generate_video_metadata(
     user_text = f"주제: {context}\n\n슬라이드 자막:\n{subtitle_text}" if context else f"슬라이드 자막:\n{subtitle_text}"
 
     try:
-        resp = await asyncio.to_thread(
-            openai_client.chat.completions.create,
+        resp = await openai_client.chat.completions.create(
             model=settings.openai_chat_model,
             messages=[
                 {"role": "system", "content": system},
