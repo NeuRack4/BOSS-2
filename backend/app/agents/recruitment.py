@@ -546,6 +546,7 @@ def _fmt_days(days: list[str] | None) -> str:
     return "·".join(days) if days else ""
 
 
+@traceable(name="recruitment.run_posting_set", run_type="chain")
 async def run_posting_set(
     *,
     account_id: str,
@@ -645,6 +646,7 @@ async def run_posting_set(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_posting_poster", run_type="chain")
 async def run_posting_poster(
     *,
     account_id: str,
@@ -702,6 +704,7 @@ async def run_posting_poster(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_interview", run_type="chain")
 async def run_interview(
     *,
     account_id: str,
@@ -722,6 +725,7 @@ async def run_interview(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_resume_parse", run_type="chain")
 async def run_resume_parse(
     *,
     account_id: str,
@@ -854,6 +858,7 @@ async def run_resume_parse(
     )
 
 
+@traceable(name="recruitment.run_resume_interview", run_type="chain")
 async def run_resume_interview(
     *,
     account_id: str,
@@ -1008,6 +1013,7 @@ async def run_resume_interview(
     )
 
 
+@traceable(name="recruitment.run_hiring_drive", run_type="chain")
 async def run_hiring_drive(
     *,
     account_id: str,
@@ -1032,6 +1038,7 @@ async def run_hiring_drive(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_checklist_guide", run_type="chain")
 async def run_checklist_guide(
     *,
     account_id: str,
@@ -1059,6 +1066,7 @@ _ONBOARDING_TYPE_LABELS = {
 }
 
 
+@traceable(name="recruitment.run_onboarding", run_type="chain")
 async def run_onboarding(
     *,
     account_id: str,
@@ -1201,6 +1209,7 @@ def _build_payroll_reply(emp: dict, month: str, records: list[dict]) -> str:
     )
 
 
+@traceable(name="recruitment.run_payroll_preview", run_type="chain")
 async def run_payroll_preview(
     message: str,
     account_id: str,
