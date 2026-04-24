@@ -214,10 +214,6 @@ const DOMAIN_CAPABILITIES: Array<{
     bg: "#f7e6da",
     items: [
       { name: "채용 공고 작성", prompt: "채용 공고 초안 작성해줘" },
-      {
-        name: "3개 플랫폼 동시 공고",
-        prompt: "3개 플랫폼에 채용 공고 동시에 올려줘",
-      },
       { name: "채용 공고 포스터", prompt: "채용 공고 포스터 이미지 만들어줘" },
       { name: "면접 질문", prompt: "면접 질문 5개 뽑아줘" },
       {
@@ -227,6 +223,11 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
       { name: "채용 가이드", prompt: "직원 근태 관리 가이드 만들어줘" },
       { name: "인건비 계산", prompt: "주휴수당 포함 월 인건비 계산해줘" },
+      {
+        name: "이력서 분석 & 면접 질문",
+        prompt:
+          "이력서 파일을 올려주시면 파싱하고 맞춤 면접 질문을 뽑아드릴게요",
+      },
     ],
   },
   {
