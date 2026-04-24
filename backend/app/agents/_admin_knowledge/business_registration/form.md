@@ -87,7 +87,7 @@
 
 ---
 
-{{opening_date}} 신청
+{{신청일}} 신청
 
 신청인: {{representative_name}} (서명 또는 인)
 

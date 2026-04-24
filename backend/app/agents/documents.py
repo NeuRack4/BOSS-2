@@ -39,8 +39,6 @@ from app.agents._legal import classify_legal_intent, handle_legal_question
 from app.agents._admin_templates import (
     VALID_ADMIN_TYPES,
     ADMIN_TYPE_LABELS,
-    ADMIN_TYPE_DUE_DAYS,
-    ADMIN_TYPE_DUE_LABELS,
     build_admin_context,
 )
 
@@ -1275,9 +1273,6 @@ async def run_admin_application(
 
     admin_ctx = build_admin_context(application_type, profile, profile_meta)
     label = ADMIN_TYPE_LABELS.get(application_type, application_type)
-    due_days = ADMIN_TYPE_DUE_DAYS.get(application_type, 7)
-    due_label = ADMIN_TYPE_DUE_LABELS.get(application_type, "행정 처리 기한")
-    due_date = (date.today() + timedelta(days=due_days)).isoformat()
 
     extra_parts: list[str] = []
     if purpose:
@@ -1298,10 +1293,9 @@ async def run_admin_application(
         f"- 응답 마지막에 아래 [ARTIFACT] 블록을 반드시 포함하세요:\n"
         f"  [ARTIFACT]\n"
         f"  type: admin_application\n"
+        f"  application_type: {application_type}\n"
         f"  title: {label}\n"
         f"  sub_domain: Operations\n"
-        f"  due_date: {due_date}\n"
-        f"  due_label: {due_label}\n"
         f"  [/ARTIFACT]\n"
         + "\n\n"
         + admin_ctx
@@ -1330,7 +1324,6 @@ async def run_admin_application(
         reply,
         default_title=label,
         valid_types=VALID_TYPES,
-        extra_meta_keys=("due_label",),
         type_to_subhub=_TYPE_TO_SUBHUB,
     )
     return reply

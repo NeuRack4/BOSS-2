@@ -29,7 +29,10 @@ import {
   ReviewResultCard,
   extractReviewPayload,
   type ReviewPayload,
+  extractAdminApplicationPayload,
+  type AdminApplicationPayload,
 } from "./ReviewResultCard";
+import { AdminApplicationCard } from "./AdminApplicationCard";
 import {
   InstagramPostCard,
   extractInstagramPayload,
@@ -129,6 +132,7 @@ type Message = {
   blogPostForm?: boolean;
   reviewReplyForm?: boolean;
   employeePicker?: EmployeePickerPayload;
+  adminApp?: { payload: AdminApplicationPayload; content: string };
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -1068,6 +1072,28 @@ export const InlineChat = () => {
     [apiBase, userId, uploading, loading, messages.length, uploadType],
   );
 
+  const handleDocxReady = useCallback(
+    (blobUrl: string) => {
+      // 자동 다운로드 트리거
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = "사업자등록_신청서.docx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant" as const,
+          content: "사업자등록 신청서 DOCX 파일을 다운로드했어요.",
+        },
+      ]);
+    },
+    [setMessages],
+  );
+
   const send = useCallback(
     async (text: string, messageIndex?: number) => {
       const trimmed = text.trim();
@@ -1172,8 +1198,17 @@ export const InlineChat = () => {
           setCurrentSessionId(newSessionId);
         }
         const rawReply = data?.data?.reply ?? "응답을 받지 못했습니다.";
+
+        // admin_application을 가장 먼저 추출 — 이후 체인의 stripMarkers가 [ARTIFACT] 제거 전에
+        const {
+          cleaned: rawAfterAdmin,
+          payload: adminAppPayloadNew,
+          documentContent: adminAppDocContent,
+        } = extractAdminApplicationPayload(rawReply);
+        const chainInput = adminAppPayloadNew ? rawAfterAdmin : rawReply;
+
         const { clean: afterSales, action: salesAction } =
-          parseSalesAction(rawReply);
+          parseSalesAction(chainInput);
         const { clean: afterCost, action: costAction } =
           parseCostAction(afterSales);
         const { clean: afterWork, action: workAction } =
@@ -1222,6 +1257,9 @@ export const InlineChat = () => {
             blogPostForm: blogPostForm || undefined,
             reviewReplyForm: reviewReplyForm || undefined,
             employeePicker: employeePicker ?? undefined,
+            adminApp: adminAppPayloadNew
+              ? { payload: adminAppPayloadNew, content: adminAppDocContent }
+              : undefined,
           },
         ]);
         const sp = data?.data?.speaker;
@@ -1511,6 +1549,10 @@ export const InlineChat = () => {
                 msg.menuChart ?? null;
               let salesInsightPayload: SalesInsightPayload | null =
                 msg.salesInsight ?? null;
+              // real-time: msg.adminApp 에 저장된 값 우선 사용
+              let adminAppPayload: AdminApplicationPayload | null =
+                msg.adminApp?.payload ?? null;
+              let adminAppContent: string = msg.adminApp?.content ?? "";
 
               const isOnboardingForm =
                 msg.role === "assistant" &&
@@ -1532,6 +1574,23 @@ export const InlineChat = () => {
                 displayText = (displayText || "")
                   .replace(/\[PAYROLL_PREVIEW_DATA:[^\]]*\]/g, "")
                   .trim();
+
+                // 히스토리: msg.adminApp 없으면 displayText에서 재감지 (세 종류 모두)
+                if (!adminAppPayload) {
+                  const {
+                    cleaned: histCleaned,
+                    payload: histPayload,
+                    documentContent: histDoc,
+                  } = extractAdminApplicationPayload(displayText || "");
+                  if (histPayload) {
+                    adminAppPayload = histPayload;
+                    adminAppContent = histDoc;
+                    displayText = histCleaned;
+                  }
+                } else {
+                  // real-time: adminApp 있으면 intro text만 bubble에 표시
+                  displayText = adminAppContent ? "" : displayText;
+                }
 
                 const rrExtracted = extractReviewReplyPayload(
                   displayText || "",
@@ -1689,6 +1748,17 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && menuChartPayload && (
                     <div className="ml-8 max-w-[85%]">
                       <MenuAnalysisCard payload={menuChartPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && adminAppPayload && userId && (
+                    <div className="ml-8 max-w-[90%]">
+                      <AdminApplicationCard
+                        content={adminAppContent}
+                        title={adminAppPayload.title}
+                        accountId={userId}
+                        applicationType={adminAppPayload.application_type}
+                        onDocxReady={handleDocxReady}
+                      />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.marketingReport && (
