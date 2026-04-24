@@ -1283,9 +1283,8 @@ async def run_interview_evaluation(
     custom_categories: list[str] | None = None,
     weights: dict[str, int] | None = None,
 ) -> str:
-    """이력서 기반 맞춤 면접 평가표 생성 → DOCX 저장 (배점 커스터마이징 지원)."""
+    """이력서 기반 맞춤 면접 평가표 생성 → 캔버스 마크다운 저장 (배점 커스터마이징 지원)."""
     import json as _json
-    import uuid as _uuid
 
     sb = get_supabase()
     rows = (
@@ -1372,36 +1371,7 @@ async def run_interview_evaluation(
     except Exception:
         log.warning("[interview_evaluation] criteria generation failed for applicant=%s", name)
 
-    # DOCX 빌드
-    try:
-        docx_bytes = _build_evaluation_docx(name, pos_label, eval_weights, criteria)
-    except Exception:
-        log.exception("[interview_evaluation] docx build failed")
-        docx_bytes = b""
-
-    # Supabase Storage 업로드
-    download_url: str | None = None
-    _BUCKET = "documents-uploads"
-    if docx_bytes:
-        try:
-            file_id = str(_uuid.uuid4()).replace("-", "")
-            safe_name = name.replace(" ", "_")
-            filename = f"{safe_name}_면접평가표.docx"
-            storage_key = f"{account_id}/interview_evaluation/{file_id}/{filename}"
-            sb.storage.from_(_BUCKET).upload(
-                path=storage_key,
-                file=docx_bytes,
-                file_options={
-                    "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    "upsert": "false",
-                },
-            )
-            res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
-            download_url = (res or {}).get("signedURL") or (res or {}).get("signed_url")
-        except Exception:
-            log.warning("[interview_evaluation] storage upload failed for applicant=%s", name)
-
-    # 아티팩트 마크다운 본문 (캔버스 표시용)
+    # 마크다운 본문 구성 (캔버스 표시용)
     weights_md = "\n".join(
         f"| {cat} | {pct}% | | | |" for cat, pct in eval_weights.items()
     )
@@ -1433,13 +1403,15 @@ async def run_interview_evaluation(
         "**우려사항:** ___________________________________________\n\n"
         "**채용 추천도:** □ 강력 추천  □ 추천  □ 보류  □ 비추천"
     )
-    if download_url:
-        content_md += f"\n\n---\n\n📄 **DOCX 다운로드:** [{safe_name}_면접평가표.docx]({download_url})"
 
     title = f"{name} 면접 평가표"
-    artifact_meta: dict = {"resume_id": resume_id}
-    if download_url:
-        artifact_meta["docx_url"] = download_url
+    artifact_meta: dict = {
+        "resume_id": resume_id,
+        "eval_weights": eval_weights,
+        "eval_criteria": criteria,
+        "applicant_name": name,
+        "position": pos_label,
+    }
 
     try:
         result = sb.table("artifacts").insert({
@@ -1469,12 +1441,113 @@ async def run_interview_evaluation(
     except Exception:
         log.warning("[interview_evaluation] artifact insert failed for applicant=%s", name)
 
-    reply = f"**{name}** 면접 평가표 생성 완료 ({categories_desc})."
-    if download_url:
-        reply += f"\n\n📄 DOCX 파일로 저장됐습니다. 캔버스에서 다운로드 링크를 확인하세요."
-    else:
-        reply += "\n\n(DOCX 파일 저장에 실패했습니다. 캔버스에서 마크다운 버전을 확인하세요.)"
-    return reply
+    return (
+        f"**{name}** 면접 평가표를 캔버스에 생성했습니다 ({categories_desc}).\n\n"
+        "내용을 검토하고 수정하신 후, **DOCX로 저장해줘**라고 말씀하시면 파일로 내보내드릴게요."
+    )
+
+
+@traceable(name="recruitment.run_evaluation_export_docx", run_type="chain")
+async def run_evaluation_export_docx(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    artifact_id: str | None = None,
+    applicant_name: str | None = None,
+) -> str:
+    """캔버스의 면접 평가표를 DOCX 파일로 변환 후 Supabase Storage에 저장, 다운로드 URL 반환."""
+    import uuid as _uuid
+
+    sb = get_supabase()
+
+    # 아티팩트 조회: artifact_id 우선, 없으면 최근 interview_evaluation
+    artifact: dict | None = None
+    if artifact_id:
+        row = (
+            sb.table("artifacts")
+            .select("*")
+            .eq("id", artifact_id)
+            .eq("account_id", account_id)
+            .maybe_single()
+            .execute()
+        )
+        artifact = row.data
+    if not artifact:
+        query = (
+            sb.table("artifacts")
+            .select("*")
+            .eq("account_id", account_id)
+            .eq("type", "interview_evaluation")
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+        if applicant_name:
+            query = query.ilike("title", f"%{applicant_name}%")
+        rows = query.execute().data or []
+        artifact = rows[0] if rows else None
+
+    if not artifact:
+        return (
+            "저장할 면접 평가표를 찾을 수 없습니다. "
+            "먼저 면접 평가표를 생성해주세요."
+        )
+
+    meta = artifact.get("metadata") or {}
+    name = meta.get("applicant_name") or artifact.get("title", "지원자").replace(" 면접 평가표", "")
+    pos_label = meta.get("position") or "해당 직종"
+    eval_weights: dict[str, int] = meta.get("eval_weights") or {"기술 역량": 50, "태도·성실성": 30, "소통 능력": 20}
+    criteria: dict = meta.get("eval_criteria") or {}
+
+    try:
+        docx_bytes = _build_evaluation_docx(name, pos_label, eval_weights, criteria)
+    except Exception:
+        log.exception("[evaluation_export] docx build failed")
+        return "DOCX 파일 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+
+    _BUCKET = "documents-uploads"
+    safe_name = name.replace(" ", "_")
+    filename = f"{safe_name}_면접평가표.docx"
+    file_id = str(_uuid.uuid4()).replace("-", "")
+    storage_key = f"{account_id}/interview_evaluation/{file_id}/{filename}"
+
+    try:
+        sb.storage.from_(_BUCKET).upload(
+            path=storage_key,
+            file=docx_bytes,
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "upsert": "false",
+            },
+        )
+        res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
+        download_url = (res or {}).get("signedURL") or (res or {}).get("signed_url")
+    except Exception:
+        log.warning("[evaluation_export] storage upload failed for applicant=%s", name)
+        return "파일 업로드 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+
+    # 아티팩트 메타에 docx_url 업데이트
+    try:
+        updated_meta = {**meta, "docx_url": download_url}
+        updated_content = artifact.get("content", "") + (
+            f"\n\n---\n\n📄 **DOCX 다운로드:** [{filename}]({download_url})"
+            if download_url and "DOCX 다운로드" not in artifact.get("content", "")
+            else ""
+        )
+        sb.table("artifacts").update({
+            "metadata": updated_meta,
+            "content": updated_content,
+        }).eq("id", artifact["id"]).execute()
+    except Exception:
+        pass
+
+    return (
+        f"📄 **{filename}** 파일로 저장 완료!\n\n"
+        f"[다운로드 링크]({download_url})\n\n"
+        "(링크는 7일간 유효합니다.)"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1915,10 +1988,11 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "recruit_interview_evaluation",
             "description": (
-                "저장된 이력서를 바탕으로 지원자 맞춤 면접 평가표를 생성하고 artifact 로 저장한다. "
+                "저장된 이력서를 바탕으로 지원자 맞춤 면접 평가표를 생성하고 캔버스에 마크다운으로 표시한다. "
                 "상단 종합 점수표(배점·채점란)와 하단 역량별 평가 기준·코멘트란으로 구성. "
                 "평가 항목·배점 비율 커스터마이징 지원. Interviews 서브허브에 자동 분류. "
-                "사용자가 '면접 평가표/평가 시트/평가 양식' 을 요청할 때 호출."
+                "사용자가 '면접 평가표/평가 시트/평가 양식' 을 요청할 때 호출. "
+                "⚠️ DOCX 파일 저장은 recruit_evaluation_export_docx 를 별도 호출."
             ),
             "handler": run_interview_evaluation,
             "parameters": {
@@ -1944,6 +2018,29 @@ def describe(account_id: str) -> list[dict]:
                     },
                 },
                 "required": ["applicant_name"],
+            },
+        },
+        {
+            "name": "recruit_evaluation_export_docx",
+            "description": (
+                "캔버스에 표시된 면접 평가표를 DOCX 파일로 변환해 다운로드 URL을 반환한다. "
+                "사용자가 평가표 검토·수정 후 'DOCX로 저장/내보내기/다운로드' 를 요청할 때 호출. "
+                "artifact_id 미확정 시 최근 interview_evaluation artifact 를 자동 사용."
+            ),
+            "handler": run_evaluation_export_docx,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "artifact_id": {
+                        "type": "string",
+                        "description": "DOCX로 변환할 interview_evaluation artifact ID (선택 — 미확정 시 생략)",
+                    },
+                    "applicant_name": {
+                        "type": "string",
+                        "description": "지원자 이름으로 artifact 검색 시 사용 (선택)",
+                    },
+                },
+                "required": [],
             },
         },
     ]
