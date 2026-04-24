@@ -70,13 +70,16 @@ const PLANS = [
 ] as const;
 
 /* ── 채널 키 (정적 접근 필수 — Next.js 브라우저에서 동적 process.env[key] 불가) */
-// 간편결제는 Tosspayments 카드 채널을 통해 easyPayProvider로 분기
-const CARD_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD ?? "";
+const CARD_CHANNEL_KEY     = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD     ?? "";
+const KAKAOPAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY ?? "";
+const TOSSPAY_CHANNEL_KEY  = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_TOSSPAY  ?? "";
+const PAYCO_CHANNEL_KEY    = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_PAYCO    ?? "";
 
 /* ── 결제 수단 (일반결제 requestPayment — 자동결제 아님) ─────────────────── */
 const PAYMENT_METHODS = [
   {
     id: "card",
+    channelKey: CARD_CHANNEL_KEY,
     label: "신용·체크카드",
     desc: "국내외 모든 카드 사용 가능",
     payMethod: "CARD" as const,
@@ -101,6 +104,7 @@ const PAYMENT_METHODS = [
     desc: "카카오페이 앱으로 간편 결제",
     payMethod: "EASY_PAY" as const,
     easyPayProvider: "KAKAOPAY" as const,
+    channelKey: KAKAOPAY_CHANNEL_KEY,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
         <rect width="24" height="24" rx="12" fill="#FEE500" />
@@ -117,6 +121,7 @@ const PAYMENT_METHODS = [
     desc: "토스 앱으로 간편 결제",
     payMethod: "EASY_PAY" as const,
     easyPayProvider: "TOSSPAY" as const,
+    channelKey: TOSSPAY_CHANNEL_KEY,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
         <rect width="24" height="24" rx="6" fill="#0064FF" />
@@ -133,6 +138,7 @@ const PAYMENT_METHODS = [
     desc: "PAYCO 앱으로 간편 결제",
     payMethod: "EASY_PAY" as const,
     easyPayProvider: "PAYCO" as const,
+    channelKey: PAYCO_CHANNEL_KEY,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
         <rect width="24" height="24" rx="6" fill="#E1251B" />
@@ -200,12 +206,9 @@ const PaymentMethodModal = ({
 
       const paymentId = `boss2-${accountId.slice(0, 8)}-${Date.now()}`;
 
-      // 결제창을 별도 팝업으로 강제 — 우리 모달과 겹침 방지
-      onClose();
-
       const result = await requestPayment({
         storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
-        channelKey: CARD_CHANNEL_KEY,
+        channelKey: method.channelKey,
         paymentId,
         orderName: planInfo.orderName,
         totalAmount: planInfo.amount,
@@ -247,7 +250,7 @@ const PaymentMethodModal = ({
       }
 
       onSuccess();
-      onClose();
+      onClose(); // 결제 성공 시에만 모달 닫기
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
