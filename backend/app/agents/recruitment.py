@@ -96,6 +96,59 @@ _INTERVIEW_FROM_RESUME_SYSTEM = (
 _JOB_POSTINGS_RE = re.compile(r"\[JOB_POSTINGS\](.*?)\[/JOB_POSTINGS\]", re.DOTALL)
 
 
+def _format_resume_table(name: str, a: dict) -> str:
+    """파싱된 applicant dict → 마크다운 표 형식 문자열."""
+    rows: list[str] = []
+
+    def row(label: str, value: str) -> None:
+        if value:
+            rows.append(f"| {label} | {value} |")
+
+    row("이름", name)
+    row("연락처", a.get("phone") or "")
+    row("이메일", a.get("email") or "")
+    row("나이", str(a["age"]) if a.get("age") else "")
+    row("주소", a.get("address") or "")
+    row("희망직종", a.get("desired_position") or "")
+    row("희망급여", a.get("desired_salary") or "")
+
+    edu_list = a.get("education") or []
+    if edu_list:
+        edu_str = " / ".join(
+            " ".join(filter(None, [e.get("school"), e.get("major"), e.get("degree"), e.get("year")]))
+            for e in edu_list
+        )
+        row("학력", edu_str)
+
+    skills = a.get("skills") or []
+    if skills:
+        row("기술스택", ", ".join(skills))
+
+    certs = a.get("certifications") or []
+    if certs:
+        row("자격증", ", ".join(certs))
+
+    intro = (a.get("introduction") or "").strip()
+    if intro:
+        row("자기소개", intro[:300] + ("…" if len(intro) > 300 else ""))
+
+    header = f"### {name}\n\n| 항목 | 내용 |\n|---|---|"
+    table = header + "\n" + "\n".join(rows)
+
+    exp_list = a.get("experience") or []
+    if exp_list:
+        exp_lines = ["", "**경력**", "", "| 회사 | 직무 | 기간 | 주요 업무 |", "|---|---|---|---|"]
+        for e in exp_list:
+            company = e.get("company") or ""
+            role = e.get("role") or ""
+            period = e.get("period") or ""
+            desc = (e.get("description") or "").replace("\n", " ")[:120]
+            exp_lines.append(f"| {company} | {role} | {period} | {desc} |")
+        table += "\n" + "\n".join(exp_lines)
+
+    return table
+
+
 def suggest_today(account_id: str) -> list[dict]:
     return suggest_today_for_domain(account_id, "recruitment")
 
@@ -726,17 +779,12 @@ async def run_resume_parse(
     if not saved:
         return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
 
-    lines = []
+    summaries: list[str] = []
     for s in saved:
-        exp = (s["applicant"].get("experience") or [])
-        if exp:
-            first = exp[0]
-            exp_str = f"{first.get('company','')} {first.get('role','')} {first.get('period','')}".strip()
-        else:
-            exp_str = "경력 정보 없음"
-        lines.append(f"- **{s['name']}**: {exp_str}")
+        a = s["applicant"]
+        summaries.append(_format_resume_table(s["name"], a))
 
-    summary = "\n".join(lines)
+    summary = "\n\n---\n\n".join(summaries)
 
     # 사용자가 면접 질문을 원하면 파싱 직후 바로 생성 (2단계 → 1단계 통합)
     interview_kw = ("면접", "질문", "인터뷰", "interview")
