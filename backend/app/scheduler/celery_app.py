@@ -53,4 +53,9 @@ celery_app.conf.beat_schedule = {
         "task":     "app.scheduler.tasks.cleanup_old_memories",
         "schedule": crontab(hour=0, minute=0),
     },
+    # 월정액 자동 청구 — 매일 09:00 KST next_billing_date 도래 구독 청구.
+    "charge-subscriptions": {
+        "task":     "app.scheduler.tasks.charge_subscriptions",
+        "schedule": crontab(hour=9, minute=0),
+    },
 }

@@ -14,13 +14,34 @@ from pathlib import Path
 _RUNNER = Path(__file__).parent / "naver_blog_runner.py"
 
 
+def _get_naver_credentials(account_id: str) -> tuple[str, list]:
+    """DB에서 account_id별 네이버 블로그 자격증명(blog_id, cookies) 반환."""
+    from app.core.supabase import get_supabase
+    sb = get_supabase()
+    res = (
+        sb.table("platform_credentials")
+        .select("credentials")
+        .eq("account_id", account_id)
+        .eq("platform", "naver_blog")
+        .execute()
+    )
+    if not res.data:
+        raise RuntimeError("네이버 블로그 쿠키가 없습니다. 플랫폼 연결 설정에서 쿠키를 업로드해 주세요.")
+    creds = res.data[0]["credentials"]
+    blog_id = creds.get("blog_id", "")
+    cookies = creds.get("cookies", [])
+    if not blog_id or not cookies:
+        raise RuntimeError("네이버 블로그 설정이 불완전합니다. 다시 업로드해 주세요.")
+    return blog_id, cookies
+
+
 def _run_subprocess(
     blog_id: str,
-    blog_pw: str,
     title: str,
     content: str,
     tags: list[str],
     image_urls: list[str] | None = None,
+    cookies: list | None = None,
 ) -> str:
     payload = json.dumps({
         "blog_id":    blog_id,
@@ -28,6 +49,7 @@ def _run_subprocess(
         "content":    content,
         "tags":       tags,
         "image_urls": image_urls or [],
+        "cookies":    cookies or [],
     })
     result = subprocess.run(
         [sys.executable, str(_RUNNER)],
@@ -35,7 +57,6 @@ def _run_subprocess(
         capture_output=True,
         text=True,
         timeout=120,
-        env={**__import__("os").environ, "NAVER_BLOG_PW": blog_pw},
     )
     output = result.stdout.strip()
     if not output:
@@ -48,19 +69,16 @@ def _run_subprocess(
 
 
 async def upload_post(
-    blog_id: str,
-    blog_pw: str,
+    account_id: str,
     title: str,
     content: str,
     tags: list[str] | None = None,
     image_urls: list[str] | None = None,
 ) -> str:
-    """
-    별도 프로세스에서 Playwright를 실행해 네이버 블로그에 업로드한다.
+    """DB에서 account_id별 자격증명을 로드해 네이버 블로그에 업로드.
     반환값: 게시된 포스트 URL (또는 블로그 홈 URL).
     """
-    if not blog_id or not blog_pw:
-        raise ValueError("NAVER_BLOG_ID / NAVER_BLOG_PW 환경변수를 설정하세요.")
+    blog_id, cookies = _get_naver_credentials(account_id)
     return await asyncio.to_thread(
-        _run_subprocess, blog_id, blog_pw, title, content, tags or [], image_urls or []
+        _run_subprocess, blog_id, title, content, tags or [], image_urls or [], cookies
     )

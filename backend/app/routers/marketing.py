@@ -102,20 +102,13 @@ class NaverBlogUploadResponse(BaseModel):
 @router.post("/blog/upload", response_model=NaverBlogUploadResponse)
 async def upload_naver_blog(req: NaverBlogUploadRequest):
     """
-    Playwright headless=False로 네이버 블로그에 자동 업로드.
-    NAVER_BLOG_ID / NAVER_BLOG_PW 환경변수 필요.
+    Playwright로 네이버 블로그에 자동 업로드.
+    account_id별 platform_credentials DB에서 자격증명 로드.
     """
-    if not settings.naver_blog_id or not settings.naver_blog_pw:
-        raise HTTPException(
-            status_code=503,
-            detail="NAVER_BLOG_ID / NAVER_BLOG_PW 환경변수가 설정되지 않았습니다.",
-        )
-
     try:
         from app.services.naver_blog import upload_post
         url = await upload_post(
-            blog_id=settings.naver_blog_id,
-            blog_pw=settings.naver_blog_pw,
+            account_id=req.account_id,
             title=req.title,
             content=req.content,
             tags=req.tags,

@@ -8,7 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
-COOKIE_PATH = Path(__file__).parent / "naver_cookies.json"
+COOKIE_PATH = Path(__file__).parent / "naver_cookies.json"  # 로컬 fallback용
 
 _JS_CLICK_SEL = "(selector) => { const el = document.querySelector(selector); if (el) { el.click(); return true; } return false; }"
 _JS_CLICK_TEXT = "(text) => { const btns = [...document.querySelectorAll('button')]; const el = btns.find(b => b.innerText.trim().includes(text)); if (el) { el.click(); return true; } return false; }"
@@ -285,6 +285,7 @@ def main():
     title_override = data.get("title", "")
     tags_override = data.get("tags", [])
     image_urls = data.get("image_urls", [])
+    cookies_from_payload = data.get("cookies")  # DB에서 전달된 쿠키 (없으면 파일 fallback)
 
     parsed_title, segments, parsed_tags = parse_content(content)
     title = title_override or parsed_title
@@ -307,11 +308,14 @@ def main():
             return page.evaluate(_JS_CLICK_SEL, sel)
 
         try:
-            if not COOKIE_PATH.exists():
-                print(json.dumps({"error": "먼저 naver_login_setup을 실행하세요."}))
+            if cookies_from_payload:
+                cookies = cookies_from_payload
+            elif COOKIE_PATH.exists():
+                cookies = json.loads(COOKIE_PATH.read_text(encoding="utf-8"))
+            else:
+                print(json.dumps({"error": "네이버 블로그 쿠키가 없습니다. 플랫폼 연결 설정에서 쿠키를 업로드해 주세요."}))
                 sys.exit(1)
 
-            cookies = json.loads(COOKIE_PATH.read_text(encoding="utf-8"))
             context.add_cookies(cookies)
 
             page.goto(f"https://blog.naver.com/{blog_id}", wait_until="domcontentloaded")
