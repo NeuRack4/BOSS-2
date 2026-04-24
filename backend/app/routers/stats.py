@@ -945,7 +945,7 @@ async def benchmark_insight(
                 temperature=0.5,
             )
             raw = resp.choices[0].message.content.strip()
-            log.info("[benchmark-insight] LLM raw: %s", raw[:300])
+            log.debug("[benchmark-insight] LLM raw: %s", raw[:300])
             if "```" in raw:
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
