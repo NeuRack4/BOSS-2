@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] — 2026-04-24
+
+### Added — Sales (feature/sales-rag-agentic-loop)
+
+- **Sales RAG Retriever** (`backend/app/agents/_sales/_retriever.py` 신규)
+  - `retrieve_sales_context()` — BAAI/bge-m3 1024차원 임베딩으로 질문 벡터화
+  - Supabase `match_sales_embeddings` RPC 호출 → `source_type='sales'` 임베딩 유사도 검색
+  - LangSmith `@traceable` 추적 포함
+- **Sales Agentic Loop** (`backend/app/agents/_sales/_graph.py` 신규)
+  - LangGraph `StateGraph` 기반 4노드 파이프라인:
+    - `fetch_data` — sales_records·cost_records DB 수집
+    - `check_data` — LLM 없이 Python 조건(≥3건)으로 데이터 충분 여부 판단 (비용 0)
+    - `retrieve_more` — 데이터 부족 시 RAG로 과거 유사 데이터 보강
+    - `generate` — generate_sales_insight() 호출
+  - 무한 루프 방지: iteration ≥ 2이면 강제 generate
+  - 각 노드 LangSmith `@traceable` 추적
+- **Supabase 함수** (`035_match_sales_embeddings.sql`)
+  - `match_sales_embeddings(vector(1024), uuid, int)` — 코사인 유사도 기반 검색
+  - `source_type = 'sales'` 필터 적용 (328건 인덱싱 확인)
+
+### Changed
+
+- `run_sales_report()` — LangGraph `ainvoke` 방식으로 전환. artifact 저장·Kanban·NodeDetailModal metadata 로직 완전 보존
+- `run()` — 오케스트레이터가 rag_context 미전달 시 `retrieve_sales_context()` 자동 호출
+
+---
+
 ## [2.5.0] — 2026-04-24
 
 ### Added — Sales (feature/sales-stats-enhancement)
