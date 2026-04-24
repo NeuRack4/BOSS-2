@@ -1,7 +1,5 @@
 # BOSS-2
 
-![Dashboard](./docs/dashboard-layout.png)
-
 ![version](https://img.shields.io/badge/version-2.7.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. Planner 기반 오케스트레이터 챗봇 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
