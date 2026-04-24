@@ -47,6 +47,7 @@ htmlcov/
 .tox/
 .nox/
 celerybeat-schedule
+celerybeat-schedule.*
 celerybeat.pid
 *.egg-info/
 *.egg
@@ -64,13 +65,15 @@ supabase/.branches/
 supabase/.temp/
 
 # --- IDE / Editor ---
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 .cursor/
 *.swp
 *.swo
 *~
 .claude/
+CLAUDE.md
 
 # --- OS ---
 .DS_Store

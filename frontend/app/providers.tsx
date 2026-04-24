@@ -1,14 +1,10 @@
 "use client";
 
-import { ThemeProvider } from "next-themes";
+import { NodeDetailProvider } from "@/components/detail/NodeDetailContext";
+import { ChatProvider } from "@/components/chat/ChatContext";
 
 export const Providers = ({ children }: { children: React.ReactNode }) => (
-  <ThemeProvider
-    attribute="class"
-    defaultTheme="dark"
-    forcedTheme="dark"
-    enableSystem={false}
-  >
-    {children}
-  </ThemeProvider>
+  <ChatProvider>
+    <NodeDetailProvider>{children}</NodeDetailProvider>
+  </ChatProvider>
 );

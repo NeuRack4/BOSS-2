@@ -26,9 +26,9 @@ const DOMAIN_ICONS = {
 };
 
 const DOMAIN_COLORS = {
-  recruitment: "text-blue-500",
-  marketing: "text-purple-500",
-  sales: "text-emerald-500",
+  recruitment: "text-[#a35c4a]",
+  marketing: "text-[#a87620]",
+  sales: "text-[#6a7843]",
 };
 
 const DOMAIN_LABELS = {

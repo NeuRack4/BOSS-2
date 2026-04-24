@@ -1,0 +1,61 @@
+2026-04-20 11:52:32,351 INFO === marketing_knowledge_chunks 임포트 ===
+2026-04-20 11:52:32,352 INFO [subsidy_law] 소상공인보호법 + 중소기업창업지원법 로딩 중...
+2026-04-20 11:52:32,461 INFO HTTP Request: GET https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?select=category%2Cchunk_index&category=eq.subsidy_law "HTTP/2 200 OK"
+2026-04-20 11:52:32,612 INFO HTTP Request: GET https://ckbnhrpzgfhwzjslyesf.supabase.co/rest/v1/law_chunks?select=id%2Ccategory%2Csource%2Cchunk_index%2Ccontent&category=eq.subsidy&offset=0&limit=1000 "HTTP/2 200 OK"
+2026-04-20 11:52:32,620 INFO   BOSS: 468개 로드
+2026-04-20 11:52:32,621 INFO   임베딩 생성 중... (468개)
+2026-04-20 11:52:32,626 INFO Use pytorch device_name: cpu
+2026-04-20 11:52:32,626 INFO Load pretrained SentenceTransformer: BAAI/bge-m3
+Batches:   0%|          | 0/15 [00:00<?, ?it/s]Batches:   7%|6         | 1/15 [03:08<43:56, 188.36s/it]Batches:  13%|#3        | 2/15 [03:37<20:27, 94.44s/it] Batches:  20%|##        | 3/15 [03:53<11:45, 58.80s/it]Batches:  27%|##6       | 4/15 [04:05<07:24, 40.37s/it]Batches:  33%|###3      | 5/15 [04:14<04:49, 28.91s/it]Batches:  40%|####      | 6/15 [04:20<03:12, 21.34s/it]Batches:  47%|####6     | 7/15 [04:26<02:10, 16.30s/it]Batches:  53%|#####3    | 8/15 [04:32<01:31, 13.08s/it]Batches:  60%|######    | 9/15 [04:39<01:06, 11.11s/it]Batches:  67%|######6   | 10/15 [04:44<00:46,  9.24s/it]Batches:  73%|#######3  | 11/15 [04:49<00:31,  7.77s/it]Batches:  80%|########  | 12/15 [04:52<00:19,  6.56s/it]Batches:  87%|########6 | 13/15 [04:56<00:11,  5.56s/it]Batches:  93%|#########3| 14/15 [04:59<00:04,  4.85s/it]Batches: 100%|##########| 15/15 [05:00<00:00,  3.59s/it]Batches: 100%|##########| 15/15 [05:00<00:00, 20.01s/it]
+2026-04-20 11:57:38,307 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:38,416 INFO   진행: 50/468
+2026-04-20 11:57:38,695 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:38,750 INFO   진행: 100/468
+2026-04-20 11:57:39,038 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:39,089 INFO   진행: 150/468
+2026-04-20 11:57:40,136 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:40,248 INFO   진행: 200/468
+2026-04-20 11:57:40,598 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:40,705 INFO   진행: 250/468
+2026-04-20 11:57:41,152 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:41,279 INFO   진행: 300/468
+2026-04-20 11:57:42,004 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:42,115 INFO   진행: 350/468
+2026-04-20 11:57:42,621 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:42,744 INFO   진행: 400/468
+2026-04-20 11:57:43,045 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:43,149 INFO   진행: 450/468
+2026-04-20 11:57:43,277 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 11:57:43,316 INFO   진행: 468/468
+2026-04-20 11:57:43,316 INFO   [subsidy_law] 완료: 468개 삽입
+2026-04-20 11:57:43,316 INFO [privacy_law] 개인정보 보호법 (마케팅 데이터 수집 컴플라이언스) 로딩 중...
+2026-04-20 11:57:43,406 INFO HTTP Request: GET https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?select=category%2Cchunk_index&category=eq.privacy_law "HTTP/2 200 OK"
+2026-04-20 11:57:43,769 INFO HTTP Request: GET https://ckbnhrpzgfhwzjslyesf.supabase.co/rest/v1/law_chunks?select=id%2Ccategory%2Csource%2Cchunk_index%2Ccontent&category=eq.regulation&offset=0&limit=1000 "HTTP/2 200 OK"
+2026-04-20 11:57:43,778 INFO   BOSS: 546개 로드
+2026-04-20 11:57:43,779 INFO   임베딩 생성 중... (546개)
+Batches:   0%|          | 0/18 [00:00<?, ?it/s]Batches:   6%|5         | 1/18 [02:08<36:16, 128.05s/it]Batches:  11%|#1        | 2/18 [02:28<17:17, 64.81s/it] Batches:  17%|#6        | 3/18 [02:43<10:29, 41.97s/it]Batches:  22%|##2       | 4/18 [02:54<06:58, 29.91s/it]Batches:  28%|##7       | 5/18 [03:02<04:45, 21.98s/it]Batches:  33%|###3      | 6/18 [03:10<03:24, 17.01s/it]Batches:  39%|###8      | 7/18 [03:16<02:28, 13.52s/it]Batches:  44%|####4     | 8/18 [03:22<01:51, 11.19s/it]Batches:  50%|#####     | 9/18 [03:28<01:24,  9.42s/it]Batches:  56%|#####5    | 10/18 [03:33<01:04,  8.10s/it]Batches:  61%|######1   | 11/18 [03:38<00:49,  7.08s/it]Batches:  67%|######6   | 12/18 [03:42<00:37,  6.26s/it]Batches:  72%|#######2  | 13/18 [03:46<00:28,  5.65s/it]Batches:  78%|#######7  | 14/18 [03:50<00:20,  5.09s/it]Batches:  83%|########3 | 15/18 [03:54<00:13,  4.66s/it]Batches:  89%|########8 | 16/18 [03:57<00:08,  4.16s/it]Batches:  94%|#########4| 17/18 [03:59<00:03,  3.56s/it]Batches: 100%|##########| 18/18 [03:59<00:00,  2.52s/it]Batches: 100%|##########| 18/18 [03:59<00:00, 13.30s/it]
+2026-04-20 12:01:43,859 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:43,951 INFO   진행: 50/546
+2026-04-20 12:01:44,499 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:44,621 INFO   진행: 100/546
+2026-04-20 12:01:45,141 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:45,244 INFO   진행: 150/546
+2026-04-20 12:01:45,550 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:45,655 INFO   진행: 200/546
+2026-04-20 12:01:46,135 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:46,242 INFO   진행: 250/546
+2026-04-20 12:01:46,569 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:46,671 INFO   진행: 300/546
+2026-04-20 12:01:46,981 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:47,076 INFO   진행: 350/546
+2026-04-20 12:01:47,354 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:47,477 INFO   진행: 400/546
+2026-04-20 12:01:47,734 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:47,800 INFO   진행: 450/546
+2026-04-20 12:01:48,605 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:48,724 INFO   진행: 500/546
+2026-04-20 12:01:49,009 INFO HTTP Request: POST https://ckesfvyaniybwcfxlfen.supabase.co/rest/v1/marketing_knowledge_chunks?columns=%22category%22%2C%22content%22%2C%22embedding%22%2C%22source%22%2C%22chunk_index%22%2C%22metadata%22 "HTTP/2 201 Created"
+2026-04-20 12:01:49,109 INFO   진행: 546/546
+2026-04-20 12:01:49,109 INFO   [privacy_law] 완료: 546개 삽입
+2026-04-20 12:01:49,116 INFO 
+임포트 완료. 총 1014개 행 삽입.

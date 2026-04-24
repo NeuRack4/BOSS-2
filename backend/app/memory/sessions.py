@@ -48,7 +48,7 @@ async def get_session_messages(account_id: str, session_id: str) -> list[dict]:
     sb = get_supabase()
     rows = (
         sb.table("chat_messages")
-        .select("role, content, choices, created_at")
+        .select("role, content, choices, attachment, speaker, created_at")
         .eq("account_id", account_id)
         .eq("session_id", session_id)
         .order("created_at")

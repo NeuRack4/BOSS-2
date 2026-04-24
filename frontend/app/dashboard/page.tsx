@@ -1,23 +1,29 @@
+"use client";
+
 import { Header } from "@/components/layout/Header";
-import { ChatOverlay } from "@/components/chat/ChatOverlay";
-import { ChatProvider } from "@/components/chat/ChatContext";
-import { FilterProvider } from "@/components/canvas/FilterContext";
-import { FlowCanvas } from "@/components/canvas/FlowCanvas";
-import { FloatingFilterPanel } from "@/components/canvas/FloatingFilterPanel";
+import { BriefingLoader } from "@/components/chat/BriefingLoader";
+import { BentoGrid } from "@/components/bento/BentoGrid";
+import { LayoutProvider } from "@/components/bento/LayoutContext";
+import { useChat } from "@/components/chat/ChatContext";
 
 export default function DashboardPage() {
+  const { userId } = useChat();
+
   return (
-    <ChatProvider>
-      <FilterProvider>
-        <div className="flex h-screen flex-col overflow-hidden">
-          <Header />
-          <div className="relative flex flex-1 overflow-hidden">
-            <FlowCanvas />
-            <FloatingFilterPanel />
-          </div>
-          <ChatOverlay />
-        </div>
-      </FilterProvider>
-    </ChatProvider>
+    <LayoutProvider accountId={userId ?? ""}>
+      <div className="bento-shell flex h-screen flex-col overflow-hidden">
+        <Header sidebar />
+        <main className="flex-1 overflow-auto">
+          {userId ? (
+            <BentoGrid accountId={userId} />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-[#030303]/40">
+              불러오는 중...
+            </div>
+          )}
+        </main>
+        <BriefingLoader />
+      </div>
+    </LayoutProvider>
   );
 }

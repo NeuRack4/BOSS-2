@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.agents import orchestrator
 from app.core.supabase import get_supabase
+from app.scheduler.log_nodes import create_log_node
 from app.models.schemas import (
     ScheduleCreateRequest,
     ScheduleResponse,
@@ -41,17 +42,28 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
         raise HTTPException(status_code=404, detail="artifact not found")
     if art.get("account_id") != req.account_id:
         raise HTTPException(status_code=403, detail="not allowed")
-    if art.get("kind") != "schedule":
-        raise HTTPException(status_code=400, detail="not a schedule node")
-
-    sb.table("artifacts").update({"status": "running"}).eq("id", artifact_id).execute()
+    metadata = art.get("metadata") or {}
+    if not metadata.get("schedule_enabled"):
+        raise HTTPException(status_code=400, detail="schedule not enabled on this artifact")
 
     now = datetime.now(timezone.utc)
-    metadata = art.get("metadata") or {}
     try:
         reply = await orchestrator.run_scheduled(art, req.account_id)
     except Exception as e:
-        sb.table("artifacts").update({"status": "failed"}).eq("id", artifact_id).execute()
+        sb.table("artifacts").update(
+            {"metadata": {**metadata, "last_run_status": "failed", "last_error": str(e)[:500]}}
+        ).eq("id", artifact_id).execute()
+        log_id = create_log_node(
+            sb, art, status="failed", content=f"실행 실패: {str(e)[:200]}", executed_at=now
+        )
+        sb.table("task_logs").insert(
+            {
+                "account_id": req.account_id,
+                "status": "failed",
+                "result": {"artifact_id": artifact_id, "title": art.get("title"), "trigger": "run_now", "log_id": log_id},
+                "error": str(e)[:2000],
+            }
+        ).execute()
         raise HTTPException(status_code=500, detail=f"execution failed: {e}")
 
     cron_expr = metadata.get("cron")
@@ -59,13 +71,34 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
     new_metadata = {
         **metadata,
         "executed_at": now.isoformat(),
+        "last_run_status": "success",
     }
     if next_run:
         new_metadata["next_run"] = next_run
 
-    sb.table("artifacts").update(
-        {"status": "active", "metadata": new_metadata}
-    ).eq("id", artifact_id).execute()
+    sb.table("artifacts").update({"metadata": new_metadata}).eq("id", artifact_id).execute()
+
+    log_id = create_log_node(
+        sb, art,
+        status="success",
+        content=f"수동 1회 실행 완료 — 응답 {len(reply or '')} 문자",
+        executed_at=now,
+    )
+
+    sb.table("task_logs").insert(
+        {
+            "account_id": req.account_id,
+            "status": "success",
+            "result": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "title": art.get("title"),
+                "trigger": "run_now",
+                "reply_preview": (reply or "")[:500],
+                "next_run": next_run,
+            },
+        }
+    ).execute()
 
     sb.table("activity_logs").insert(
         {
@@ -74,7 +107,13 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
             "domain": (art.get("domains") or ["general"])[0],
             "title": art.get("title") or "scheduled run",
             "description": "수동 1회 실행",
-            "metadata": {"artifact_id": artifact_id, "reply_preview": (reply or "")[:200]},
+            "metadata": {
+                "artifact_id": artifact_id,
+                "log_id": log_id,
+                "status": "success",
+                "trigger": "run_now",
+                "reply_preview": (reply or "")[:200],
+            },
         }
     ).execute()
 
@@ -90,64 +129,43 @@ async def run_now(artifact_id: str, req: ScheduleRunRequest):
 
 @router.post("", response_model=ScheduleResponse)
 async def create_schedule(req: ScheduleCreateRequest):
-    """artifact에 자식으로 schedule 노드를 추가. artifact_edges.scheduled_by 관계 생성."""
+    """대상 artifact 에 schedule 토글을 켠다 (v0.10 — 별도 노드를 만들지 않음)."""
     sb = get_supabase()
-    parent_res = (
+    art_res = (
         sb.table("artifacts")
-        .select("id,account_id,domains,title")
+        .select("id,account_id,metadata")
         .eq("id", req.artifact_id)
         .single()
         .execute()
     )
-    parent = parent_res.data
-    if not parent:
-        raise HTTPException(status_code=404, detail="parent artifact not found")
-    if parent.get("account_id") != req.account_id:
+    art = art_res.data
+    if not art:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    if art.get("account_id") != req.account_id:
         raise HTTPException(status_code=403, detail="not allowed")
 
     now = datetime.now(timezone.utc)
     next_run = _next_run_iso(req.cron, now)
-    title = req.title or f"{parent.get('title') or 'schedule'} — 자동 실행"
+    metadata = {
+        **(art.get("metadata") or {}),
+        "schedule_enabled": True,
+        "schedule_status":  "active",
+        "cron":             req.cron,
+    }
+    if next_run:
+        metadata["next_run"] = next_run
 
-    ins = (
-        sb.table("artifacts")
-        .insert(
-            {
-                "account_id": req.account_id,
-                "domains": parent.get("domains") or [],
-                "kind": "schedule",
-                "type": "schedule",
-                "title": title,
-                "content": "",
-                "status": "active",
-                "metadata": {"cron": req.cron, "next_run": next_run},
-            }
-        )
-        .execute()
-    )
-    schedule = (ins.data or [{}])[0]
-    schedule_id = schedule.get("id")
-    if not schedule_id:
-        raise HTTPException(status_code=500, detail="failed to create schedule")
-
-    sb.table("artifact_edges").insert(
-        {
-            "parent_id": req.artifact_id,
-            "child_id": schedule_id,
-            "relation": "scheduled_by",
-        }
-    ).execute()
-
-    return ScheduleResponse(data={"ok": True, "id": schedule_id, "next_run": next_run})
+    sb.table("artifacts").update({"metadata": metadata}).eq("id", req.artifact_id).execute()
+    return ScheduleResponse(data={"ok": True, "id": req.artifact_id, "next_run": next_run})
 
 
 @router.patch("/{artifact_id}", response_model=ScheduleResponse)
 async def update_schedule(artifact_id: str, req: ScheduleUpdateRequest):
-    """cron 표현식 수정 + next_run 재계산."""
+    """cron 표현식 수정 + next_run 재계산 (metadata.schedule_enabled=true 전제)."""
     sb = get_supabase()
     art_res = (
         sb.table("artifacts")
-        .select("id,account_id,kind,metadata")
+        .select("id,account_id,metadata")
         .eq("id", artifact_id)
         .single()
         .execute()
@@ -157,11 +175,12 @@ async def update_schedule(artifact_id: str, req: ScheduleUpdateRequest):
         raise HTTPException(status_code=404, detail="artifact not found")
     if art.get("account_id") != req.account_id:
         raise HTTPException(status_code=403, detail="not allowed")
-    if art.get("kind") != "schedule":
-        raise HTTPException(status_code=400, detail="not a schedule node")
+    meta = art.get("metadata") or {}
+    if not meta.get("schedule_enabled"):
+        raise HTTPException(status_code=400, detail="schedule not enabled on this artifact")
 
     next_run = _next_run_iso(req.cron, datetime.now(timezone.utc))
-    metadata = {**(art.get("metadata") or {}), "cron": req.cron}
+    metadata = {**meta, "cron": req.cron}
     if next_run:
         metadata["next_run"] = next_run
 
@@ -192,13 +211,14 @@ async def schedule_history(artifact_id: str, account_id: str, limit: int = 20):
 
 @router.patch("/{artifact_id}/status", response_model=ScheduleResponse)
 async def update_status(artifact_id: str, req: ScheduleStatusRequest):
+    """metadata.schedule_status 를 active/paused 로 토글."""
     if req.status not in ("active", "paused"):
         raise HTTPException(status_code=400, detail="status must be 'active' or 'paused'")
 
     sb = get_supabase()
     art_res = (
         sb.table("artifacts")
-        .select("id,account_id,kind")
+        .select("id,account_id,metadata")
         .eq("id", artifact_id)
         .single()
         .execute()
@@ -208,9 +228,11 @@ async def update_status(artifact_id: str, req: ScheduleStatusRequest):
         raise HTTPException(status_code=404, detail="artifact not found")
     if art.get("account_id") != req.account_id:
         raise HTTPException(status_code=403, detail="not allowed")
-    if art.get("kind") != "schedule":
-        raise HTTPException(status_code=400, detail="not a schedule node")
+    meta = art.get("metadata") or {}
+    if not meta.get("schedule_enabled"):
+        raise HTTPException(status_code=400, detail="schedule not enabled on this artifact")
 
-    sb.table("artifacts").update({"status": req.status}).eq("id", artifact_id).execute()
+    metadata = {**meta, "schedule_status": req.status}
+    sb.table("artifacts").update({"metadata": metadata}).eq("id", artifact_id).execute()
 
     return ScheduleResponse(data={"ok": True, "status": req.status})
