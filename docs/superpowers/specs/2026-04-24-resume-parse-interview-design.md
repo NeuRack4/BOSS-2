@@ -29,7 +29,7 @@
 
 ## 2. DB Migration
 
-**File:** `supabase/migrations/027_resumes_table.sql`  
+**File:** `supabase/migrations/035_resumes_table.sql`  
 **Apply via:** Supabase MCP
 
 ```sql
@@ -155,7 +155,7 @@ Capability(
 | 파일                                        | 변경 내용                                                              |
 | ------------------------------------------- | ---------------------------------------------------------------------- |
 | `frontend/components/chat/InlineChat.tsx`   | "3개 플랫폼 동시 공고" 제거, "이력서 분석 & 면접 질문" 추가            |
-| `supabase/migrations/027_resumes_table.sql` | resumes 테이블 생성                                                    |
+| `supabase/migrations/035_resumes_table.sql` | resumes 테이블 생성                                                    |
 | `backend/app/agents/recruitment.py`         | `run_resume_parse`, `run_resume_interview` 추가, `describe()` 업데이트 |
 
 ---
