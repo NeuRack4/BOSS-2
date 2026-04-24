@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] — 2026-04-24
+
+### Added — Recruitment (feature-rec)
+
+- **면접 평가표 capability** (`recruit_interview_evaluation`) — 이력서 기반 맞춤 면접 평가표 생성. 종합 점수표(배점·채점란) + 역량별 평가 기준·체크포인트·코멘트란 혼합 형식. 배점 비율 커스터마이징 지원. `Interviews` 서브허브 자동 분류.
+- **면접 평가표 DOCX 내보내기 capability** (`recruit_evaluation_export_docx`) — 캔버스에서 검토·수정 후 요청 시 DOCX 파일로 변환, Supabase Storage 업로드 후 7일 유효 다운로드 URL 반환.
+- **면접 질문 서브허브 변경** — `recruit_interview`, `recruit_resume_interview` artifact `sub_domain: Job_posting` → `Interviews`.
+
+### Changed — Recruitment (feature-rec)
+
+- **채팅 사전 질문 버튼 개편** — 면접 질문·온보딩 체크리스트·채용 가이드·인건비 계산·이력서 분석 & 면접 질문 제거, 이력서 분석·면접 질문지 신규 추가.
+- **면접 평가표 생성·내보내기 분리** — 생성(마크다운 캔버스 표시)과 DOCX 내보내기를 별도 capability로 분리.
+
+### Fixed — Recruitment (feature-rec)
+
+- **평가표 전문 채팅 미표시** — 면접 평가표 생성 시 전체 내용이 채팅 응답에 포함되도록 수정.
+- **Storage 한글 키 오류** — DOCX 업로드 시 한글 파일명이 Supabase Storage `InvalidKey` 에러를 유발, storage path를 ASCII 고정(`evaluation.docx`)으로 변경.
+
+---
+
 ## [2.8.1] — 2026-04-24
 
 ### Fixed — Sales (feature/sales-phase2)
