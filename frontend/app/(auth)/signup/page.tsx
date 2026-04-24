@@ -313,27 +313,37 @@ export default function SignupPage() {
           </section>
 
           {/* STATS */}
-          <section className="tile t-stats tint-sage">
-            <div>
-              <div className="eyebrow">
-                <span className="dot" />
-                Throughput
-              </div>
-              <div className="stat-num">
-                14<sup>hrs/wk</sup>
-              </div>
-              <div className="stat-label">
-                median time returned to owners after the first 30 days.
-              </div>
+          <section className="tile t-stats t-terminal">
+            <div className="term-chrome" aria-hidden="true">
+              <span className="term-dot term-red" />
+              <span className="term-dot term-yellow" />
+              <span className="term-dot term-green" />
+              <span className="term-title-bar">boss — stats</span>
             </div>
-            <div className="sparkline">
-              {[20, 35, 28, 55, 42, 68, 60, 80, 72, 95, 88, 100].map((h, i) => (
-                <span
-                  key={i}
-                  style={{ height: `${h}%` }}
-                  className={h >= 75 ? "hi" : ""}
-                />
-              ))}
+            <div className="term-body">
+              <div className="term-line">
+                <span className="term-dim">$ </span>throughput --avg
+              </div>
+              <div
+                className="term-line term-g"
+                style={{
+                  fontSize: "20px",
+                  fontWeight: 400,
+                  lineHeight: 1.1,
+                  margin: "4px 0",
+                }}
+              >
+                14
+                <span style={{ fontSize: "11px", opacity: 0.65 }}> hrs/wk</span>
+              </div>
+              <div className="term-line term-dim" style={{ fontSize: "10px" }}>
+                median · 30 days
+              </div>
+              <div className="term-sparkline" aria-hidden="true">
+                {[28, 45, 58, 72, 62, 88, 78, 100].map((h, i) => (
+                  <span key={i} style={{ height: `${h}%` }} />
+                ))}
+              </div>
             </div>
           </section>
 
@@ -1034,4 +1044,52 @@ const SIGNUP_CSS = `
 }
 .boss-signup .hero-meta-light { color: rgba(255,253,249,0.42); }
 .boss-signup .hero-meta-light b { color: rgba(255,253,249,0.6); }
+
+/* Terminal tile */
+.boss-signup .t-terminal {
+  background: #1a1816;
+  border-color: transparent;
+  padding: 0;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.boss-signup .term-chrome {
+  background: #2a2724;
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.boss-signup .term-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.boss-signup .term-red    { background: #ff5f57; }
+.boss-signup .term-yellow { background: #febc2e; }
+.boss-signup .term-green  { background: #28c840; }
+.boss-signup .term-title-bar {
+  font-family: var(--font-mono); font-size: 10px;
+  color: rgba(255,253,249,0.28); margin-left: 6px;
+}
+.boss-signup .term-body {
+  padding: 12px 14px; flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  line-height: 1.85;
+}
+.boss-signup .term-line {
+  font-family: var(--font-mono); font-size: 11px;
+  color: rgba(255,253,249,0.8);
+}
+.boss-signup .term-g   { color: #28c840; }
+.boss-signup .term-y   { color: #febc2e; }
+.boss-signup .term-m   { color: rgba(255,253,249,0.42); }
+.boss-signup .term-dim { color: rgba(255,253,249,0.3); }
+.boss-signup .term-sparkline {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 22px; margin-top: 8px;
+}
+.boss-signup .term-sparkline span {
+  flex: 1; border-radius: 1px;
+  background: rgba(40, 200, 64, 0.28);
+}
+.boss-signup .term-sparkline span:last-child {
+  background: rgba(40, 200, 64, 0.6);
+}
 `;
