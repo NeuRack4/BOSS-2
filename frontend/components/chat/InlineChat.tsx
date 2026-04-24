@@ -534,8 +534,10 @@ export const InlineChat = () => {
   // sessionStorage 에 미러링해서 탭 새로고침에도 살아남게 한다.
   const PENDING_UPLOAD_KEY = "boss2:pending-upload";
   const PENDING_RECEIPT_KEY = "boss2:pending-receipt";
+  const PENDING_UPLOADS_KEY = "boss2:pending-uploads";
   const pendingUploadRef = useRef<Record<string, unknown> | null>(null);
   const pendingReceiptRef = useRef<Record<string, unknown> | null>(null);
+  const pendingUploadsRef = useRef<Array<Record<string, unknown>> | null>(null);
   // SalesInputTable / CostInputTable Save 경로. 한 번에 하나만 대기.
   const pendingSaveRef = useRef<Record<string, unknown> | null>(null);
   const setPendingUpload = useCallback(
@@ -564,6 +566,19 @@ export const InlineChat = () => {
     },
     [],
   );
+  const setPendingUploads = useCallback(
+    (payloads: Array<Record<string, unknown>> | null) => {
+      pendingUploadsRef.current = payloads;
+      try {
+        if (payloads)
+          sessionStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(payloads));
+        else sessionStorage.removeItem(PENDING_UPLOADS_KEY);
+      } catch {
+        /* noop */
+      }
+    },
+    [],
+  );
   // mount 시 sessionStorage 에서 복원
   useEffect(() => {
     try {
@@ -573,6 +588,11 @@ export const InlineChat = () => {
       const rawR = sessionStorage.getItem(PENDING_RECEIPT_KEY);
       if (rawR)
         pendingReceiptRef.current = JSON.parse(rawR) as Record<string, unknown>;
+      const rawU = sessionStorage.getItem(PENDING_UPLOADS_KEY);
+      if (rawU)
+        pendingUploadsRef.current = JSON.parse(rawU) as Array<
+          Record<string, unknown>
+        >;
     } catch {
       /* noop */
     }
@@ -990,8 +1010,27 @@ export const InlineChat = () => {
         );
 
         if (otherNonDocs.length > 0) {
+          // "other" 카테고리 파일은 이력서일 수 있으므로 upload_payloads 로 보관해
+          // 다음 chat 요청에 함께 전송한다 (recruit_resume_parse 라우팅용).
+          const payloads = otherNonDocs
+            .filter((it) => it.storage_path)
+            .map((it) => ({
+              title: it.title,
+              content: it.content ?? "",
+              storage_path: it.storage_path!,
+              bucket: it.bucket ?? "documents-uploads",
+              mime_type: it.mime_type ?? "application/octet-stream",
+              size_bytes: it.size_bytes ?? 0,
+              original_name: it.original_name ?? it.title,
+              parsed_len: it.parsed_len ?? 0,
+              uploaded_at: new Date().toISOString(),
+            }));
+          if (payloads.length > 0) setPendingUploads(payloads);
+
           const lines = otherNonDocs.map((it) => {
             const cat = (it.final_category ?? "other") as UploadCategory;
+            if (cat === "other")
+              return `- **${it.title}** 파일을 저장했어요. 이력서 분석이나 면접 질문 생성이 필요하면 말씀해주세요.`;
             return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
           });
           setMessages((prev) => [
@@ -1070,7 +1109,15 @@ export const InlineChat = () => {
         setUploading(false);
       }
     },
-    [apiBase, userId, uploading, loading, messages.length, uploadType],
+    [
+      apiBase,
+      userId,
+      uploading,
+      loading,
+      messages.length,
+      uploadType,
+      setPendingUploads,
+    ],
   );
 
   const handleDocxReady = useCallback(
@@ -1131,7 +1178,9 @@ export const InlineChat = () => {
         }
         await uploadFiles(files);
         if (trimmed) {
-          await send(trimmed, messageIndex);
+          // sendRef.current 는 항상 최신 send (stagedFiles=[] 로 재생성된 것)를 가리킨다.
+          // 같은 클로저의 send() 를 재귀 호출하면 stale stagedFiles 를 보게 되어 무한 재업로드 발생.
+          await sendRef.current?.(trimmed, messageIndex);
         }
         return;
       }
@@ -1156,6 +1205,10 @@ export const InlineChat = () => {
         };
         if (pendingUploadRef.current) {
           chatBody.upload_payload = pendingUploadRef.current;
+        }
+        if (pendingUploadsRef.current) {
+          chatBody.upload_payloads = pendingUploadsRef.current;
+          setPendingUploads(null);
         }
         if (pendingReceiptRef.current) {
           chatBody.receipt_payload = pendingReceiptRef.current;
@@ -1302,6 +1355,7 @@ export const InlineChat = () => {
       uploadFiles,
       userId,
       setLastSpeaker,
+      setPendingUploads,
     ],
   );
 
