@@ -757,6 +757,9 @@ async def run_resume_interview(
 ) -> str:
     """저장된 이력서를 기반으로 맞춤 면접 질문 생성 후 artifact 저장."""
     sb = get_supabase()
+    applicant_name = (applicant_name or "").strip()
+    if not applicant_name:
+        return "지원자 이름이 필요합니다."
 
     # account_id 필터 필수 — 최신 파싱 순으로 이름 매칭
     rows = (
@@ -777,7 +780,7 @@ async def run_resume_interview(
         # 이름 정확 매칭 실패 시 파일명으로 폴백
         resume = next(
             (r for r in rows if applicant_name in (r.get("file_name") or "")),
-            rows[0] if rows else None,
+            None,
         )
     if resume is None:
         return f"'{applicant_name}' 이력서를 찾을 수 없습니다. 먼저 이력서를 업로드해주세요."
