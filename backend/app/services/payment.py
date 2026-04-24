@@ -13,12 +13,28 @@ from app.core.config import settings
 log = logging.getLogger(__name__)
 
 _PORTONE_BASE = "https://api.portone.io"
-PRO_AMOUNT    = 29_900
-PRO_ORDER_NAME = "BOSS2 Pro 구독"
+PRO_AMOUNT           = 29_900
+BUSINESS_AMOUNT      = 99_900
+PRO_ORDER_NAME       = "BOSS2 Pro 구독"
+BUSINESS_ORDER_NAME  = "BOSS2 Business 구독"
+
+PLAN_AMOUNTS = {"pro": PRO_AMOUNT, "business": BUSINESS_AMOUNT}
 
 
 def _auth_header() -> dict:
     return {"Authorization": f"PortOne {settings.portone_api_secret}"}
+
+
+async def verify_payment(payment_id: str) -> dict:
+    """PortOne API로 결제 상태 검증."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"{_PORTONE_BASE}/payments/{payment_id}",
+            headers=_auth_header(),
+        )
+        data = r.json()
+        log.info("[payment] verify status=%s payment_id=%s", data.get("status"), payment_id)
+        return data
 
 
 async def charge_billing_key(
