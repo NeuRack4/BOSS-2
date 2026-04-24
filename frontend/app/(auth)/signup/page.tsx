@@ -857,28 +857,6 @@ const SIGNUP_CSS = `
   color: var(--ink);
 }
 
-.boss-signup .t-stats {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-
-
-.boss-signup .pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  letter-spacing: 0.04em;
-}
-.boss-signup .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
-
 @media (max-width: 1200px) {
   .boss-signup .bento { grid-template-columns: repeat(6, 1fr); grid-auto-rows: 120px; }
   .boss-signup .t-form { grid-column: span 6; grid-row: span 6; }

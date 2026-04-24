@@ -724,21 +724,6 @@ const SIGNIN_CSS = `
 }
 .boss-signin .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-.boss-signin .welcome-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.boss-signin .welcome-avatar {
-  width: 52px; height: 52px;
-  border-radius: 14px;
-  background: color-mix(in oklab, #fff 35%, transparent);
-  color: inherit;
-  display: grid; place-items: center;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 600;
-}
 .boss-signin .welcome-title {
   font-size: 36px;
   line-height: 1.05;
@@ -753,12 +738,6 @@ const SIGNIN_CSS = `
   color: var(--tint-mint-ink);
 }
 
-.boss-signin .welcome-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 20px;
-}
 .boss-signin .welcome-meta {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -767,8 +746,6 @@ const SIGNIN_CSS = `
   letter-spacing: 0.02em;
 }
 .boss-signin .welcome-meta b { color: inherit; font-weight: 500; }
-
-/* Status */
 
 /* Quick */
 .boss-signin .t-quick { display: flex; flex-direction: column; justify-content: space-between; }
