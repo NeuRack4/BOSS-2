@@ -99,14 +99,14 @@ async def scan_and_send(account_id: str) -> dict:
 
     Returns: {scanned: int, sent: int, campaigns: int}
     """
-    from app.core.config import settings
+    from app.services.instagram import _get_instagram_credentials
+    creds = _get_instagram_credentials(account_id)
+    fb_token   = creds.get("meta_access_token", "")
+    ig_token   = creds.get("meta_ig_access_token", "")
+    ig_user_id = creds.get("instagram_user_id", "")
 
-    if not settings.meta_access_token or not settings.meta_ig_access_token or not settings.instagram_user_id:
-        return {"error": "Instagram 연결 설정이 없습니다. (META_ACCESS_TOKEN / META_IG_ACCESS_TOKEN / INSTAGRAM_USER_ID)", "scanned": 0, "sent": 0, "campaigns": 0}
-
-    fb_token  = settings.meta_access_token      # EAA — 댓글 조회
-    ig_token  = settings.meta_ig_access_token   # IGAA — DM 발송
-    ig_user_id = settings.instagram_user_id
+    if not fb_token or not ig_token or not ig_user_id:
+        return {"error": "Instagram 연결 설정이 없습니다. 플랫폼 연결 설정에서 Instagram을 연결해주세요.", "scanned": 0, "sent": 0, "campaigns": 0}
     log.info("[ig_dm] fb_token=%s ig_token=%s", fb_token[:6], ig_token[:6])
     sb = get_supabase()
 

@@ -1446,7 +1446,7 @@ async def run(
     )
 
     if wants_naver_upload:
-        reply += "\n\n" + await _try_naver_upload(reply, image_urls=image_urls)
+        reply += "\n\n" + await _try_naver_upload(reply, account_id=account_id, image_urls=image_urls)
     else:
         review_marker = _maybe_review_reply_card(reply)
         if review_marker:
@@ -1564,14 +1564,9 @@ async def _generate_blog_image(title: str, content_preview: str) -> str:
         return ""
 
 
-async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> str:
+async def _try_naver_upload(reply: str, account_id: str = "", image_urls: list[str] | None = None) -> str:
     """blog_post 본문을 파싱해 네이버 블로그에 업로드. 결과 문자열 반환."""
-    import os as _os
-    from app.core.config import settings
     from app.agents._artifact import _parse_block
-
-    if not settings.naver_blog_id or not settings.naver_blog_pw:
-        return "📌 네이버 블로그 자동 업로드를 사용하려면 `.env`에 `NAVER_BLOG_ID`와 `NAVER_BLOG_PW`를 설정해 주세요."
 
     # # 제목 줄 기준으로 실제 블로그 본문만 추출 (에이전트 대화 문구 제거)
     title_from_content, blog_content = _extract_blog_content(reply)
@@ -1589,13 +1584,10 @@ async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> 
             tags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
             break
 
-    # 이미지: 사용자 첨부 이미지 URL을 그대로 전달 (다운로드 불필요)
-
     try:
         from app.services.naver_blog import upload_post
         post_url = await upload_post(
-            blog_id=settings.naver_blog_id,
-            blog_pw=settings.naver_blog_pw,
+            account_id=account_id,
             title=title,
             content=blog_content,
             tags=tags,

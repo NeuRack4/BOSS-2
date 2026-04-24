@@ -36,11 +36,13 @@ from app.routers import (
     dm_campaigns,
     docx,
     evaluations,
+    integrations,
     kanban,
     marketing,
     memory,
     menus,
     memos,
+    payment,
     pos,
     recruitment,
     reviews,
@@ -66,6 +68,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(integrations.router)
+app.include_router(payment.router)
 app.include_router(comments.router)
 app.include_router(dm_campaigns.router)
 app.include_router(activity.router)

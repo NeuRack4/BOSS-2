@@ -246,3 +246,15 @@ def cleanup_old_memories() -> dict:
         return {"deleted": 0, "error": str(exc)}
     log.info("[cleanup_old_memories] deleted %d rows older than %s", deleted, cutoff)
     return {"deleted": deleted, "cutoff": cutoff}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 월정액 자동 청구 — 매일 09:00 KST, next_billing_date 도래 구독 청구
+# ──────────────────────────────────────────────────────────────────────────
+@celery_app.task(name="app.scheduler.tasks.charge_subscriptions")
+def charge_subscriptions() -> dict:
+    """next_billing_date 가 지난 active 구독 월정액 자동 청구."""
+    from app.services.payment import run_monthly_billing
+    result = asyncio.run(run_monthly_billing())
+    log.info("[charge_subscriptions] %s", result)
+    return result

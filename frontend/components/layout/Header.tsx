@@ -15,6 +15,8 @@ import { MemosModal } from "@/components/layout/MemosModal";
 import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
 import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
 import { SubsidyModal } from "@/components/layout/SubsidyModal";
+import { IntegrationsModal } from "@/components/layout/IntegrationsModal";
+import { PaymentModal } from "@/components/layout/PaymentModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { useLayout } from "@/components/bento/LayoutContext";
 import { COLOR_SETS } from "@/components/bento/colorSets";
@@ -36,6 +38,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [dmCampaignOpen, setDmCampaignOpen] = useState(false);
   const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const layoutCtx = useLayout();
 
   useEffect(() => {
@@ -149,17 +153,49 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         {sidebar && (
           <div className="hidden min-w-[220px] max-w-[320px] flex-1 basis-0 items-center gap-2 self-stretch min-[1500px]:flex">
             {logo}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIntegrationsOpen(true)}
+              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+            >
+              Connect
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPaymentOpen(true)}
+              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+            >
+              Payment
+            </Button>
             {layoutBtn}
           </div>
         )}
 
         {/* Main content row */}
         <div className="flex h-full w-full max-w-[1400px] items-center justify-between gap-4">
-          {/* Left: logo + Layout button — hidden at >= 1500px when sidebar is active */}
+          {/* Left: logo + Connect + Layout button — hidden at >= 1500px when sidebar is active */}
           <div
             className={`flex items-center gap-2 ${sidebar ? "min-[1500px]:invisible" : ""}`}
           >
             {logo}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIntegrationsOpen(true)}
+              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+            >
+              Connect
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPaymentOpen(true)}
+              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+            >
+              Payment
+            </Button>
             {layoutBtn}
           </div>
 
@@ -294,6 +330,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         onClose={() => setDmCampaignOpen(false)}
       />
       <SubsidyModal open={subsidyOpen} onClose={() => setSubsidyOpen(false)} />
+      <IntegrationsModal open={integrationsOpen} onClose={() => setIntegrationsOpen(false)} />
+      <PaymentModal open={paymentOpen} onClose={() => setPaymentOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
