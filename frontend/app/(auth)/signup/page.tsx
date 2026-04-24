@@ -552,8 +552,6 @@ const SIGNUP_CSS = `
 .boss-signup .tile.tint-butter   .eyebrow, .boss-signup .tile.tint-butter   h3 { color: var(--tint-butter-ink); }
 
 .boss-signup .tile[class*="tint-"] p { color: color-mix(in oklab, currentColor 65%, transparent); }
-.boss-signup .tile[class*="tint-"] .stat-num,
-.boss-signup .tile[class*="tint-"] .stat-label { color: inherit; }
 .boss-signup .tile[class*="tint-"] .eyebrow { color: color-mix(in oklab, currentColor 70%, transparent); }
 
 .boss-signup .tile .eyebrow {
@@ -579,8 +577,6 @@ const SIGNUP_CSS = `
 .boss-signup .tile[class*="tint-"] .agent-row .avatar { background: currentColor; color: var(--bg-tile); }
 .boss-signup .tile[class*="tint-"] .agent-row .status { background: currentColor; }
 .boss-signup .tile[class*="tint-"] .agent-row .status.idle { background: color-mix(in oklab, currentColor 40%, transparent); }
-.boss-signup .tile[class*="tint-"] .sparkline span { background: color-mix(in oklab, currentColor 25%, transparent); }
-.boss-signup .tile[class*="tint-"] .sparkline span.hi { background: currentColor; }
 .boss-signup .tile[class*="tint-"] .pill { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
 .boss-signup .tile[class*="tint-"] .pill .dot { background: currentColor; }
 .boss-signup .tile[class*="tint-"] .glyph { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
@@ -887,41 +883,6 @@ const SIGNUP_CSS = `
   flex-direction: column;
   justify-content: space-between;
 }
-.boss-signup .stat-num {
-  font-size: 56px;
-  letter-spacing: -0.04em;
-  font-weight: 400;
-  line-height: 1;
-  margin: 20px 0 0;
-}
-.boss-signup .stat-num sup {
-  font-size: 18px;
-  letter-spacing: 0;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-weight: 400;
-  vertical-align: super;
-  margin-left: 6px;
-}
-.boss-signup .stat-label {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.45;
-  max-width: 200px;
-}
-.boss-signup .sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 28px;
-  margin-top: 12px;
-}
-.boss-signup .sparkline span {
-  flex: 1;
-  background: var(--line-strong);
-  border-radius: 2px;
-}
-.boss-signup .sparkline span.hi { background: var(--ink); }
 
 .boss-signup .agent-list {
   display: flex;
