@@ -140,15 +140,37 @@ async def get_media_insights(
     return results
 
 
-async def collect_report_data(days: int = 30) -> dict:
+async def collect_report_data(days: int = 30, account_id: str = "") -> dict:
     """전체 인스타그램 리포트 데이터 수집."""
-    from app.core.config import settings
+    # DB 우선, fallback → env
+    access_token = ""
+    ig_user_id = ""
 
-    if not settings.meta_access_token or not settings.instagram_user_id:
-        return {"error": "Instagram 계정이 연결되지 않았습니다. 환경변수를 확인해주세요."}
+    if account_id:
+        try:
+            from app.core.supabase import get_supabase
+            sb = get_supabase()
+            res = (
+                sb.table("platform_credentials")
+                .select("credentials")
+                .eq("account_id", account_id)
+                .eq("platform", "instagram")
+                .execute()
+            )
+            if res.data:
+                creds = res.data[0]["credentials"]
+                access_token = creds.get("meta_access_token", "")
+                ig_user_id = creds.get("instagram_user_id", "")
+        except Exception:
+            pass
 
-    access_token = settings.meta_access_token
-    ig_user_id = settings.instagram_user_id
+    if not access_token or not ig_user_id:
+        from app.core.config import settings
+        access_token = access_token or settings.meta_access_token or ""
+        ig_user_id = ig_user_id or settings.instagram_user_id or ""
+
+    if not access_token or not ig_user_id:
+        return {"error": "Instagram 계정이 연결되지 않았습니다. 플랫폼 연동 설정에서 연결해 주세요."}
 
     try:
         account = await get_account_insights(access_token, ig_user_id, days)

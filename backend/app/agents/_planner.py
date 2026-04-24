@@ -220,6 +220,8 @@ _PLANNER_SYSTEM = """당신은 소상공인 지원 AI 플랫폼 **BOSS** 의 오
 - `mkt_event_plan`      → title, event_type, start_date (+ end_date 또는 due_date, benefit).
   - 메시지에 "인스타그램 게시물도 바로 작성" 또는 "인스타그램" 채널이 포함되면 → mkt_sns_post(depends_on: mkt_event_plan) 추가.
   - 메시지에 "네이버 블로그 포스트도 바로 작성" 또는 "네이버 블로그" 채널이 포함되면 → mkt_blog_post(depends_on: mkt_event_plan, auto_upload=true) 추가.
+  - 메시지에 "이벤트 포스터", "포스터 HTML", "오프라인 포스터", "포스터 생성" 키워드가 포함되면 → mkt_event_poster(depends_on: mkt_event_plan, event_title=<이벤트명>) 추가. mkt_event_poster 는 기획안을 받아 HTML 포스터를 생성하므로 반드시 mkt_event_plan 이후에 실행.
+- `mkt_event_poster`   → event_title 만 확정되면 즉시 dispatch 가능 (event_content 없으면 preceding reply 사용). 단독 포스터 생성 요청이거나 이벤트 기획안과 함께 요청한 경우 dispatch.
 - `mkt_notice`          → notice_type, content (+ date). 인스타 게시 요청 시 publish_sns=true.
 - `doc_contract`         → subtype, party_a, party_b, start_date (+ amount 권장)
 - `doc_estimate`         → client, items, total_amount, valid_until

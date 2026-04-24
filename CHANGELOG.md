@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] — 2026-04-24
+
+### Added — Marketing (feature-marketing)
+
+- **이벤트 포스터 HTML 생성** (`mkt_event_poster`) — GPT-4o로 A4 standalone HTML 이벤트 포스터 자동 생성. Supabase Storage `event-posters` 버킷 업로드 후 `[[EVENT_POSTER]]` 마커로 채팅에 iframe 미리보기 카드 렌더링. artifact(type=event_poster) 저장 및 NodeDetailModal 내 HTML iframe 표시 지원.
+- **이벤트 기획 + 포스터 연계 dispatch** — 플래너가 이벤트 기획 메시지에서 포스터 키워드 감지 시 `mkt_event_poster(depends_on: mkt_event_plan)` 자동 추가. 기획안 텍스트를 event_content로 포스터 생성에 활용.
+- **자동화 스케줄 설정 폼** (`mkt_schedule_form`, `ScheduleFormCard`) — "자동화 스케줄" 버튼 클릭 시 폼 UI 표시. 작업 종류 칩·세부 지시사항·실행 주기(매일/매주/격주/매월)·요일·날짜·시간 선택 → cron 5-field 표현식 자동 생성 후 `mkt_schedule_post` dispatch.
+- **리뷰 답글 폼 이미지 업로드** — `ReviewReplyFormCard`에 리뷰 캡처 이미지 드래그앤드롭 / 클릭 업로드 추가. `/api/marketing/review/analyze` 엔드포인트 호출로 리뷰 원문·별점·플랫폼 자동 입력.
+- **이벤트 기획 폼 디자인 개선** — `EventPlanFormCard`: violet 그라데이션 헤더, 채널·이벤트 종류 선택 칩 violet 강조, "기획 시작" 버튼 그라데이션 + disabled 처리 개선.
+- **Pricing 미리보기 모달** (`PricingPreviewModal`) — 로그인·회원가입 페이지 상단 네비게이션 "Pricing" 버튼에서 요금제 미리보기 모달 오픈.
+
+### Fixed — Marketing (feature-marketing)
+
+- **이벤트 기획 응답 HTML 직접 출력 차단** — `run_event_plan` LLM 응답에서 `<!DOCTYPE…</html>` 블록 강제 제거(`_strip_html_blocks`). `run()` LLM 응답에도 동일 안전망 적용. 이벤트 기획 메시지 전달 전 포스터 HTML 요청 지시문 필터링(`_strip_poster_instructions`).
+- **Instagram 인사이트 계정별 토큰 조회** — `collect_report_data`가 환경변수 대신 `platform_credentials` DB에서 계정별 `meta_access_token` / `instagram_user_id` 우선 조회, env fallback 유지. 미연결 안내 메시지 개선.
+- **Shorts 자막 생성 MIME 타입 자동 감지** — PNG·WebP·GIF 이미지를 `image/jpeg`로 오인식하던 문제 수정(`_detect_mime`). `asyncio.to_thread` → 네이티브 async 호출로 변경.
+- **NodeDetailModal 계정 전환 동기화** — `accountId`를 마운트 시 1회만 조회하던 방식을 `onAuthStateChange` 구독으로 교체, 계정 전환 시 stale account_id → 403 발생 문제 해소.
+- **MarketingReportCard AI 분석 마크다운 렌더링** — 분석 텍스트를 `whitespace-pre-wrap` 단순 출력에서 `MarkdownMessage` 컴포넌트로 교체.
+- **PaymentModal 플랜 명칭** — Business → Enterprise로 변경.
+
+---
+
 ## [2.9.1] — 2026-04-24
 
 ### Changed — Sales (feature/sales_shortmenu)

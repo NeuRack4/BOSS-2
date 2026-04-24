@@ -72,6 +72,11 @@ import {
   extractMarketingReportPayload,
   type MarketingReportPayload,
 } from "./MarketingReportCard";
+import {
+  EventPosterCard,
+  extractEventPosterPayload,
+  type EventPosterPayload,
+} from "./EventPosterCard";
 import { EventPlanFormCard, extractEventPlanForm } from "./EventPlanFormCard";
 import { SnsPostFormCard, extractSnsPostForm } from "./SnsPostFormCard";
 import { BlogPostFormCard, extractBlogPostForm } from "./BlogPostFormCard";
@@ -79,6 +84,10 @@ import {
   ReviewReplyFormCard,
   extractReviewReplyForm,
 } from "./ReviewReplyFormCard";
+import {
+  ScheduleFormCard,
+  extractScheduleForm,
+} from "./ScheduleFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -127,10 +136,12 @@ type Message = {
   menuChart?: MenuAnalysisPayload;
   salesInsight?: SalesInsightPayload;
   marketingReport?: MarketingReportPayload;
+  eventPoster?: EventPosterPayload;
   eventPlanForm?: boolean;
   snsPostForm?: boolean;
   blogPostForm?: boolean;
   reviewReplyForm?: boolean;
+  scheduleForm?: boolean;
   employeePicker?: EmployeePickerPayload;
   adminApp?: { payload: AdminApplicationPayload; content: string };
   savedArtifactId?: string;
@@ -318,7 +329,7 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "성과 리포트", prompt: "인스타그램·유튜브 성과 리포트 보여줘" },
       {
         name: "자동화 스케줄",
-        prompt: "매주 월요일 인스타 포스트 자동으로 올려줘",
+        prompt: "마케팅 자동화 스케줄 설정해줘",
       },
     ],
   },
@@ -660,12 +671,16 @@ export const InlineChat = () => {
               extractMenuChartPayload(afterShorts);
             const { cleaned: afterMktReport, payload: mktReport } =
               extractMarketingReportPayload(afterMenu);
+            const { cleaned: afterEventPoster, payload: eventPoster } =
+              extractEventPosterPayload(afterMktReport);
             const { cleaned: afterInstagram, payload: igPayload } =
-              extractInstagramPayload(afterMktReport);
+              extractInstagramPayload(afterEventPoster);
             const { cleaned: afterEventForm, hasForm: eventPlanForm } =
               extractEventPlanForm(afterInstagram);
+            const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
+              extractScheduleForm(afterEventForm);
             const { cleaned: cleanedContent, payload: employeePicker } =
-              extractEmployeePickerPayload(afterEventForm);
+              extractEmployeePickerPayload(afterScheduleForm);
             return {
               role: m.role === "user" ? "user" : "assistant",
               content: cleanedContent,
@@ -683,8 +698,10 @@ export const InlineChat = () => {
               shortsWizard: shortsWizard ?? undefined,
               menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
+              eventPoster: eventPoster ?? undefined,
               instagram: igPayload ?? undefined,
               eventPlanForm: eventPlanForm || undefined,
+              scheduleForm: scheduleForm || undefined,
               employeePicker: employeePicker ?? undefined,
             };
           },
@@ -1266,8 +1283,10 @@ export const InlineChat = () => {
           extractMenuChartPayload(afterInsight);
         const { cleaned: afterMarketing, payload: marketingReport } =
           extractMarketingReportPayload(afterMenu);
+        const { cleaned: afterEventPoster, payload: eventPoster } =
+          extractEventPosterPayload(afterMarketing);
         const { cleaned: afterInstagram, payload: instagram } =
-          extractInstagramPayload(afterMarketing);
+          extractInstagramPayload(afterEventPoster);
         const { cleaned: afterNaverBlog, payload: naverBlog } =
           extractNaverBlogPayload(afterInstagram);
         const { cleaned: afterEventForm, hasForm: eventPlanForm } =
@@ -1278,8 +1297,10 @@ export const InlineChat = () => {
           extractBlogPostForm(afterSnsForm);
         const { cleaned: afterReviewForm, hasForm: reviewReplyForm } =
           extractReviewReplyForm(afterBlogForm);
+        const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
+          extractScheduleForm(afterReviewForm);
         const { cleaned: cleanReply, payload: employeePicker } =
-          extractEmployeePickerPayload(afterReviewForm);
+          extractEmployeePickerPayload(afterScheduleForm);
         setMessages((prev) => [
           ...prev,
           {
@@ -1295,12 +1316,14 @@ export const InlineChat = () => {
             menuChart: menuChart ?? undefined,
             salesInsight: salesInsight ?? undefined,
             marketingReport: marketingReport ?? undefined,
+            eventPoster: eventPoster ?? undefined,
             instagram: instagram ?? undefined,
             naverBlog: naverBlog ?? undefined,
             eventPlanForm: eventPlanForm || undefined,
             snsPostForm: snsPostForm || undefined,
             blogPostForm: blogPostForm || undefined,
             reviewReplyForm: reviewReplyForm || undefined,
+            scheduleForm: scheduleForm || undefined,
             employeePicker: employeePicker ?? undefined,
             adminApp: adminAppPayloadNew
               ? { payload: adminAppPayloadNew, content: adminAppDocContent }
@@ -1812,6 +1835,11 @@ export const InlineChat = () => {
                       <MarketingReportCard payload={msg.marketingReport} />
                     </div>
                   )}
+                  {msg.role === "assistant" && msg.eventPoster && (
+                    <div className="ml-8 max-w-[85%]">
+                      <EventPosterCard payload={msg.eventPoster} />
+                    </div>
+                  )}
                   {msg.role === "assistant" && msg.eventPlanForm && (
                     <div className="ml-8">
                       <EventPlanFormCard
@@ -1834,6 +1862,11 @@ export const InlineChat = () => {
                       <ReviewReplyFormCard
                         onSubmit={(message) => send(message)}
                       />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.scheduleForm && (
+                    <div className="ml-8">
+                      <ScheduleFormCard onSubmit={(message) => send(message)} />
                     </div>
                   )}
                   {msg.role === "assistant" && msg.choices && (

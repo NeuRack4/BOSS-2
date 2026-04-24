@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { createClient } from "@/lib/supabase/client";
+import { PricingPreviewModal } from "@/components/layout/PricingPreviewModal";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -91,6 +93,7 @@ export default function LoginPage() {
     <div
       className={`${interTight.variable} ${jetbrainsMono.variable} boss-signin`}
     >
+      <PricingPreviewModal open={pricingOpen} onClose={() => setPricingOpen(false)} />
       <style>{SIGNIN_CSS}</style>
 
       <header className="topbar">
@@ -108,6 +111,7 @@ export default function LoginPage() {
         <nav>
           <a href="#">Docs</a>
           <a href="#">Status</a>
+          <button type="button" onClick={() => setPricingOpen(true)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "var(--muted)" }}>Pricing</button>
           <a href="#">Contact</a>
           <Link href="/signup" className="signup">
             Create account →

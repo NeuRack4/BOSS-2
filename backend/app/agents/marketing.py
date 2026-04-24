@@ -11,6 +11,7 @@
   notice        — 공지사항 (임시휴무·영업시간변경·이벤트·신상품 등)
   product_post  — 상품/서비스 소개 게시글
 """
+import logging
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
@@ -31,10 +32,36 @@ from langsmith import traceable
 import re as _re
 import json as _json
 
+log = logging.getLogger("boss2.marketing")
+
 _NAVER_UPLOAD_RE = _re.compile(r"\[NAVER_UPLOAD\]", _re.IGNORECASE)
 _INSTAGRAM_POST_RE = _re.compile(
     r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]"
 )
+
+# LLM 응답에서 HTML 문서 블록을 제거하는 정규식
+_HTML_BLOCK_RE = _re.compile(
+    r"(?:```html\s*)?<!DOCTYPE[\s\S]*?</html>\s*(?:```)?",
+    _re.IGNORECASE,
+)
+
+# 이벤트 기획안 LLM에 전달 시 포스터 HTML 요청 지시문을 제거 (별도 기능이 처리)
+_POSTER_INSTRUCTION_RE = _re.compile(
+    r"[^\n]*(?:포스터\s*HTML|HTML.*생성|포스터.*생성|별도\s*포스터)[^\n]*",
+    _re.IGNORECASE,
+)
+
+
+def _strip_html_blocks(text: str) -> str:
+    """LLM 응답에서 HTML 문서(<!DOCTYPE...>)를 완전히 제거한다."""
+    return _HTML_BLOCK_RE.sub("", text).strip()
+
+
+def _strip_poster_instructions(text: str) -> str:
+    """이벤트 기획안 LLM에 전달할 메시지에서 포스터 HTML 생성 관련 지시를 제거."""
+    cleaned = _POSTER_INSTRUCTION_RE.sub("", text)
+    lines = [ln for ln in cleaned.splitlines() if ln.strip()]
+    return "\n".join(lines)
 
 
 VALID_TYPES: tuple[str, ...] = (
@@ -303,6 +330,11 @@ SYSTEM_PROMPT = (
 작성 원칙:
 - 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
 - 없는 수치(매출·방문자 수·실적 등)는 절대 만들어내지 않음
+
+[HTML 출력 절대 금지]
+- 어떤 경우에도 HTML 코드(<!DOCTYPE, <html>, <head>, <body>, <style> 등)를 직접 응답에 포함하지 않는다.
+- 이벤트 포스터·전단지 HTML 생성은 별도 전담 기능(mkt_event_poster)이 처리한다.
+- 포스터 관련 요청이 있으면 "포스터는 별도로 생성됩니다"라고만 언급하고 기획안 텍스트만 작성한다.
 - 실용적이고 바로 복사해 사용할 수 있는 한국어로 작성
 - 과장 없이 진정성 있는 목소리 유지
 
@@ -813,6 +845,19 @@ async def run_event_form(
     return "이벤트 정보를 입력해주세요.\n\n[[EVENT_PLAN_FORM]][[/EVENT_PLAN_FORM]]"
 
 
+async def run_schedule_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    **_: object,
+) -> str:
+    """자동화 스케줄 설정 폼 UI를 반환한다. 스케줄/자동화 요청 시 즉시 호출."""
+    return "자동화할 작업과 실행 주기를 설정해주세요.\n\n[[SCHEDULE_FORM]][[/SCHEDULE_FORM]]"
+
+
 async def run_event_plan(
     *,
     account_id: str,
@@ -865,10 +910,14 @@ async def run_event_plan(
 - [ ] 항목 1
 - [ ] 항목 2
 - [ ] 항목 3
+
+⚠️ HTML 코드 절대 포함 금지. 포스터·전단지 관련 HTML은 별도 기능이 처리한다.
 """
-        + f"\n원본 사용자 요청: {message}"
+        + f"\n원본 사용자 요청: {_strip_poster_instructions(message)}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    result = await run(synthetic, account_id, history, rag_context, long_term_context)
+    # LLM이 HTML을 생성했더라도 강제로 제거 (포스터는 mkt_event_poster가 처리)
+    return _strip_html_blocks(result)
 
 
 async def run_notice(
@@ -930,7 +979,7 @@ async def run_marketing_report(
     # 두 플랫폼 데이터 병렬 수집
     import asyncio as _asyncio
     ig_data, yt_data = await _asyncio.gather(
-        ig_report(days=period),
+        ig_report(days=period, account_id=account_id),
         yt_report(account_id=account_id, days=period),
         return_exceptions=True,
     )
@@ -1009,15 +1058,13 @@ async def run_marketing_report(
     }
     marker = f"\n\n[[MARKETING_REPORT]]{_json.dumps(report_payload, ensure_ascii=False)}[[/MARKETING_REPORT]]"
 
-    # artifact 저장용 응답 조합
-    reply_lines = [f"최근 {period}일 마케팅 성과 리포트를 생성했습니다.\n"]
-    reply_lines.append(analysis)
-    reply_lines.append(
-        f"\n[ARTIFACT]\ntitle: 마케팅 성과 리포트 ({period}일)\ntype: marketing_report\ndomains: [marketing]\n[/ARTIFACT]"
+    # analysis는 카드(marker) 안에만 포함 — 본문 중복 노출 방지
+    reply = (
+        f"[ARTIFACT]\ntitle: 마케팅 성과 리포트 ({period}일)\ntype: marketing_report\ndomains: [marketing]\n[/ARTIFACT]"
+        + marker
     )
-    reply_lines.append(marker)
 
-    return "\n".join(reply_lines)
+    return reply
 
 
 def _cron_to_korean(cron: str) -> str:
@@ -1137,6 +1184,52 @@ async def run_schedule_post(
         f"Celery 스케줄러가 설정한 주기마다 자동으로 위 작업을 실행하고 결과를 로그로 저장합니다. "
         f"스케줄 관리는 상단 캘린더 아이콘(Schedule Manager)에서 일시정지/재개할 수 있습니다."
     )
+
+
+async def run_event_poster(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    event_title: str,
+    event_content: str = "",
+    style: str = "",
+    source_artifact_id: str | None = None,
+    _preceding_reply: str = "",
+    **_: object,
+) -> str:
+    """이벤트 포스터 HTML을 GPT-4o로 생성하고 [[EVENT_POSTER]] 마커를 반환한다."""
+    import json as _json
+    from app.core.event_poster_gen import generate_event_poster
+
+    # event_content 우선순위: 명시값 > 이전 스텝(기획안 텍스트) > 원본 메시지
+    effective_content = (
+        event_content.strip()
+        or _preceding_reply.strip()
+        or message.strip()
+    )
+
+    try:
+        result = await generate_event_poster(
+            account_id=account_id,
+            event_title=event_title,
+            event_content=effective_content,
+            style_prompt=style,
+            source_artifact_id=source_artifact_id or None,
+        )
+    except Exception as exc:
+        log.exception("run_event_poster failed")
+        return f"포스터 생성에 실패했어요: {exc}"
+
+    payload = {
+        "artifact_id": result["artifact_id"],
+        "title": result["title"],
+        "public_url": result.get("public_url", ""),
+    }
+    marker = f"[[EVENT_POSTER]]{_json.dumps(payload, ensure_ascii=False)}[[/EVENT_POSTER]]"
+    return marker
 
 
 def describe(account_id: str) -> list[dict]:
@@ -1293,7 +1386,9 @@ def describe(account_id: str) -> list[dict]:
                 "이벤트·프로모션·세일·기념일 행사 기획안을 작성하고 artifact 로 등록한다. "
                 "start_date + end_date 또는 due_date 를 저장해 D-7/D-3/D-1/D-0 알림 자동 발생. "
                 "'이벤트 기획', '프로모션', '할인 행사', '기념일 이벤트' 요청 시 호출. "
-                "인스타 자동 게시 요청 시 mkt_sns_post(depends_on: mkt_event_plan) 을 함께 dispatch."
+                "인스타 자동 게시 요청 시 mkt_sns_post(depends_on: mkt_event_plan) 을 함께 dispatch. "
+                "포스터 생성 요청 시 mkt_event_poster(depends_on: mkt_event_plan) 을 함께 dispatch. "
+                "절대 HTML 코드를 직접 출력하지 않는다 — 포스터 HTML은 mkt_event_poster 가 처리."
             ),
             "handler": run_event_plan,
             "parameters": {
@@ -1349,11 +1444,53 @@ def describe(account_id: str) -> list[dict]:
             },
         },
         {
+            "name": "mkt_event_poster",
+            "description": (
+                "이벤트·프로모션 포스터를 HTML로 생성해 미리보기를 보여준다. "
+                "'포스터', '전단지', '홍보물', '오프라인 포스터', '이벤트 포스터' 키워드 포함 시 호출. "
+                "event_title과 event_content는 필수. style은 선택."
+            ),
+            "handler": run_event_poster,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_title": {
+                        "type": "string",
+                        "description": "이벤트·행사명 (예: '봄맞이 할인 이벤트')",
+                    },
+                    "event_content": {
+                        "type": "string",
+                        "description": "이벤트 상세 내용 (날짜, 혜택, 참여 방법 등)",
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "디자인 스타일 힌트 (선택, 예: '따뜻한 봄 컬러, 파스텔 톤')",
+                    },
+                    "source_artifact_id": {
+                        "type": "string",
+                        "description": "연결할 이벤트 기획안 artifact_id (선택)",
+                    },
+                },
+                "required": ["event_title"],
+            },
+        },
+        {
+            "name": "mkt_schedule_form",
+            "description": (
+                "자동화 스케줄 설정 폼 UI를 띄운다. "
+                "'스케줄', '자동화', '자동으로', '정기적으로', '예약', '매주', '매일' 키워드 포함 시 "
+                "구체적인 cron·task 정보 없이 바로 호출. "
+                "폼을 통해 사용자가 직접 작업·주기·시간을 선택하게 한다."
+            ),
+            "handler": run_schedule_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
             "name": "mkt_schedule_post",
             "description": (
-                "마케팅 작업을 정기 자동 실행하는 스케줄을 등록한다. "
-                "'매주', '매일', '자동으로', '정기적으로', '스케줄', '예약' 키워드와 함께 "
-                "SNS 게시물·블로그·광고 카피 등 반복 작업 요청 시 호출."
+                "마케팅 작업을 정기 자동 실행하는 스케줄을 실제 등록한다. "
+                "반드시 task(작업 지시문)와 cron(5-field 표현식)이 모두 명시된 경우에만 호출. "
+                "폼 제출 후 task·cron이 메시지에 포함되어 있으면 이 capability를 호출."
             ),
             "handler": run_schedule_post,
             "parameters": {
@@ -1420,6 +1557,11 @@ async def run(
         ],
     )
     reply = resp.choices[0].message.content
+
+    # HTML 문서가 응답에 포함됐으면 강제 제거 (포스터는 별도 기능이 처리)
+    if reply and _HTML_BLOCK_RE.search(reply):
+        log.warning("[marketing.run] HTML block detected in reply — stripping")
+        reply = _strip_html_blocks(reply)
 
     # ── 디버그 로그 (artifact 저장 여부 추적) ──────────────────────────────
     import logging as _logging
