@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] — 2026-04-24
+
+### Added — Recruitment (feature-recruit)
+
+- **이력서 파싱 파이프라인** — PDF/이미지 이력서 업로드 시 GPT-4o로 구조화 파싱 (resumes 테이블 저장, migration 035)
+- **면접 질문 자동 생성** — 파싱 완료 직후 "면접/질문/인터뷰" 키워드 감지 시 지원자별 맞춤 면접 질문 artifact 자동 생성
+- **장기기억 연동** — 이력서 파싱·면접 질문 생성 결과를 pgvector 장기기억에 저장 (재방문 시 맥락 유지)
+- **파싱 결과 UI** — 경력·프로젝트·교육수료 분리 마크다운 표 + 면접 질문 상세모달에 이력서 파싱 결과 토글 추가
+- **복수 이력서 동시 업로드** — `upload_payloads` 리스트로 여러 이력서 한 번에 처리
+- **LangSmith 트레이싱** — documents·recruitment agent 전 capability 함수에 `@traceable` 추가 (플래너 경로 누락 해소)
+
+### Fixed — Recruitment
+
+- **플래너 오분류 강제 override** — 파일 업로드 시 planner LLM이 chitchat/ask/refuse로 잘못 분류해도 코드레벨에서 `recruit_resume_parse` 강제 dispatch
+- **중복 면접 질문 방지** — 2분 이내 동일 resume_id artifact 재사용, planner 1-shot 규칙 명시
+- **이력서 업로드 무한 루프 수정** — upload_payloads contextvar 전달 누락 + 재업로드 루프 수정
+- **resumes 테이블 RLS 활성화** + account_id FK 제약 추가
+
+---
+
 ## [2.6.1] — 2026-04-24
 
 ### Fixed — Sales (feature/sales_agent_test)

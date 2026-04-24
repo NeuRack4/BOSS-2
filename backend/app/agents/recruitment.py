@@ -61,7 +61,111 @@ _GENERIC_VALID_TYPES: tuple[str, ...] = (
     "education_material",
 )
 
+_RESUME_PARSE_SYSTEM = (
+    "당신은 이력서 파싱 전문가입니다. "
+    "주어진 이력서 텍스트에서 정보를 추출해 JSON만 반환하세요. "
+    "없는 정보는 null 또는 빈 배열로 설정하세요. 절대 정보를 추측하거나 만들어내지 마세요.\n\n"
+    "분류 기준:\n"
+    "- experience: 실제 재직·인턴십 (회사에 소속되어 급여를 받은 경력)\n"
+    "- projects: 팀/개인 프로젝트, 해커톤, 사이드 프로젝트, 수업 과제 프로젝트 등\n"
+    "- training: 부트캠프, 교육 수료, 연수, 강의 이수 등\n\n"
+    "반환 형식 (JSON only, 설명 없이):\n"
+    "{\n"
+    '  "name": "이름 또는 null",\n'
+    '  "phone": "연락처 또는 null",\n'
+    '  "email": "이메일 또는 null",\n'
+    '  "age": 나이(정수) 또는 null,\n'
+    '  "address": "주소 또는 null",\n'
+    '  "education": [{"school":"","major":"","degree":"","year":""}],\n'
+    '  "experience": [{"company":"","role":"","period":"","description":""}],\n'
+    '  "projects": [{"name":"","role":"","period":"","tech_stack":"","description":""}],\n'
+    '  "training": [{"institution":"","course":"","period":"","description":""}],\n'
+    '  "skills": ["기술1"],\n'
+    '  "certifications": ["자격증1"],\n'
+    '  "desired_position": "희망직종 또는 null",\n'
+    '  "desired_salary": "희망급여 또는 null",\n'
+    '  "introduction": "자기소개 전문 또는 null",\n'
+    '  "raw_text": "이력서 원문 전체"\n'
+    "}"
+)
+
+_INTERVIEW_FROM_RESUME_SYSTEM = (
+    "당신은 소상공인 채용 전문가입니다. "
+    "지원자 이력서를 바탕으로 날카롭고 구체적인 면접 질문을 생성합니다.\n"
+    "규칙:\n"
+    "- 이력서의 구체적 내용(회사명, 기간, 역할)을 직접 인용해 질문\n"
+    "- 경력 공백, 짧은 재직기간, 직무 불일치는 파고드는 질문 포함\n"
+    "- 직무 적합성 / 성실성 / 상황 대응력 3축으로 골고루 구성\n"
+    "- 번호 목록 형식으로만 답변 (설명 없이 질문만)"
+)
+
 _JOB_POSTINGS_RE = re.compile(r"\[JOB_POSTINGS\](.*?)\[/JOB_POSTINGS\]", re.DOTALL)
+
+
+def _format_resume_table(name: str, a: dict) -> str:
+    """파싱된 applicant dict → 마크다운 표 형식 문자열."""
+    rows: list[str] = []
+
+    def row(label: str, value: str) -> None:
+        if value:
+            rows.append(f"| {label} | {value} |")
+
+    row("이름", name)
+    row("연락처", a.get("phone") or "")
+    row("이메일", a.get("email") or "")
+    row("나이", str(a["age"]) if a.get("age") else "")
+    row("주소", a.get("address") or "")
+    row("희망직종", a.get("desired_position") or "")
+    row("희망급여", a.get("desired_salary") or "")
+
+    edu_list = a.get("education") or []
+    if edu_list:
+        edu_str = " / ".join(
+            " ".join(filter(None, [e.get("school"), e.get("major"), e.get("degree"), e.get("year")]))
+            for e in edu_list
+        )
+        row("학력", edu_str)
+
+    skills = a.get("skills") or []
+    if skills:
+        row("기술스택", ", ".join(skills))
+
+    certs = a.get("certifications") or []
+    if certs:
+        row("자격증", ", ".join(certs))
+
+    intro = (a.get("introduction") or "").strip()
+    if intro:
+        row("자기소개", intro[:300] + ("…" if len(intro) > 300 else ""))
+
+    header = f"### {name}\n\n| 항목 | 내용 |\n|---|---|"
+    table = header + "\n" + "\n".join(rows)
+
+    exp_list = a.get("experience") or []
+    if exp_list:
+        lines = ["", "**경력**", "", "| 회사 | 직무 | 기간 | 주요 업무 |", "|---|---|---|---|"]
+        for e in exp_list:
+            desc = (e.get("description") or "").replace("\n", " ")[:120]
+            lines.append(f"| {e.get('company','')} | {e.get('role','')} | {e.get('period','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
+
+    proj_list = a.get("projects") or []
+    if proj_list:
+        lines = ["", "**프로젝트**", "", "| 프로젝트명 | 역할 | 기간 | 기술스택 | 내용 |", "|---|---|---|---|---|"]
+        for p in proj_list:
+            desc = (p.get("description") or "").replace("\n", " ")[:100]
+            lines.append(f"| {p.get('name','')} | {p.get('role','')} | {p.get('period','')} | {p.get('tech_stack','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
+
+    training_list = a.get("training") or []
+    if training_list:
+        lines = ["", "**교육수료**", "", "| 기관 | 과정 | 기간 | 내용 |", "|---|---|---|---|"]
+        for t in training_list:
+            desc = (t.get("description") or "").replace("\n", " ")[:100]
+            lines.append(f"| {t.get('institution','')} | {t.get('course','')} | {t.get('period','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
+
+    return table
 
 
 def suggest_today(account_id: str) -> list[dict]:
@@ -442,6 +546,7 @@ def _fmt_days(days: list[str] | None) -> str:
     return "·".join(days) if days else ""
 
 
+@traceable(name="recruitment.run_posting_set", run_type="chain")
 async def run_posting_set(
     *,
     account_id: str,
@@ -541,6 +646,7 @@ async def run_posting_set(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_posting_poster", run_type="chain")
 async def run_posting_poster(
     *,
     account_id: str,
@@ -598,6 +704,7 @@ async def run_posting_poster(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_interview", run_type="chain")
 async def run_interview(
     *,
     account_id: str,
@@ -618,6 +725,295 @@ async def run_interview(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_resume_parse", run_type="chain")
+async def run_resume_parse(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+) -> str:
+    """구직자 이력서 파일(복수 가능)을 파싱해 resumes 테이블에 저장."""
+    import json as _json
+    from app.agents._upload_context import get_pending_upload, get_pending_uploads
+
+    uploads = get_pending_uploads() or []
+    if not uploads:
+        single = get_pending_upload()
+        if single:
+            uploads = [single]
+
+    if not uploads:
+        return (
+            "이력서 파일을 첨부해주세요. 파일을 채팅창에 업로드한 후 다시 요청해주세요.\n\n"
+            "[CHOICES]\n이력서 파일 업로드할게요\n[/CHOICES]"
+        )
+
+    sb = get_supabase()
+    saved: list[dict] = []
+
+    for up in uploads:
+        content = (up.get("content") or "").strip()
+        file_name = up.get("original_name") or up.get("title") or "이력서"
+        if not content:
+            log.warning("[resume_parse] empty content for file=%s", file_name)
+            continue
+
+        parse_resp = await chat_completion(
+            messages=[
+                {"role": "system", "content": _RESUME_PARSE_SYSTEM},
+                {"role": "user", "content": f"다음 이력서를 파싱해주세요:\n\n{content[:6000]}"},
+            ],
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+        )
+        raw_json = parse_resp.choices[0].message.content or "{}"
+        try:
+            applicant = _json.loads(raw_json)
+        except Exception:
+            applicant = {"raw_text": content}
+
+        applicant["raw_text"] = applicant.get("raw_text") or content
+
+        try:
+            row = (
+                sb.table("resumes")
+                .insert({
+                    "account_id": account_id,
+                    "file_name": file_name,
+                    "applicant": applicant,
+                })
+                .execute()
+                .data
+            )
+        except Exception:
+            log.warning("[resume_parse] DB insert failed for file=%s", file_name)
+            continue
+        if row:
+            saved.append({
+                "id": row[0]["id"],
+                "name": (applicant.get("name") or "").strip() or file_name,
+                "applicant": applicant,
+            })
+        else:
+            log.warning("[resume_parse] DB insert returned no data for file=%s", file_name)
+
+    if not saved:
+        return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
+
+    # 파싱 완료 → 장기기억에 지원자 정보 누적
+    try:
+        from app.memory.long_term import log_artifact_to_memory
+        for s in saved:
+            a = s["applicant"]
+            mem_lines = [f"지원자 {s['name']} 이력서 파싱 완료."]
+            if a.get("desired_position"):
+                mem_lines.append(f"희망직종: {a['desired_position']}.")
+            exp = a.get("experience") or []
+            if exp:
+                mem_lines.append(f"경력: {', '.join(e.get('company','') for e in exp[:3])}.")
+            proj = a.get("projects") or []
+            if proj:
+                mem_lines.append(f"프로젝트: {', '.join(p.get('name','') for p in proj[:3])}.")
+            skills = a.get("skills") or []
+            if skills:
+                mem_lines.append(f"주요 기술: {', '.join(skills[:6])}.")
+            await log_artifact_to_memory(
+                account_id, "recruitment", "resume_parse", f"{s['name']} 이력서",
+                content=" ".join(mem_lines),
+                metadata={"resume_id": s["id"]},
+            )
+    except Exception:
+        pass
+
+    summaries: list[str] = []
+    for s in saved:
+        a = s["applicant"]
+        summaries.append(_format_resume_table(s["name"], a))
+
+    summary = "\n\n---\n\n".join(summaries)
+
+    # 사용자가 면접 질문을 원하면 파싱 직후 바로 생성 (2단계 → 1단계 통합)
+    interview_kw = ("면접", "질문", "인터뷰", "interview")
+    wants_interview = any(kw in message for kw in interview_kw)
+    if wants_interview:
+        parts = [f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n---\n"]
+        for s in saved:
+            questions = await run_resume_interview(
+                account_id=account_id,
+                message=message,
+                history=history,
+                long_term_context=long_term_context,
+                rag_context=rag_context,
+                applicant_name=s["name"],
+            )
+            parts.append(questions)
+        return "\n\n".join(parts)
+
+    choices_items = "\n".join(f"{s['name']} 면접 질문 생성" for s in saved)
+    return (
+        f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n"
+        f"[CHOICES]\n{choices_items}\n다른 이력서도 올릴게요\n[/CHOICES]"
+    )
+
+
+@traceable(name="recruitment.run_resume_interview", run_type="chain")
+async def run_resume_interview(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    applicant_name: str,
+    count: int = 7,
+) -> str:
+    """저장된 이력서를 기반으로 맞춤 면접 질문 생성 후 artifact 저장."""
+    sb = get_supabase()
+    applicant_name = (applicant_name or "").strip()
+    if not applicant_name:
+        return "지원자 이름이 필요합니다."
+
+    # account_id 필터 필수 — 최신 파싱 순으로 이름 매칭
+    rows = (
+        sb.table("resumes")
+        .select("*")
+        .eq("account_id", account_id)
+        .order("parsed_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+        or []
+    )
+    resume = next(
+        (r for r in rows if (r.get("applicant") or {}).get("name") == applicant_name),
+        None,
+    )
+    if resume is None:
+        # 이름 정확 매칭 실패 시 파일명으로 폴백
+        resume = next(
+            (r for r in rows if applicant_name in (r.get("file_name") or "")),
+            None,
+        )
+    if resume is None:
+        return f"'{applicant_name}' 이력서를 찾을 수 없습니다. 먼저 이력서를 업로드해주세요."
+
+    applicant = resume.get("applicant") or {}
+    resume_id = resume["id"]
+    name = (applicant.get("name") or "").strip() or applicant_name
+
+    # 동일 resume_id 에 대해 2분 이내 중복 생성 방지 (planner 이중 dispatch 대응)
+    from datetime import datetime, timedelta, timezone as _tz
+    cutoff = (datetime.now(_tz.utc) - timedelta(minutes=2)).isoformat()
+    try:
+        dup = (
+            sb.table("artifacts")
+            .select("id,content")
+            .eq("account_id", account_id)
+            .eq("type", "interview_questions")
+            .filter("metadata->>resume_id", "eq", resume_id)
+            .gte("created_at", cutoff)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if dup:
+            return f"**{name}** 이력서 기반 면접 질문 {count}개 생성 완료.\n\n{dup[0]['content']}"
+    except Exception:
+        pass
+
+    context_lines = [f"지원자 이름: {name}"]
+    if applicant.get("experience"):
+        for e in applicant["experience"]:
+            context_lines.append(
+                f"경력: {e.get('company','')} / {e.get('role','')} / {e.get('period','')} — {e.get('description','')}"
+            )
+    if applicant.get("education"):
+        for ed in applicant["education"]:
+            context_lines.append(f"학력: {ed.get('school','')} {ed.get('major','')} {ed.get('year','')}")
+    if applicant.get("skills"):
+        context_lines.append(f"기술: {', '.join(applicant['skills'])}")
+    if applicant.get("certifications"):
+        context_lines.append(f"자격증: {', '.join(applicant['certifications'])}")
+    if applicant.get("introduction"):
+        context_lines.append(f"자기소개: {applicant['introduction'][:500]}")
+    if applicant.get("desired_position"):
+        context_lines.append(f"희망직종: {applicant['desired_position']}")
+
+    context_text = "\n".join(context_lines)
+
+    resp = await chat_completion(
+        messages=[
+            {"role": "system", "content": _INTERVIEW_FROM_RESUME_SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"아래 지원자 이력서를 바탕으로 날카로운 면접 질문 {count}개를 생성해주세요.\n\n"
+                    f"{context_text}"
+                ),
+            },
+        ],
+        model="gpt-4o",
+    )
+    questions_text = (resp.choices[0].message.content or "").strip()
+
+    title = f"{name} 면접 질문"
+    payload: dict = {
+        "account_id": account_id,
+        "domains": ["recruitment"],
+        "kind": "artifact",
+        "type": "interview_questions",
+        "title": title,
+        "content": questions_text,
+        "status": "draft",
+        "metadata": {"resume_id": resume_id},
+    }
+    try:
+        result = sb.table("artifacts").insert(payload).execute()
+        if result.data:
+            artifact_id = result.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "recruitment")
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id,
+                        "parent_id": hub_id,
+                        "child_id": artifact_id,
+                        "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id,
+                    "type": "artifact_created",
+                    "domain": "recruitment",
+                    "title": title,
+                    "description": "interview_questions 생성됨",
+                    "metadata": {"artifact_id": artifact_id, "resume_id": resume_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(
+                    account_id, "recruitment", "interview_questions", title,
+                    content=questions_text,
+                    metadata={"resume_id": resume_id, "applicant_name": name},
+                )
+            except Exception:
+                pass
+    except Exception:
+        log.warning("[resume_interview] artifact insert failed for applicant=%s", name)
+
+    return (
+        f"**{name}** 이력서 기반 면접 질문 {count}개 생성 완료.\n\n{questions_text}"
+    )
+
+
+@traceable(name="recruitment.run_hiring_drive", run_type="chain")
 async def run_hiring_drive(
     *,
     account_id: str,
@@ -642,6 +1038,7 @@ async def run_hiring_drive(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="recruitment.run_checklist_guide", run_type="chain")
 async def run_checklist_guide(
     *,
     account_id: str,
@@ -669,6 +1066,7 @@ _ONBOARDING_TYPE_LABELS = {
 }
 
 
+@traceable(name="recruitment.run_onboarding", run_type="chain")
 async def run_onboarding(
     *,
     account_id: str,
@@ -811,6 +1209,7 @@ def _build_payroll_reply(emp: dict, month: str, records: list[dict]) -> str:
     )
 
 
+@traceable(name="recruitment.run_payroll_preview", run_type="chain")
 async def run_payroll_preview(
     message: str,
     account_id: str,
@@ -1092,6 +1491,47 @@ def describe(account_id: str) -> list[dict]:
                     "pay_month": {"type": "string", "description": "급여 정산 월 YYYY-MM (예: 2026-04)"},
                 },
                 "required": [],
+            },
+        },
+        {
+            "name": "recruit_resume_parse",
+            "description": (
+                "구직자 이력서 파일을 파싱해 DB에 저장한다. "
+                "사용자가 이력서 파일을 업로드하고 파싱/분석을 요청할 때 호출. "
+                "upload_payload 또는 upload_payloads contextvar 에 파일 내용이 있어야 한다. "
+                "⚠️ 사용자 메시지에 면접/질문 키워드가 있으면 파싱 후 내부에서 면접 질문까지 직접 생성하므로 "
+                "recruit_resume_interview 를 별도 dispatch 하지 말 것."
+            ),
+            "handler": run_resume_parse,
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+        {
+            "name": "recruit_resume_interview",
+            "description": (
+                "저장된 이력서를 바탕으로 날카로운 맞춤 면접 질문을 생성하고 artifact 로 저장한다. "
+                "이력서 파싱 완료 후 특정 지원자의 면접 질문을 요청할 때 호출."
+            ),
+            "handler": run_resume_interview,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "applicant_name": {
+                        "type": "string",
+                        "description": "면접 질문을 생성할 지원자 이름 (이력서에서 파싱된 이름)",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "생성할 면접 질문 수 (기본 7)",
+                        "default": 7,
+                        "minimum": 3,
+                        "maximum": 15,
+                    },
+                },
+                "required": ["applicant_name"],
             },
         },
     ]

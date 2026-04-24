@@ -648,6 +648,24 @@ async def _dispatch_via_planner(
     # 미해결 CHOICES가 있으면 플래너에게 라우팅 힌트로 주입
     choices_ctx = _last_assistant_unresolved_choices(history)
 
+    # 업로드 파일이 있으면 플래너에게 힌트 주입 (recruit_resume_parse 라우팅용)
+    from app.agents._upload_context import get_pending_upload, get_pending_uploads
+    _uploads = get_pending_uploads() or []
+    if not _uploads:
+        _single = get_pending_upload()
+        if _single:
+            _uploads = [_single]
+    upload_hint: str | None = None
+    if _uploads:
+        names = ", ".join(u.get("original_name") or u.get("title") or "파일" for u in _uploads)
+        upload_hint = (
+            f"[첨부 파일 감지 — 라우팅 OVERRIDE]\n"
+            f"이번 요청에 파일 {len(_uploads)}개가 첨부돼 있습니다: {names}\n"
+            "⚠️ 파일이 첨부된 경우 사용자 메시지 내용과 무관하게 반드시 **recruit_resume_parse** 를 즉시 dispatch 하세요. "
+            "'면접 질문' 등 다른 의도가 있어도 파싱 없이 바로 interview 를 생성하면 안 됩니다. "
+            "recruit_resume_parse 는 required 파라미터 없음 — 파일 내용은 contextvar 로 이미 전달됩니다."
+        )
+
     result = await _planner.plan(
         account_id=account_id,
         message=message,
@@ -658,11 +676,30 @@ async def _dispatch_via_planner(
         memos_context=memos_ctx,
         tools_catalog=tools,
         choices_context=choices_ctx,
+        upload_hint=upload_hint,
     )
     mode = result.get("mode")
     if mode == "error":
         log.info("[planner] account=%s error reason=%s → fallback", account_id, result.get("reason"))
         return None
+
+    # 업로드가 있는데 planner 가 dispatch 하지 않았으면 강제 override
+    # (LLM 이 chitchat/ask/refuse 로 잘못 분류해도 recruitment agent 가 처리하도록)
+    if _uploads and mode != "dispatch":
+        log.info(
+            "[planner] account=%s upload_override mode=%s → force recruit_resume_parse",
+            account_id, mode,
+        )
+        result = {
+            "mode": "dispatch",
+            "opening": result.get("opening") or "",
+            "brief": result.get("brief") or "",
+            "steps": [{"capability": "recruit_resume_parse", "args": {}, "depends_on": None}],
+            "question": "",
+            "choices": [],
+            "profile_updates": result.get("profile_updates") or {},
+        }
+        mode = "dispatch"
 
     opening = (result.get("opening") or "").strip()
     brief = (result.get("brief") or "").strip()

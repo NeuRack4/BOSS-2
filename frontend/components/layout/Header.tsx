@@ -330,7 +330,10 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         onClose={() => setDmCampaignOpen(false)}
       />
       <SubsidyModal open={subsidyOpen} onClose={() => setSubsidyOpen(false)} />
-      <IntegrationsModal open={integrationsOpen} onClose={() => setIntegrationsOpen(false)} />
+      <IntegrationsModal
+        open={integrationsOpen}
+        onClose={() => setIntegrationsOpen(false)}
+      />
       <PaymentModal open={paymentOpen} onClose={() => setPaymentOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>

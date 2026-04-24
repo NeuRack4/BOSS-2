@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.core.supabase import get_supabase
 from app.core.embedder import embed_text
-from app.agents._subsidy_cache import get_cache, invalidate_and_recompute
+from app.agents._subsidy_cache import get_cache, invalidate_and_recompute, maybe_refresh
 
 router = APIRouter(prefix="/api/subsidies", tags=["subsidies"])
 
@@ -111,6 +111,7 @@ def _search_subsidies_rpc(query: str, match_count: int = 30) -> list[dict]:
 @router.get("/cache")
 async def get_subsidy_cache(account_id: str = Query(...)):
     """캐시된 지원사업 추천 반환. is_computing=true 면 아직 계산 중."""
+    await maybe_refresh(account_id)
     cache = get_cache(account_id)
     return {
         "data": cache["results"],

@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from langsmith import traceable
+
 from langgraph.graph import StateGraph, END
 
 from app.core.llm import chat_completion
@@ -773,6 +775,7 @@ _graph = _build_graph()
 # Public entrypoints
 # ──────────────────────────────────────────────────────────────────────────
 
+@traceable(name="documents.run", run_type="chain")
 async def run(
     message: str,
     account_id: str,
@@ -795,6 +798,7 @@ async def run(
     return result["reply"]
 
 
+@traceable(name="documents.run_contract", run_type="chain")
 async def run_contract(
     *,
     account_id: str,
@@ -830,6 +834,7 @@ async def run_contract(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="documents.run_estimate", run_type="chain")
 async def run_estimate(
     *,
     account_id: str,
@@ -857,6 +862,7 @@ async def run_estimate(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="documents.run_proposal", run_type="chain")
 async def run_proposal(
     *,
     account_id: str,
@@ -884,6 +890,7 @@ async def run_proposal(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="documents.run_notice", run_type="chain")
 async def run_notice(
     *,
     account_id: str,
@@ -906,6 +913,7 @@ async def run_notice(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="documents.run_checklist_guide", run_type="chain")
 async def run_checklist_guide(
     *,
     account_id: str,
@@ -967,6 +975,7 @@ async def run_checklist_guide(
 # Step 3-B — Operations: 지원사업 추천
 # ──────────────────────────────────────────────────────────────────────────
 
+@traceable(name="documents.run_subsidy_recommend", run_type="chain")
 async def run_subsidy_recommend(
     *,
     account_id: str,
@@ -1216,6 +1225,7 @@ async def run_subsidy_recommend(
     return reply
 
 
+@traceable(name="documents.run_admin_application", run_type="chain")
 async def run_admin_application(
     *,
     account_id: str,
@@ -1332,6 +1342,7 @@ async def run_admin_application(
 # Step 3-A — Tax&HR 신규 3종
 # ──────────────────────────────────────────────────────────────────────────
 
+@traceable(name="documents.run_hr_evaluation", run_type="chain")
 async def run_hr_evaluation(
     *,
     account_id: str,
@@ -1411,6 +1422,7 @@ async def run_hr_evaluation(
     return reply
 
 
+@traceable(name="documents.run_payroll_doc", run_type="chain")
 async def run_payroll_doc(
     *,
     account_id: str,
@@ -1774,6 +1786,7 @@ async def run_payroll_doc(
     return reply
 
 
+@traceable(name="documents.run_tax_calendar", run_type="chain")
 async def run_tax_calendar(
     *,
     account_id: str,
@@ -1833,6 +1846,7 @@ async def run_tax_calendar(
     return reply
 
 
+@traceable(name="documents.run_review", run_type="chain")
 async def run_review(
     *,
     account_id: str,
@@ -1854,6 +1868,7 @@ async def run_review(
     return await run(synthetic, account_id, history, rag_context, long_term_context)
 
 
+@traceable(name="documents.run_legal_advice", run_type="chain")
 async def run_legal_advice(
     *,
     account_id: str,
@@ -1880,6 +1895,7 @@ async def run_legal_advice(
     )
 
 
+@traceable(name="documents.run_tax_advice", run_type="chain")
 async def run_tax_advice(
     *,
     account_id: str,

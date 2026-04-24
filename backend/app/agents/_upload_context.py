@@ -43,3 +43,21 @@ def get_pending_upload() -> dict[str, Any] | None:
 
 def clear_pending_upload() -> None:
     _PENDING_UPLOAD.set(None)
+
+
+# -- 복수 이력서 업로드 지원 (v0.11+) --
+_PENDING_UPLOADS: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "boss2.pending_uploads", default=None
+)
+
+
+def set_pending_uploads(payloads: list[dict[str, Any]] | None) -> None:
+    _PENDING_UPLOADS.set(payloads)
+
+
+def get_pending_uploads() -> list[dict[str, Any]] | None:
+    return _PENDING_UPLOADS.get()
+
+
+def clear_pending_uploads() -> None:
+    _PENDING_UPLOADS.set(None)

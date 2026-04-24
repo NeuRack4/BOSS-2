@@ -154,10 +154,11 @@ async def invalidate_and_recompute(account_id: str) -> None:
 
 
 def get_cache(account_id: str) -> dict:
-    """캐시 row 반환. 없으면 {results: [], is_computing: True}."""
+    """캐시 row 반환. row 없으면 빈 결과 반환 (is_computing=False).
+    실제 계산 트리거는 maybe_refresh() 가 담당."""
     row = _get_cache_row(account_id)
     if not row:
-        return {"results": [], "is_computing": True, "computed_at": None}
+        return {"results": [], "is_computing": False, "computed_at": None}
     return {
         "results": row.get("results") or [],
         "is_computing": bool(row.get("is_computing")),
