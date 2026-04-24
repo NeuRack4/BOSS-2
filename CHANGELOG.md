@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales-phase2)
+
+- **메뉴 수익성 분석 서브허브 오배치** — `run_menu_analysis` artifact `sub_domain: Reports` → `Pricing` 수정.
+
+---
+
 ## [2.8.0] — 2026-04-24
 
 ### Added — Marketing / Integrations (feature-marketing)
