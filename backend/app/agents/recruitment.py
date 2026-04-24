@@ -64,7 +64,11 @@ _GENERIC_VALID_TYPES: tuple[str, ...] = (
 _RESUME_PARSE_SYSTEM = (
     "당신은 이력서 파싱 전문가입니다. "
     "주어진 이력서 텍스트에서 정보를 추출해 JSON만 반환하세요. "
-    "없는 정보는 null로 설정하세요. 절대 정보를 추측하거나 만들어내지 마세요.\n\n"
+    "없는 정보는 null 또는 빈 배열로 설정하세요. 절대 정보를 추측하거나 만들어내지 마세요.\n\n"
+    "분류 기준:\n"
+    "- experience: 실제 재직·인턴십 (회사에 소속되어 급여를 받은 경력)\n"
+    "- projects: 팀/개인 프로젝트, 해커톤, 사이드 프로젝트, 수업 과제 프로젝트 등\n"
+    "- training: 부트캠프, 교육 수료, 연수, 강의 이수 등\n\n"
     "반환 형식 (JSON only, 설명 없이):\n"
     "{\n"
     '  "name": "이름 또는 null",\n'
@@ -74,6 +78,8 @@ _RESUME_PARSE_SYSTEM = (
     '  "address": "주소 또는 null",\n'
     '  "education": [{"school":"","major":"","degree":"","year":""}],\n'
     '  "experience": [{"company":"","role":"","period":"","description":""}],\n'
+    '  "projects": [{"name":"","role":"","period":"","tech_stack":"","description":""}],\n'
+    '  "training": [{"institution":"","course":"","period":"","description":""}],\n'
     '  "skills": ["기술1"],\n'
     '  "certifications": ["자격증1"],\n'
     '  "desired_position": "희망직종 또는 null",\n'
@@ -137,14 +143,27 @@ def _format_resume_table(name: str, a: dict) -> str:
 
     exp_list = a.get("experience") or []
     if exp_list:
-        exp_lines = ["", "**경력**", "", "| 회사 | 직무 | 기간 | 주요 업무 |", "|---|---|---|---|"]
+        lines = ["", "**경력**", "", "| 회사 | 직무 | 기간 | 주요 업무 |", "|---|---|---|---|"]
         for e in exp_list:
-            company = e.get("company") or ""
-            role = e.get("role") or ""
-            period = e.get("period") or ""
             desc = (e.get("description") or "").replace("\n", " ")[:120]
-            exp_lines.append(f"| {company} | {role} | {period} | {desc} |")
-        table += "\n" + "\n".join(exp_lines)
+            lines.append(f"| {e.get('company','')} | {e.get('role','')} | {e.get('period','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
+
+    proj_list = a.get("projects") or []
+    if proj_list:
+        lines = ["", "**프로젝트**", "", "| 프로젝트명 | 역할 | 기간 | 기술스택 | 내용 |", "|---|---|---|---|---|"]
+        for p in proj_list:
+            desc = (p.get("description") or "").replace("\n", " ")[:100]
+            lines.append(f"| {p.get('name','')} | {p.get('role','')} | {p.get('period','')} | {p.get('tech_stack','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
+
+    training_list = a.get("training") or []
+    if training_list:
+        lines = ["", "**교육수료**", "", "| 기관 | 과정 | 기간 | 내용 |", "|---|---|---|---|"]
+        for t in training_list:
+            desc = (t.get("description") or "").replace("\n", " ")[:100]
+            lines.append(f"| {t.get('institution','')} | {t.get('course','')} | {t.get('period','')} | {desc} |")
+        table += "\n" + "\n".join(lines)
 
     return table
 

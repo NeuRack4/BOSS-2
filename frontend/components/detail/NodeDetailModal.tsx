@@ -753,6 +753,19 @@ type ApplicantData = {
     period?: string;
     description?: string;
   }[];
+  projects?: {
+    name?: string;
+    role?: string;
+    period?: string;
+    tech_stack?: string;
+    description?: string;
+  }[];
+  training?: {
+    institution?: string;
+    course?: string;
+    period?: string;
+    description?: string;
+  }[];
   skills?: string[];
   certifications?: string[];
 };
@@ -867,6 +880,8 @@ const ResumeDataTable = ({
 
   const intro = (a.introduction ?? "").trim();
   const exp = a.experience ?? [];
+  const projects = a.projects ?? [];
+  const training = a.training ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -920,6 +935,74 @@ const ResumeDataTable = ({
                     {e.period}
                   </td>
                   <td className="py-1.5 text-[#030303]/70">{e.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11.5px] font-semibold text-[#030303]/60">
+            프로젝트
+          </p>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-[#030303]/15 text-left text-[11px] text-[#030303]/50">
+                <th className="pb-1 pr-3 font-medium">프로젝트명</th>
+                <th className="pb-1 pr-3 font-medium">역할</th>
+                <th className="pb-1 pr-3 font-medium">기간</th>
+                <th className="pb-1 pr-3 font-medium">기술스택</th>
+                <th className="pb-1 font-medium">내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p, i) => (
+                <tr key={i} className="border-b border-[#030303]/8">
+                  <td className="py-1.5 pr-3 font-medium text-[#030303]">
+                    {p.name}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/70">{p.role}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-[#030303]/50">
+                    {p.period}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/50">
+                    {p.tech_stack}
+                  </td>
+                  <td className="py-1.5 text-[#030303]/70">{p.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {training.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11.5px] font-semibold text-[#030303]/60">
+            교육수료
+          </p>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-[#030303]/15 text-left text-[11px] text-[#030303]/50">
+                <th className="pb-1 pr-3 font-medium">기관</th>
+                <th className="pb-1 pr-3 font-medium">과정</th>
+                <th className="pb-1 pr-3 font-medium">기간</th>
+                <th className="pb-1 font-medium">내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {training.map((t, i) => (
+                <tr key={i} className="border-b border-[#030303]/8">
+                  <td className="py-1.5 pr-3 font-medium text-[#030303]">
+                    {t.institution}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/70">{t.course}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-[#030303]/50">
+                    {t.period}
+                  </td>
+                  <td className="py-1.5 text-[#030303]/70">{t.description}</td>
                 </tr>
               ))}
             </tbody>
