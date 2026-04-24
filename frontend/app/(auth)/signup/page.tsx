@@ -358,16 +358,9 @@ export default function SignupPage() {
               <br />
               not headcount.
             </h3>
-            <div className="agent-list">
-              {AGENTS.map((a) => (
-                <div className="agent-row" key={a.code}>
-                  <div className="avatar">{a.code}</div>
-                  <span className="name">{a.name}</span>
-                  <span className="role">{a.status}</span>
-                  <span
-                    className={`status ${a.status === "live" ? "" : "idle"}`}
-                  />
-                </div>
+            <div className="agent-bars" aria-hidden="true">
+              {[55, 75, 62, 88, 70, 92, 80, 100].map((h, i) => (
+                <span key={i} style={{ height: `${h}%` }} />
               ))}
             </div>
           </section>
@@ -417,13 +410,6 @@ const SOCIAL_BUTTONS = [
       </svg>
     ),
   },
-];
-
-const AGENTS = [
-  { code: "RC", name: "Recruitment", status: "live" },
-  { code: "MK", name: "Marketing", status: "live" },
-  { code: "SL", name: "Sales", status: "live" },
-  { code: "DC", name: "Documents", status: "idle" },
 ];
 
 const SIGNUP_CSS = `
@@ -1052,5 +1038,18 @@ const SIGNUP_CSS = `
 }
 .boss-signup .term-sparkline span:last-child {
   background: rgba(40, 200, 64, 0.6);
+}
+
+/* Agents tile bar chart */
+.boss-signup .agent-bars {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 28px; margin-top: auto; padding-top: 10px;
+}
+.boss-signup .agent-bars span {
+  flex: 1; border-radius: 1px 1px 0 0;
+  background: rgba(138, 78, 73, 0.25);
+}
+.boss-signup .agent-bars span:last-child {
+  background: rgba(138, 78, 73, 0.52);
 }
 `;
