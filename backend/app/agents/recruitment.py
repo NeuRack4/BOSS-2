@@ -798,6 +798,31 @@ async def run_resume_parse(
     if not saved:
         return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
 
+    # 파싱 완료 → 장기기억에 지원자 정보 누적
+    try:
+        from app.memory.long_term import log_artifact_to_memory
+        for s in saved:
+            a = s["applicant"]
+            mem_lines = [f"지원자 {s['name']} 이력서 파싱 완료."]
+            if a.get("desired_position"):
+                mem_lines.append(f"희망직종: {a['desired_position']}.")
+            exp = a.get("experience") or []
+            if exp:
+                mem_lines.append(f"경력: {', '.join(e.get('company','') for e in exp[:3])}.")
+            proj = a.get("projects") or []
+            if proj:
+                mem_lines.append(f"프로젝트: {', '.join(p.get('name','') for p in proj[:3])}.")
+            skills = a.get("skills") or []
+            if skills:
+                mem_lines.append(f"주요 기술: {', '.join(skills[:6])}.")
+            await log_artifact_to_memory(
+                account_id, "recruitment", "resume_parse", f"{s['name']} 이력서",
+                content=" ".join(mem_lines),
+                metadata={"resume_id": s["id"]},
+            )
+    except Exception:
+        pass
+
     summaries: list[str] = []
     for s in saved:
         a = s["applicant"]
@@ -944,6 +969,15 @@ async def run_resume_interview(
                     "description": "interview_questions 생성됨",
                     "metadata": {"artifact_id": artifact_id, "resume_id": resume_id},
                 }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(
+                    account_id, "recruitment", "interview_questions", title,
+                    content=questions_text,
+                    metadata={"resume_id": resume_id, "applicant_name": name},
+                )
             except Exception:
                 pass
     except Exception:
