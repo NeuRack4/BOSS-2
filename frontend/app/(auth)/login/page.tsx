@@ -230,63 +230,61 @@ export default function LoginPage() {
           </section>
 
           {/* WELCOME */}
-          <section className="tile t-welcome tint-peach">
-            <div className="welcome-top">
-              <span className="pill">
-                <span className="dot" />
+          <section className="tile t-welcome t-photo">
+            <div className="photo-overlay" />
+            <div className="photo-streak" />
+            <div className="photo-content">
+              <span className="pill pill-light">
+                <span className="dot-green" />
                 Returning member
               </span>
-              <div className="welcome-avatar">B</div>
-            </div>
-            <h2 className="welcome-title">
-              Welcome
-              <br />
-              <em>back.</em>
-            </h2>
-            <div className="welcome-bottom">
-              <div className="welcome-meta">
-                <b>BOSS</b> keeps your workspace ready —<br />
-                your agents, schedules and chats are right where you left them.
+              <div>
+                <h2 className="welcome-title">
+                  Welcome
+                  <br />
+                  <em>back.</em>
+                </h2>
+                <div className="welcome-meta">
+                  <b>BOSS</b> keeps your workspace ready —<br />
+                  your agents, schedules and chats are right where you left
+                  them.
+                </div>
               </div>
             </div>
           </section>
 
           {/* STATUS */}
-          <section className="tile t-status tint-sage">
-            <div>
-              <div className="eyebrow">
-                <span className="dot" />
-                All systems
-              </div>
+          <section className="tile t-status t-terminal">
+            <div className="term-chrome" aria-hidden="true">
+              <span className="term-dot term-red" />
+              <span className="term-dot term-yellow" />
+              <span className="term-dot term-green" />
+              <span className="term-title-bar">boss — system</span>
             </div>
-            <div className="status-rows">
-              <div className="status-row">
-                <span className="name">Agents</span>
-                <span className="val">
-                  <span className="led" />
-                  OPERATIONAL
-                </span>
+            <div className="term-body">
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">agents</span>{" "}
+                <span className="term-g">OK</span>
               </div>
-              <div className="status-row">
-                <span className="name">NetSuite sync</span>
-                <span className="val">
-                  <span className="led" />
-                  0.8s
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">netsuite</span>{" "}
+                <span className="term-y">0.8s</span>
               </div>
-              <div className="status-row">
-                <span className="name">Slack bridge</span>
-                <span className="val">
-                  <span className="led" />
-                  LIVE
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">slack</span>{" "}
+                <span className="term-g">LIVE</span>
               </div>
-              <div className="status-row">
-                <span className="name">SSO · Okta</span>
-                <span className="val">
-                  <span className="led" />
-                  OK
-                </span>
+              <div className="term-line">
+                <span className="term-g">✓</span>{" "}
+                <span className="term-m">sso·okta</span>{" "}
+                <span className="term-g">OK</span>
+              </div>
+              <div className="term-line term-prompt">
+                <span className="term-dim">$ </span>
+                <span className="term-cursor" aria-hidden="true" />
               </div>
             </div>
           </section>
@@ -302,6 +300,11 @@ export default function LoginPage() {
             </div>
             <div className="quick-label">
               BOSS handled 128 tasks and saved you roughly 4 hours.
+            </div>
+            <div className="quick-bars" aria-hidden="true">
+              {[30, 48, 38, 65, 55, 80, 72, 100].map((h, i) => (
+                <span key={i} style={{ height: `${h}%` }} />
+              ))}
             </div>
           </section>
         </div>
@@ -721,21 +724,6 @@ const SIGNIN_CSS = `
 }
 .boss-signin .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-.boss-signin .welcome-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.boss-signin .welcome-avatar {
-  width: 52px; height: 52px;
-  border-radius: 14px;
-  background: color-mix(in oklab, #fff 35%, transparent);
-  color: inherit;
-  display: grid; place-items: center;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 600;
-}
 .boss-signin .welcome-title {
   font-size: 36px;
   line-height: 1.05;
@@ -750,12 +738,6 @@ const SIGNIN_CSS = `
   color: var(--tint-mint-ink);
 }
 
-.boss-signin .welcome-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 20px;
-}
 .boss-signin .welcome-meta {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -764,32 +746,6 @@ const SIGNIN_CSS = `
   letter-spacing: 0.02em;
 }
 .boss-signin .welcome-meta b { color: inherit; font-weight: 500; }
-
-/* Status */
-.boss-signin .t-status { display: flex; flex-direction: column; justify-content: space-between; }
-.boss-signin .status-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 10px;
-}
-.boss-signin .status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-}
-.boss-signin .status-row .name { color: inherit; }
-.boss-signin .status-row .val {
-  display: flex; align-items: center; gap: 5px;
-  color: color-mix(in oklab, currentColor 70%, transparent);
-}
-.boss-signin .status-row .val .led {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor;
-}
 
 /* Quick */
 .boss-signin .t-quick { display: flex; flex-direction: column; justify-content: space-between; }
@@ -833,5 +789,121 @@ const SIGNIN_CSS = `
   .boss-signin .t-quick { grid-column: span 2; }
   .boss-signin .form-title { font-size: 26px; }
   .boss-signin .welcome-title { font-size: 30px; }
+}
+
+/* Photo background tile */
+.boss-signin .t-photo {
+  background: radial-gradient(ellipse at 75% 35%, #5a4030 0%, #3a2818 40%, #1c1008 100%);
+  border-color: transparent;
+  padding: 0;
+  display: block;
+}
+.boss-signin .t-photo::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(190,140,85,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(230,180,100,0.12) 0%, transparent 45%);
+  pointer-events: none;
+}
+.boss-signin .photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, rgba(16,10,6,0.75) 0%, rgba(16,10,6,0.35) 55%, rgba(16,10,6,0.08) 100%);
+  z-index: 0;
+}
+.boss-signin .photo-streak {
+  position: absolute; top: -30%; right: 18%;
+  width: 160px; height: 200%;
+  background: linear-gradient(168deg, rgba(255,200,100,0.07) 0%, transparent 55%);
+  transform: rotate(12deg);
+  pointer-events: none; z-index: 0;
+}
+.boss-signin .photo-content {
+  position: relative; z-index: 1;
+  padding: 24px; height: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.boss-signin .pill-light {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: rgba(255,253,249,0.65);
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px; letter-spacing: 0.04em;
+}
+.boss-signin .dot-green {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #28c840; flex-shrink: 0;
+}
+.boss-signin .t-welcome .welcome-title { color: #fffdf9; }
+.boss-signin .t-welcome .welcome-title em { color: rgba(255,218,150,0.88); }
+.boss-signin .t-welcome .welcome-meta {
+  color: rgba(255,253,249,0.38); margin-top: 8px;
+}
+.boss-signin .t-welcome .welcome-meta b { color: rgba(255,253,249,0.6); }
+
+/* Terminal tile */
+.boss-signin .t-terminal {
+  background: #1a1816;
+  border-color: transparent;
+  padding: 0;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.boss-signin .term-chrome {
+  background: #2a2724;
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.boss-signin .term-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.boss-signin .term-red    { background: #ff5f57; }
+.boss-signin .term-yellow { background: #febc2e; }
+.boss-signin .term-green  { background: #28c840; }
+.boss-signin .term-title-bar {
+  font-family: var(--font-mono); font-size: 10px;
+  color: rgba(255,253,249,0.28); margin-left: 6px;
+}
+.boss-signin .term-body {
+  padding: 12px 14px; flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  line-height: 1.85;
+}
+.boss-signin .term-line {
+  font-family: var(--font-mono); font-size: 11px;
+  color: rgba(255,253,249,0.8);
+}
+.boss-signin .term-g   { color: #28c840; }
+.boss-signin .term-y   { color: #febc2e; }
+.boss-signin .term-m   { color: rgba(255,253,249,0.42); }
+.boss-signin .term-dim { color: rgba(255,253,249,0.3); }
+.boss-signin .term-prompt { margin-top: 4px; }
+.boss-signin .term-cursor {
+  display: inline-block;
+  width: 7px; height: 13px;
+  background: rgba(255,253,249,0.4);
+  vertical-align: middle;
+  animation: boss-cursor-blink 1.2s step-end infinite;
+}
+@keyframes boss-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boss-signin .term-cursor { animation: none; }
+}
+
+/* Quick tile bar chart */
+.boss-signin .quick-bars {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 28px; margin-top: 10px;
+}
+.boss-signin .quick-bars span {
+  flex: 1; border-radius: 1px 1px 0 0;
+  background: rgba(78, 73, 112, 0.25);
+}
+.boss-signin .quick-bars span:last-child {
+  background: rgba(78, 73, 112, 0.5);
 }
 `;

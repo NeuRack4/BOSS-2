@@ -82,7 +82,13 @@ const PAYMENT_METHODS = [
     payMethod: "CARD" as const,
     easyPayProvider: undefined,
     icon: (
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <svg
+        className="w-6 h-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
         <rect x="2" y="5" width="20" height="14" rx="2" />
         <path d="M2 10h20" />
         <path strokeLinecap="round" d="M6 15h4" />
@@ -97,8 +103,11 @@ const PAYMENT_METHODS = [
     easyPayProvider: "KAKAOPAY" as const,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
-        <rect width="24" height="24" rx="12" fill="#FEE500"/>
-        <path d="M12 5.5C8.134 5.5 5 7.91 5 10.875c0 1.89 1.2 3.555 3.02 4.56l-.77 2.87 3.34-2.2c.46.065.93.1 1.41.1 3.866 0 7-2.41 7-5.375S15.866 5.5 12 5.5z" fill="#3A1D1D"/>
+        <rect width="24" height="24" rx="12" fill="#FEE500" />
+        <path
+          d="M12 5.5C8.134 5.5 5 7.91 5 10.875c0 1.89 1.2 3.555 3.02 4.56l-.77 2.87 3.34-2.2c.46.065.93.1 1.41.1 3.866 0 7-2.41 7-5.375S15.866 5.5 12 5.5z"
+          fill="#3A1D1D"
+        />
       </svg>
     ),
   },
@@ -110,8 +119,11 @@ const PAYMENT_METHODS = [
     easyPayProvider: "TOSSPAY" as const,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
-        <rect width="24" height="24" rx="6" fill="#0064FF"/>
-        <path d="M7 12.5C7 10 9 8 12 8s5 2 5 4.5-2 4.5-5 4.5c-.8 0-1.6-.15-2.3-.4L7 17.5V12.5z" fill="white"/>
+        <rect width="24" height="24" rx="6" fill="#0064FF" />
+        <path
+          d="M7 12.5C7 10 9 8 12 8s5 2 5 4.5-2 4.5-5 4.5c-.8 0-1.6-.15-2.3-.4L7 17.5V12.5z"
+          fill="white"
+        />
       </svg>
     ),
   },
@@ -123,8 +135,17 @@ const PAYMENT_METHODS = [
     easyPayProvider: "PAYCO" as const,
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24">
-        <rect width="24" height="24" rx="6" fill="#E1251B"/>
-        <text x="4" y="17" fontSize="10" fontWeight="bold" fill="white" fontFamily="Arial">PAY</text>
+        <rect width="24" height="24" rx="6" fill="#E1251B" />
+        <text
+          x="4"
+          y="17"
+          fontSize="10"
+          fontWeight="bold"
+          fill="white"
+          fontFamily="Arial"
+        >
+          PAY
+        </text>
       </svg>
     ),
   },
@@ -132,8 +153,18 @@ const PAYMENT_METHODS = [
 
 /* ── 결제 수단 선택 모달 ─────────────────────────────────────────────────── */
 const PLAN_INFO = {
-  pro:      { label: "Pro",      amount: 29900,  orderName: "BOSS2 Pro 구독 (1개월)",      display: "29,900" },
-  business: { label: "Business", amount: 99900,  orderName: "BOSS2 Business 구독 (1개월)", display: "99,900" },
+  pro: {
+    label: "Pro",
+    amount: 29900,
+    orderName: "BOSS2 Pro 구독 (1개월)",
+    display: "29,900",
+  },
+  business: {
+    label: "Business",
+    amount: 99900,
+    orderName: "BOSS2 Business 구독 (1개월)",
+    display: "99,900",
+  },
 };
 
 const PaymentMethodModal = ({
@@ -151,9 +182,9 @@ const PaymentMethodModal = ({
   plan: "pro" | "business";
   onSuccess: () => void;
 }) => {
-  const [selected, setSelected]   = useState<string | null>(null);
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const planInfo = PLAN_INFO[plan];
 
@@ -173,35 +204,37 @@ const PaymentMethodModal = ({
       onClose();
 
       const result = await requestPayment({
-        storeId:      process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
-        channelKey:   CARD_CHANNEL_KEY,
+        storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
+        channelKey: CARD_CHANNEL_KEY,
         paymentId,
-        orderName:    planInfo.orderName,
-        totalAmount:  planInfo.amount,
-        currency:     "KRW",
-        payMethod:    method.payMethod,
-        windowType:   { pc: "POPUP" },
+        orderName: planInfo.orderName,
+        totalAmount: planInfo.amount,
+        currency: "KRW",
+        payMethod: method.payMethod,
+        windowType: { pc: "POPUP" },
         ...(method.easyPayProvider
           ? { easyPay: { easyPayProvider: method.easyPayProvider } }
           : {}),
         customer: {
           customerId: accountId,
-          email:      userEmail,
+          email: userEmail,
         },
       });
 
       if (!result || "code" in result) {
-        setError((result as { message?: string })?.message ?? "결제가 취소되었습니다.");
+        setError(
+          (result as { message?: string })?.message ?? "결제가 취소되었습니다.",
+        );
         return;
       }
 
       // 백엔드에 결제 확인 + 구독 활성화
       const res = await fetch(`${API}/api/payment/subscribe`, {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          account_id:     accountId,
-          payment_id:     paymentId,
+          account_id: accountId,
+          payment_id: paymentId,
           billing_method: selected,
           plan,
         }),
@@ -223,9 +256,16 @@ const PaymentMethodModal = ({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="결제 수단 선택" widthClass="w-[400px]">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="결제 수단 선택"
+      widthClass="w-[400px]"
+    >
       <p className="text-[13px] text-[#6b7280] mb-4">
-        {planInfo.label} 플랜 · <strong className="text-[#111827]">{planInfo.display}원 / 월</strong> · 언제든지 해지 가능
+        {planInfo.label} 플랜 ·{" "}
+        <strong className="text-[#111827]">{planInfo.display}원 / 월</strong> ·
+        언제든지 해지 가능
       </p>
 
       <div className="flex flex-col gap-2">
@@ -242,13 +282,21 @@ const PaymentMethodModal = ({
           >
             <div className="shrink-0">{m.icon}</div>
             <div className="flex-1">
-              <p className="text-[13px] font-medium text-[#111827]">{m.label}</p>
+              <p className="text-[13px] font-medium text-[#111827]">
+                {m.label}
+              </p>
               <p className="text-[12px] text-[#9ca3af]">{m.desc}</p>
             </div>
-            <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
-              selected === m.id ? "border-[#111827] bg-[#111827]" : "border-[#d1d5db]"
-            }`}>
-              {selected === m.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+            <div
+              className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+                selected === m.id
+                  ? "border-[#111827] bg-[#111827]"
+                  : "border-[#d1d5db]"
+              }`}
+            >
+              {selected === m.id && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+              )}
             </div>
           </button>
         ))}
@@ -286,12 +334,16 @@ const PaymentMethodModal = ({
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export const PaymentModal = ({ open, onClose }: Props) => {
-  const supabase                        = createClient();
-  const [accountId, setAccountId]       = useState("");
-  const [userEmail, setUserEmail]       = useState("");
-  const [methodOpen, setMethodOpen]         = useState(false);
-  const [selectedPlan, setSelectedPlan]     = useState<"pro" | "business">("pro");
-  const [subscription, setSubscription]     = useState<{ plan: string; status: string; next_billing_date?: string } | null>(null);
+  const supabase = createClient();
+  const [accountId, setAccountId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<"pro" | "business">("pro");
+  const [subscription, setSubscription] = useState<{
+    plan: string;
+    status: string;
+    next_billing_date?: string;
+  } | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -307,7 +359,9 @@ export const PaymentModal = ({ open, onClose }: Props) => {
   }, [open, accountId]);
 
   const fetchSubscription = async () => {
-    const res = await fetch(`${API}/api/payment/status?account_id=${accountId}`);
+    const res = await fetch(
+      `${API}/api/payment/status?account_id=${accountId}`,
+    );
     const data = await res.json();
     setSubscription(data);
   };
@@ -321,8 +375,15 @@ export const PaymentModal = ({ open, onClose }: Props) => {
   };
 
   const handleUnsubscribe = async () => {
-    if (!confirm("구독을 해지하시겠습니까? 현재 결제 주기가 끝날 때까지 Pro 기능을 사용할 수 있습니다.")) return;
-    await fetch(`${API}/api/payment/unsubscribe?account_id=${accountId}`, { method: "DELETE" });
+    if (
+      !confirm(
+        "구독을 해지하시겠습니까? 현재 결제 주기가 끝날 때까지 Pro 기능을 사용할 수 있습니다.",
+      )
+    )
+      return;
+    await fetch(`${API}/api/payment/unsubscribe?account_id=${accountId}`, {
+      method: "DELETE",
+    });
     fetchSubscription();
   };
 
@@ -332,10 +393,20 @@ export const PaymentModal = ({ open, onClose }: Props) => {
       <div className="mb-5 flex items-center gap-3 rounded-lg bg-[#f9fafb] border border-[#e5e7eb] px-4 py-3">
         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
         <span className="text-[13px] text-[#374151]">
-          현재 플랜: <strong>{currentPlan === "pro" ? "Pro" : currentPlan === "business" ? "Business" : "Free"}</strong>
+          현재 플랜:{" "}
+          <strong>
+            {currentPlan === "pro"
+              ? "Pro"
+              : currentPlan === "business"
+                ? "Business"
+                : "Free"}
+          </strong>
           {subscription?.next_billing_date && (
             <span className="ml-2 text-[12px] text-[#9ca3af]">
-              다음 결제일: {new Date(subscription.next_billing_date).toLocaleDateString("ko-KR")}
+              다음 결제일:{" "}
+              {new Date(subscription.next_billing_date).toLocaleDateString(
+                "ko-KR",
+              )}
             </span>
           )}
         </span>
@@ -349,10 +420,14 @@ export const PaymentModal = ({ open, onClose }: Props) => {
           </button>
         )}
         {subscription?.status === "cancelled" && (
-          <span className="ml-auto text-[11px] text-[#9ca3af]">해지 예정 (기간 만료까지 유지)</span>
+          <span className="ml-auto text-[11px] text-[#9ca3af]">
+            해지 예정 (기간 만료까지 유지)
+          </span>
         )}
         {subscription?.status === "past_due" && (
-          <span className="ml-auto text-[11px] text-red-500">결제 실패 — 결제 수단을 확인해주세요</span>
+          <span className="ml-auto text-[11px] text-red-500">
+            결제 실패 — 결제 수단을 확인해주세요
+          </span>
         )}
       </div>
 
@@ -364,7 +439,9 @@ export const PaymentModal = ({ open, onClose }: Props) => {
             <div
               key={plan.id}
               className={`relative flex flex-col rounded-xl border px-4 py-5 gap-4 ${
-                isCurrent || plan.highlight ? "border-[#111827] shadow-md" : "border-[#e5e7eb]"
+                isCurrent || plan.highlight
+                  ? "border-[#111827] shadow-md"
+                  : "border-[#e5e7eb]"
               }`}
             >
               {(isCurrent || plan.highlight) && (
@@ -374,29 +451,65 @@ export const PaymentModal = ({ open, onClose }: Props) => {
               )}
 
               <div>
-                <p className="text-[13px] font-semibold text-[#374151]">{plan.name}</p>
+                <p className="text-[13px] font-semibold text-[#374151]">
+                  {plan.name}
+                </p>
                 <div className="mt-1 flex items-baseline gap-1">
-                  <span className="text-[22px] font-bold text-[#111827]">{plan.price}</span>
-                  {plan.priceNote && <span className="text-[12px] text-[#9ca3af]">{plan.priceNote}</span>}
+                  <span className="text-[22px] font-bold text-[#111827]">
+                    {plan.price}
+                  </span>
+                  {plan.priceNote && (
+                    <span className="text-[12px] text-[#9ca3af]">
+                      {plan.priceNote}
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 text-[12px] text-[#6b7280]">{plan.description}</p>
+                <p className="mt-1 text-[12px] text-[#6b7280]">
+                  {plan.description}
+                </p>
               </div>
 
               <div className="border-t border-[#f3f4f6]" />
 
               <ul className="flex flex-col gap-2 flex-1">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-[12px] text-[#374151]">
-                    <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <li
+                    key={f}
+                    className="flex items-start gap-2 text-[12px] text-[#374151]"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0 mt-0.5 text-green-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                     {f}
                   </li>
                 ))}
                 {plan.limits.map((l) => (
-                  <li key={l} className="flex items-start gap-2 text-[12px] text-[#9ca3af]">
-                    <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  <li
+                    key={l}
+                    className="flex items-start gap-2 text-[12px] text-[#9ca3af]"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0 mt-0.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                     {l}
                   </li>
@@ -405,16 +518,24 @@ export const PaymentModal = ({ open, onClose }: Props) => {
 
               <Button
                 onClick={() => handleCta(plan.id)}
-                disabled={isCurrent || plan.id === "free" || subscription?.status === "cancelled"}
+                disabled={
+                  isCurrent ||
+                  plan.id === "free" ||
+                  subscription?.status === "cancelled"
+                }
                 className={`w-full text-[13px] py-2 h-auto rounded-lg ${
                   isCurrent || plan.id === "free"
                     ? "bg-[#f3f4f6] text-[#9ca3af] cursor-default"
                     : plan.highlight
-                    ? "bg-[#111827] text-white hover:bg-[#374151]"
-                    : "bg-white border border-[#d1d5db] text-[#374151] hover:bg-[#f9fafb]"
+                      ? "bg-[#111827] text-white hover:bg-[#374151]"
+                      : "bg-white border border-[#d1d5db] text-[#374151] hover:bg-[#f9fafb]"
                 }`}
               >
-                {isCurrent ? "현재 플랜" : plan.id === "free" ? "기본 플랜" : plan.cta}
+                {isCurrent
+                  ? "현재 플랜"
+                  : plan.id === "free"
+                    ? "기본 플랜"
+                    : plan.cta}
               </Button>
             </div>
           );
@@ -422,7 +543,8 @@ export const PaymentModal = ({ open, onClose }: Props) => {
       </div>
 
       <p className="mt-4 text-center text-[11px] text-[#9ca3af]">
-        Pro 플랜은 월 단위 구독이며 언제든지 해지 가능합니다. · 문의: contact@boss2.kr
+        Pro 플랜은 월 단위 구독이며 언제든지 해지 가능합니다. · 문의:
+        contact@boss2.kr
       </p>
 
       <PaymentMethodModal
