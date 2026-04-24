@@ -477,22 +477,27 @@ async def run_sales_report(
     log.info("[SALES] run_sales_report 진입 (LangGraph) | account=%s period=%s",
              account_id, period)
 
-    from app.agents._sales._graph import build_sales_graph
-
-    graph = build_sales_graph()
-    final_state = await graph.ainvoke({
-        "account_id":   account_id,
-        "message":      message,
-        "period":       period,
-        "sales_data":   [],
-        "cost_data":    [],
-        "rag_context":  rag_context,
-        "iteration":    0,
-        "data_ok":      False,
-        "final_result": {},
-    })
-
-    result = final_state["final_result"]
+    result: dict = {}
+    try:
+        from app.agents._sales._graph import build_sales_graph
+        graph = build_sales_graph()
+        final_state = await graph.ainvoke({
+            "account_id":   account_id,
+            "message":      message,
+            "period":       period,
+            "sales_data":   [],
+            "cost_data":    [],
+            "rag_context":  rag_context,
+            "iteration":    0,
+            "data_ok":      False,
+            "final_result": {},
+        })
+        result = final_state["final_result"]
+        log.info("[SALES] LangGraph 완료 | period=%s", period)
+    except Exception as _graph_err:
+        log.error("[SALES] LangGraph 실패 → 기존 방식으로 fallback: %s", _graph_err)
+        from app.agents._sales._insights import generate_sales_insight
+        result = await generate_sales_insight(account_id=account_id, period=period, target=target)
 
     title = f"{period} 매출 인사이트"
     artifact_block = (
