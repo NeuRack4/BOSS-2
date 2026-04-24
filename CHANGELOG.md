@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales_agent_test)
+
+- **run_cost_entry raw_text 파라미터 오류** — 플래너가 `raw_text` 인자를 전달할 때 `unexpected keyword argument` 에러 발생. 함수 시그니처에 `raw_text: str | None = None` 추가해 수정.
+
+---
+
 ## [2.6.0] — 2026-04-24
 
 ### Added — Sales (feature/sales-rag-agentic-loop)
