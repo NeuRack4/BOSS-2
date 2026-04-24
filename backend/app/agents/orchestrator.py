@@ -683,6 +683,24 @@ async def _dispatch_via_planner(
         log.info("[planner] account=%s error reason=%s → fallback", account_id, result.get("reason"))
         return None
 
+    # 업로드가 있는데 planner 가 dispatch 하지 않았으면 강제 override
+    # (LLM 이 chitchat/ask/refuse 로 잘못 분류해도 recruitment agent 가 처리하도록)
+    if _uploads and mode != "dispatch":
+        log.info(
+            "[planner] account=%s upload_override mode=%s → force recruit_resume_parse",
+            account_id, mode,
+        )
+        result = {
+            "mode": "dispatch",
+            "opening": result.get("opening") or "",
+            "brief": result.get("brief") or "",
+            "steps": [{"capability": "recruit_resume_parse", "args": {}, "depends_on": None}],
+            "question": "",
+            "choices": [],
+            "profile_updates": result.get("profile_updates") or {},
+        }
+        mode = "dispatch"
+
     opening = (result.get("opening") or "").strip()
     brief = (result.get("brief") or "").strip()
 
