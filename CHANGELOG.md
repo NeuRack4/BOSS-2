@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] — 2026-04-24
+
+### Added — Marketing / Integrations (feature-marketing)
+
+- **Business 플랜 결제 플로우** — 요금제 모달에서 Business 플랜 "Business 시작하기" 버튼 클릭 시 PortOne `requestPayment` 결제창 실행 (기존 mailto 방식 제거). 결제 금액 99,900원, 주문명 "BOSS2 Business 구독 (1개월)" 자동 적용.
+- **플랜별 동적 결제 정보** — `PaymentMethodModal`에 `plan` prop 전달, `PLAN_INFO` 맵으로 Pro/Business 금액·라벨 동적 표시.
+- **현재 사용 중인 플랜 강조** — 구독 중인 플랜 카드에 검은색 테두리 적용 + "사용 중" 배지 (기존 "추천" 배지 대체).
+- **IntegrationsModal API URL 수정** — 모든 fetch 호출에 `NEXT_PUBLIC_API_URL` 적용, 포트 3000→8000 프록시 오류 해소. `safeJson` 래퍼로 플랫폼별 독립 에러 처리 (Promise.all 실패 전파 방지).
+- **연결된 플랫폼 상세 UI** — YouTube·Instagram·Naver 블로그 연결 완료 시 정보 카드 표시:
+  - YouTube: 연결 방식(Google OAuth 2.0), 토큰 만료일, 활성 기능 목록, 연결 해제 버튼.
+  - Instagram: 계정 ID, 마지막 업데이트, 60일 만료 경고, 토큰 갱신 폼, 연결 해제 버튼.
+  - Naver 블로그: 블로그 ID, 쿠키 D-day (7일 이하 빨간색 강조), 쿠키 갱신 폼, 연결 해제 버튼.
+
+### Changed — Marketing (feature-marketing)
+
+- **`backend/app/services/payment.py`** — `BUSINESS_AMOUNT = 99_900`, `PLAN_AMOUNTS` 맵 추가.
+- **`backend/app/routers/payment.py`** — `SubscribeRequest.plan` 필드 추가, 결제 금액을 `PLAN_AMOUNTS[req.plan]` 으로 검증 및 적용.
+- **`backend/app/services/naver_blog.py`** — DB 자격증명 부재 시 `naver_cookies.json` 로컬 파일 + `settings.naver_blog_id` fallback 추가.
+
+### Fixed — Marketing (feature-marketing)
+
+- **IntegrationsModal 404 오류** — 모든 API 호출이 Next.js 포트(3000)로 향하던 문제 수정. `const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"` 적용.
+- **신규 계정 플랫폼 자동 연결 오류** — integrations 상태 조회 엔드포인트의 env fallback 제거, DB 전용 조회로 복원해 계정 격리 보장.
+
+---
+
 ## [2.7.0] — 2026-04-24
 
 ### Added — Recruitment (feature-recruit)
