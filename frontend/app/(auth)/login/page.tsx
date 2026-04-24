@@ -255,7 +255,7 @@ export default function LoginPage() {
 
           {/* STATUS */}
           <section className="tile t-status t-terminal">
-            <div className="term-chrome">
+            <div className="term-chrome" aria-hidden="true">
               <span className="term-dot term-red" />
               <span className="term-dot term-yellow" />
               <span className="term-dot term-green" />
@@ -284,7 +284,7 @@ export default function LoginPage() {
               </div>
               <div className="term-line term-prompt">
                 <span className="term-dim">$ </span>
-                <span className="term-cursor" />
+                <span className="term-cursor" aria-hidden="true" />
               </div>
             </div>
           </section>
@@ -764,30 +764,6 @@ const SIGNIN_CSS = `
 .boss-signin .welcome-meta b { color: inherit; font-weight: 500; }
 
 /* Status */
-.boss-signin .t-status { display: flex; flex-direction: column; justify-content: space-between; }
-.boss-signin .status-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 10px;
-}
-.boss-signin .status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-}
-.boss-signin .status-row .name { color: inherit; }
-.boss-signin .status-row .val {
-  display: flex; align-items: center; gap: 5px;
-  color: color-mix(in oklab, currentColor 70%, transparent);
-}
-.boss-signin .status-row .val .led {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor;
-}
 
 /* Quick */
 .boss-signin .t-quick { display: flex; flex-direction: column; justify-content: space-between; }
@@ -931,5 +907,8 @@ const SIGNIN_CSS = `
 @keyframes boss-cursor-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boss-signin .term-cursor { animation: none; }
 }
 `;
