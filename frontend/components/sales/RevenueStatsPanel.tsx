@@ -1121,12 +1121,15 @@ export function RevenueStatsPanel({ accountId }: { accountId: string }) {
     [accountId],
   );
 
+  const fetchBenchmarkDataRef = useRef(fetchBenchmarkData);
+  useEffect(() => { fetchBenchmarkDataRef.current = fetchBenchmarkData; }, [fetchBenchmarkData]);
+
   useEffect(() => {
     if (!accountId) return;
-    if (selectedPeriod === prevPeriodRef.current) return; // 실제 변경 없으면 skip
+    if (selectedPeriod === prevPeriodRef.current) return;
     prevPeriodRef.current = selectedPeriod;
-    fetchBenchmarkData(selectedPeriod);
-  }, [selectedPeriod, accountId, fetchBenchmarkData]);
+    fetchBenchmarkDataRef.current(selectedPeriod);
+  }, [selectedPeriod, accountId]);
 
   if (loading)
     return (

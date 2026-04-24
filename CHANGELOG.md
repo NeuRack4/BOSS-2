@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales_bugfix)
+
+- **benchmark-insight 이중 호출 버그 수정** — `fetchBenchmarkData` useCallback 재생성 시 effect 중복 실행 문제. ref 분리로 해결.
+- **LLM raw 로그 debug 레벨로 변경** — 시연·운영 환경에서 불필요한 JSON 로그 미출력.
+
+---
+
 ## [2.10.0] — 2026-04-24
 
 ### Added — Marketing (feature-marketing)
