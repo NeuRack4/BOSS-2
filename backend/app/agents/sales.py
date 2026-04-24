@@ -839,7 +839,7 @@ async def run_menu_analysis(
             f"\n\n[ARTIFACT]\n"
             f"type: sales_report\n"
             f"title: {period} 메뉴별 수익성 분석\n"
-            f"sub_domain: Reports\n"
+            f"sub_domain: Pricing\n"
             f"[/ARTIFACT]"
         )
         # 저장용: 마커 없는 깨끗한 텍스트 (NodeDetailModal에서 마커가 노출되지 않도록)
