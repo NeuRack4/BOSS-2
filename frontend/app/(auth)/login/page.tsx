@@ -301,6 +301,11 @@ export default function LoginPage() {
             <div className="quick-label">
               BOSS handled 128 tasks and saved you roughly 4 hours.
             </div>
+            <div className="quick-bars" aria-hidden="true">
+              {[30, 48, 38, 65, 55, 80, 72, 100].map((h, i) => (
+                <span key={i} style={{ height: `${h}%` }} />
+              ))}
+            </div>
           </section>
         </div>
       </main>
@@ -910,5 +915,18 @@ const SIGNIN_CSS = `
 }
 @media (prefers-reduced-motion: reduce) {
   .boss-signin .term-cursor { animation: none; }
+}
+
+/* Quick tile bar chart */
+.boss-signin .quick-bars {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 28px; margin-top: 10px;
+}
+.boss-signin .quick-bars span {
+  flex: 1; border-radius: 1px 1px 0 0;
+  background: rgba(78, 73, 112, 0.25);
+}
+.boss-signin .quick-bars span:last-child {
+  background: rgba(78, 73, 112, 0.5);
 }
 `;
