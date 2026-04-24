@@ -657,7 +657,6 @@ async def run_resume_parse(
     history: list[dict],
     long_term_context: str = "",
     rag_context: str = "",
-    file_count: int = 1,
 ) -> str:
     """구직자 이력서 파일(복수 가능)을 파싱해 resumes 테이블에 저장."""
     import json as _json
@@ -701,22 +700,28 @@ async def run_resume_parse(
 
         applicant["raw_text"] = applicant.get("raw_text") or content
 
-        row = (
-            sb.table("resumes")
-            .insert({
-                "account_id": account_id,
-                "file_name": file_name,
-                "applicant": applicant,
-            })
-            .execute()
-            .data
-        )
+        try:
+            row = (
+                sb.table("resumes")
+                .insert({
+                    "account_id": account_id,
+                    "file_name": file_name,
+                    "applicant": applicant,
+                })
+                .execute()
+                .data
+            )
+        except Exception:
+            log.warning("[resume_parse] DB insert failed for file=%s", file_name)
+            continue
         if row:
             saved.append({
                 "id": row[0]["id"],
                 "name": (applicant.get("name") or "").strip() or file_name,
                 "applicant": applicant,
             })
+        else:
+            log.warning("[resume_parse] DB insert returned no data for file=%s", file_name)
 
     if not saved:
         return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
