@@ -687,22 +687,6 @@ function StageGuide({ currentStage }: { currentStage: "early" | "growing" | "sta
   );
 }
 
-// ── 전년 동월 안내 팁 ─────────────────────────────────────────────────────────
-
-function YoyTip({ hasYearData }: { hasYearData: boolean }) {
-  return (
-    <div className="rounded-[5px] border border-[#d4e0c4] bg-[#f0f6e8] px-3 py-1.5">
-      <p className="text-[11px] text-[#4a5c28]">
-        💡 <strong>전년 동월 비교가 가장 정확해요.</strong>
-        {" "}계절 요인을 제거하고 순수한 성장만 볼 수 있어요.
-        {!hasYearData && (
-          <span className="ml-1 text-[#6a7843]">1년치 데이터가 쌓이면 자동 활성화돼요.</span>
-        )}
-      </p>
-    </div>
-  );
-}
-
 // ── 벤치마크 통합 섹션 ────────────────────────────────────────────────────────
 
 function BenchmarkSection({
@@ -753,12 +737,18 @@ function BenchmarkSection({
 
       {/* 비교 기간 드롭박스 */}
       {periods.length > 0 && (
-        <PeriodDropdown
-          periods={periods}
-          selected={selectedPeriod}
-          onChange={onPeriodChange}
-          loading={periodLoading}
-        />
+        <div className="flex flex-col gap-1">
+          <PeriodDropdown
+            periods={periods}
+            selected={selectedPeriod}
+            onChange={onPeriodChange}
+            loading={periodLoading}
+          />
+          <p className="text-[10px] text-[#aaa]">
+            💡 전년 동월 비교가 가장 정확해요 — 계절 요인을 제거하고 순수한 성장만 볼 수 있어요.
+            {!hasYearData && " 1년치 데이터가 쌓이면 자동 활성화돼요."}
+          </p>
+        </div>
       )}
 
       {/* 데이터 부족 경고 */}
@@ -798,8 +788,6 @@ function BenchmarkSection({
         />
       )}
 
-      {/* 전년 동월 안내 팁 */}
-      <YoyTip hasYearData={hasYearData} />
 
       {/* 예상 월매출 — 알고리즘 개선 후 별도 브랜치에서 활성화 예정 */}
       {false && insight?.monthly_prediction && insight.monthly_prediction > 0 && insight.prediction_basis && (
