@@ -298,18 +298,23 @@ def _format_capability_catalog(tools: list[dict]) -> str:
     for t in tools:
         f = t.get("function") or {}
         name = f.get("name", "")
-        desc = (f.get("description") or "").strip().replace("\n", " ")
+        desc = (f.get("description") or "").strip().replace("\n", " ")[:60]
         params = f.get("parameters") or {}
         props = params.get("properties") or {}
         required = set(params.get("required") or [])
         arg_bits: list[str] = []
         for pname, pspec in props.items():
-            pdesc = (pspec.get("description") or "").strip().replace("\n", " ")
+            pdesc = (pspec.get("description") or "").strip().replace("\n", " ")[:40]
             enum = pspec.get("enum")
             tag = " (required)" if pname in required else ""
-            detail = pdesc[:80] if pdesc else pspec.get("type", "")
             if enum:
-                detail = f"enum={enum}"
+                enum_list = enum[:3]
+                enum_str = ",".join(str(e) for e in enum_list)
+                if len(enum) > 3:
+                    enum_str += ",..."
+                detail = f"enum=[{enum_str}]"
+            else:
+                detail = pdesc if pdesc else pspec.get("type", "")
             arg_bits.append(f"{pname}{tag}: {detail}")
         args_line = ("\n    · " + "\n    · ".join(arg_bits)) if arg_bits else " (인자 없음)"
         lines.append(f"- `{name}` — {desc}{args_line}")

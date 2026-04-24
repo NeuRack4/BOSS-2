@@ -30,8 +30,6 @@ except ImportError:
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
-    NICKNAME_RULE,
-    PROFILE_RULE,
     ARTIFACT_RULE,
 )
 from app.agents._feedback import feedback_context
@@ -310,8 +308,6 @@ artifact 저장 시 sub_domain 필드를 반드시 포함:
     + _CUSTOMER_FORMAT
     + ARTIFACT_RULE
     + CLARIFY_RULE
-    + NICKNAME_RULE
-    + PROFILE_RULE
     + """
 작성 원칙:
 - 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성

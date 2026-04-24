@@ -100,14 +100,28 @@ async def save_memory(
     *,
     domain: str | None = None,
     digest_date: str | None = None,
+    max_chars: int = 300,
 ) -> None:
     """범용 장기기억 저장.
 
     - domain/digest_date 모두 있으면 `upsert_memory_long` RPC 로 도메인-일자 digest upsert.
     - 둘 중 하나라도 없으면 일반 insert (compressor 요약·evaluations 등).
+    - Compressor 메모리(domain=None)는 max_chars 초과시 압축, digest(domain!=None)는 압축 안 함.
     """
+    final_content = content
+    if not domain and len(content) > max_chars:
+        try:
+            final_content = await _summarize_event(
+                domain="memory",
+                artifact_type="session_summary",
+                title="세션 요약",
+                content=content,
+            )
+        except Exception:
+            final_content = content[:max_chars]
+
     try:
-        embedding = embed_text(content)
+        embedding = embed_text(final_content)
     except Exception:
         return
 
@@ -118,7 +132,7 @@ async def save_memory(
                 "p_account_id":  account_id,
                 "p_domain":      domain,
                 "p_digest_date": digest_date,
-                "p_content":     content,
+                "p_content":     final_content,
                 "p_embedding":   embedding,
                 "p_importance":  importance,
             }).execute()
@@ -129,7 +143,7 @@ async def save_memory(
     try:
         sb.table("memory_long").insert({
             "account_id": account_id,
-            "content":    content,
+            "content":    final_content,
             "embedding":  embedding,
             "importance": importance,
         }).execute()
@@ -206,6 +220,9 @@ async def recall(account_id: str, query: str, limit: int = 5) -> list[dict]:
             "p_query_text": query or "",
             "p_limit":      limit,
         }).execute()
-        return result.data or []
+        data = result.data or []
+        for item in data:
+            item["content"] = (item.get("content") or "")[:200]
+        return data
     except Exception:
         return []

@@ -14,8 +14,6 @@
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
-    NICKNAME_RULE,
-    PROFILE_RULE,
     ARTIFACT_RULE,
 )
 from app.agents._feedback import feedback_context
@@ -274,8 +272,6 @@ SYSTEM_PROMPT = (
     + _SEASON_CONTEXT
     + ARTIFACT_RULE
     + CLARIFY_RULE
-    + NICKNAME_RULE
-    + PROFILE_RULE
     + """
 [결과물 저장 강화 규칙]
 - 대화를 통해 타입별 필수 필드를 모두 확인했다면, 그 턴에 반드시 완성된 결과물 + [ARTIFACT] 블록을 출력한다.

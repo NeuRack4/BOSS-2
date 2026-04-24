@@ -363,11 +363,20 @@ def _retrieve_legal_context(
 
     lines = ["[관련 법령 조문]"]
     for r in kept:
-        src = r.get("source") or "출처 불명"
-        art = r.get("article_no") or ""
-        ttl = r.get("article_title") or ""
-        head = f"{src} {art}{f'({ttl})' if ttl else ''}".strip()
-        lines.append(f"- {head}")
+        src  = r.get("source") or "출처 불명"
+        art  = r.get("article_no") or ""
+        ttl  = r.get("article_title") or ""
+        para = r.get("paragraph_no")
+
+        cite = src
+        if art:
+            cite += f" {art}"
+        if ttl:
+            cite += f"({ttl})"
+        if para:
+            cite += f" 제{para}항"
+
+        lines.append(f"- {cite.strip()}")
         content = (r.get("content") or "").strip()
         if content:
             lines.append(f"  {content[:800]}")
@@ -393,7 +402,8 @@ _SYSTEM_PROMPT = """당신은 대한민국 법률 전문 AI 자문가입니다. 
 
 [답변 원칙]
 1. 아래 [관련 법령 조문] 섹션이 주어지면 반드시 그 범위 안에서 근거를 인용하며 답합니다.
-2. 조항을 인용할 땐 "근로기준법 제17조" 같은 정식 형식으로 명시합니다.
+2. 조항을 인용할 땐 "근로기준법 제17조 제2항" 처럼 **조·항까지** 정식 형식으로 명시합니다.
+   항 정보가 없으면 조문 번호만("제17조"). 항이 여럿이면 각각 구분해 표기.
 3. 컨텍스트에 없는 조항·판례·숫자를 지어내지 마세요. 확신이 없으면 "확답은 어렵고 일반적으로는..." 식으로 한계를 밝힙니다.
 4. 답변 구조:
    - **결론** 한 줄 (가능 / 제한적 가능 / 불가 / 상황에 따라 다름)

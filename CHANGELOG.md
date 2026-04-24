@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] — 2026-04-24
+
+### Added
+
+- **세무 자문 전용 RAG 파이프라인** — `doc_tax_advice` capability 신규 구현. 세무 지식 베이스를 대상으로 한 하이브리드 검색(pgvector + FTS RRF)으로 세무·노무 자문 답변 품질 향상.
+- **행정서류 인라인 카드 + DOCX 자동 다운로드** — 사업자등록·통신판매업·구매안전서비스 신청서를 채팅 내 인라인 카드로 표시하고 DOCX 파일 자동 생성·다운로드 지원.
+
+### Fixed
+
+- **LLM 시스템 프롬프트 토큰 최적화** — domain agent에서 중복 NICKNAME_RULE·PROFILE_RULE 제거, dead code `_dispatch_via_tools` 150줄 삭제, capability catalog 설명 길이 압축, recall 결과 200자 슬라이싱 및 저장 시 gpt-4o-mini 압축 적용.
+
+---
+
 ## [2.3.0] — 2026-04-23
 
 ### Added — Recruitment (feature-doc)

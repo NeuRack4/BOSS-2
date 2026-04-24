@@ -138,11 +138,6 @@ export const ProfileWidget = ({ bgColor }: { bgColor?: string }) => {
               <div className="truncate text-[14px] font-semibold text-[#030303]">
                 {name}
               </div>
-              {profile?.business_name && profile?.display_name && (
-                <div className="mt-0.5 truncate text-[11.5px] text-[#030303]/60">
-                  {profile.business_name}
-                </div>
-              )}
             </div>
             {rows.map((r) => (
               <div

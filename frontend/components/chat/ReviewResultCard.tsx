@@ -29,6 +29,7 @@ const SEVERITY_TONE: Record<ReviewClause["severity"], string> = {
 const _REVIEW_JSON_RE = /\[\[REVIEW_JSON\]\]([\s\S]*?)\[\[\/REVIEW_JSON\]\]/;
 const _CHOICES_RE = /\[CHOICES\][\s\S]*?\[\/CHOICES\]/g;
 const _ARTIFACT_RE = /\[ARTIFACT\][\s\S]*?\[\/ARTIFACT\]/g;
+const _ARTIFACT_CAPTURE_RE = /\[ARTIFACT\]([\s\S]*?)\[\/ARTIFACT\]/;
 const _SET_NICKNAME_RE = /\[SET_NICKNAME\][\s\S]*?\[\/SET_NICKNAME\]/g;
 const _SET_PROFILE_RE = /\[SET_PROFILE\][\s\S]*?\[\/SET_PROFILE\]/g;
 const _REVIEW_REQUEST_RE = /\[REVIEW_REQUEST\][\s\S]*?\[\/REVIEW_REQUEST\]/g;
@@ -43,6 +44,111 @@ const stripMarkers = (text: string): string =>
     .replace(_REVIEW_REQUEST_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+export type AdminApplicationPayload = {
+  title: string;
+  sub_domain: string;
+  application_type?: string;
+  due_date?: string;
+  due_label?: string;
+};
+
+// Content-based patterns for when LLM omits [ARTIFACT]
+const _ADMIN_CONTENT_PATTERNS: Array<{
+  detect: (t: string) => boolean;
+  title: string;
+  application_type: string;
+}> = [
+  {
+    detect: (t) => t.includes("## 신고인 정보") && t.includes("## 대표자 정보"),
+    title: "통신판매업 신고서",
+    application_type: "mail_order_registration",
+  },
+  {
+    detect: (t) => t.includes("구매안전서비스") && t.includes("## 해당 사유"),
+    title: "구매안전서비스 비적용대상 확인서",
+    application_type: "purchase_safety_exempt",
+  },
+  {
+    detect: (t) =>
+      t.includes("## 1. 인적사항") && t.includes("## 2. 사업장 현황"),
+    title: "사업자등록 신청서",
+    application_type: "business_registration",
+  },
+];
+
+const _splitAdminDoc = (
+  body: string,
+): { introText: string; documentContent: string } => {
+  const headingMatch = body.match(/(?:^|\n)(#{1,2}\s)/);
+  if (!headingMatch) return { introText: "", documentContent: body.trim() };
+  const introText = body.slice(0, headingMatch.index).trim();
+  // Cut off at 📝 section
+  const docEnd = body.search(/^📝/m);
+  const docBody =
+    docEnd >= 0
+      ? body.slice(headingMatch.index!, docEnd)
+      : body.slice(headingMatch.index!);
+  return { introText, documentContent: docBody.trim() };
+};
+
+export const extractAdminApplicationPayload = (
+  text: string,
+): {
+  cleaned: string;
+  payload: AdminApplicationPayload | null;
+  documentContent: string;
+} => {
+  // Primary: [ARTIFACT] block
+  const m = text.match(_ARTIFACT_CAPTURE_RE);
+  if (m) {
+    const meta: Record<string, string> = {};
+    for (const line of m[1].split("\n")) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx < 0) continue;
+      const key = line.slice(0, colonIdx).trim();
+      const val = line.slice(colonIdx + 1).trim();
+      if (key) meta[key] = val;
+    }
+
+    if (meta.type === "admin_application") {
+      const artifactStart = text.indexOf("[ARTIFACT]");
+      const beforeArtifact = text.slice(0, artifactStart);
+      const { introText, documentContent } = _splitAdminDoc(beforeArtifact);
+      return {
+        cleaned: introText,
+        payload: {
+          title: meta.title || "신청서",
+          sub_domain: meta.sub_domain || "Operations",
+          application_type: meta.application_type,
+          due_date: meta.due_date,
+          due_label: meta.due_label,
+        },
+        documentContent,
+      };
+    }
+  }
+
+  // Fallback: content-based detection (LLM omitted [ARTIFACT])
+  const stripped = text
+    .replace(_ARTIFACT_RE, "")
+    .replace(_CHOICES_RE, "")
+    .replace(_SET_NICKNAME_RE, "")
+    .replace(_SET_PROFILE_RE, "");
+
+  for (const { detect, title, application_type } of _ADMIN_CONTENT_PATTERNS) {
+    if (detect(stripped)) {
+      const { introText, documentContent } = _splitAdminDoc(stripped);
+      return {
+        cleaned: introText,
+        payload: { title, sub_domain: "Operations", application_type },
+        documentContent,
+      };
+    }
+  }
+
+  return { cleaned: text, payload: null, documentContent: "" };
+};
 
 export const extractReviewPayload = (
   text: string,

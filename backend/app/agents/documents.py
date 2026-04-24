@@ -15,8 +15,6 @@ from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
 from app.agents.orchestrator import (
     CLARIFY_RULE,
-    NICKNAME_RULE,
-    PROFILE_RULE,
     ARTIFACT_RULE,
 )
 from app.agents._feedback import feedback_context
@@ -36,11 +34,10 @@ from app.agents._doc_templates import (
 )
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
 from app.agents._legal import classify_legal_intent, handle_legal_question
+from app.agents._tax_legal import TaxIntent, classify_tax_intent, handle_tax_question
 from app.agents._admin_templates import (
     VALID_ADMIN_TYPES,
     ADMIN_TYPE_LABELS,
-    ADMIN_TYPE_DUE_DAYS,
-    ADMIN_TYPE_DUE_LABELS,
     build_admin_context,
 )
 
@@ -154,7 +151,7 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
   (4) REVIEW_REQUEST 턴엔 [ARTIFACT]/[CHOICES] 를 함께 넣지 마세요.
   (5) 이미 분석된 결과(컨텍스트에 "[최근 분석 결과]" 가 있으면) 에 대한 후속 질문은 그 결과만 참고해 답하세요.
 
-""" + ARTIFACT_RULE + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE + """
+""" + ARTIFACT_RULE + CLARIFY_RULE + """
 
 예시 (type 불명확):
 "어떤 서류가 필요하신가요?
@@ -1275,9 +1272,6 @@ async def run_admin_application(
 
     admin_ctx = build_admin_context(application_type, profile, profile_meta)
     label = ADMIN_TYPE_LABELS.get(application_type, application_type)
-    due_days = ADMIN_TYPE_DUE_DAYS.get(application_type, 7)
-    due_label = ADMIN_TYPE_DUE_LABELS.get(application_type, "행정 처리 기한")
-    due_date = (date.today() + timedelta(days=due_days)).isoformat()
 
     extra_parts: list[str] = []
     if purpose:
@@ -1298,10 +1292,9 @@ async def run_admin_application(
         f"- 응답 마지막에 아래 [ARTIFACT] 블록을 반드시 포함하세요:\n"
         f"  [ARTIFACT]\n"
         f"  type: admin_application\n"
+        f"  application_type: {application_type}\n"
         f"  title: {label}\n"
         f"  sub_domain: Operations\n"
-        f"  due_date: {due_date}\n"
-        f"  due_label: {due_label}\n"
         f"  [/ARTIFACT]\n"
         + "\n\n"
         + admin_ctx
@@ -1330,7 +1323,6 @@ async def run_admin_application(
         reply,
         default_title=label,
         valid_types=VALID_TYPES,
-        extra_meta_keys=("due_label",),
         type_to_subhub=_TYPE_TO_SUBHUB,
     )
     return reply
@@ -1888,6 +1880,31 @@ async def run_legal_advice(
     )
 
 
+async def run_tax_advice(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    question: str,
+    topic: str | None = None,
+) -> str:
+    intent = await classify_tax_intent(question, history)
+    if not intent.is_tax and topic:
+        intent = TaxIntent(is_tax=True, topic=topic, reason="tool-invoked")
+    if not intent.is_tax:
+        return await run(question, account_id, history, rag_context, long_term_context)
+    return await handle_tax_question(
+        question,
+        account_id,
+        history,
+        rag_context=rag_context,
+        long_term_context=long_term_context,
+        intent=intent,
+    )
+
+
 def describe(account_id: str) -> list[dict]:
     caps: list[dict] = [
         {
@@ -2081,8 +2098,9 @@ def describe(account_id: str) -> list[dict]:
             "name": "doc_legal_advice",
             "description": (
                 "한국 법률·법령·조례·시행령에 대한 질문에 RAG 기반으로 답한다. "
-                "노동·임대차·공정거래·개인정보·세법·상법·식품위생·건축·저작권 등 분야 무관. "
+                "노동·임대차·공정거래·개인정보·상법·민법·식품위생·건축·저작권 등 분야 무관. "
                 "서류 작성/검토가 아니라 **법령 자체에 대한 자문** 이 필요할 때 선택. "
+                "세법·세무·부가가치세·소득세·법인세·원천세·국세 관련 질문은 doc_tax_advice 를 사용. "
                 "[카테고리: Legal — 법률 자문]"
             ),
             "handler": run_legal_advice,
@@ -2090,7 +2108,26 @@ def describe(account_id: str) -> list[dict]:
                 "type": "object",
                 "properties": {
                     "question": {"type": "string", "description": "법률 질문 원문"},
-                    "topic":    {"type": "string", "description": "노동/임대차/세법 등 대분야 힌트(선택)"},
+                    "topic":    {"type": "string", "description": "노동/임대차 등 대분야 힌트(선택)"},
+                },
+                "required": ["question"],
+            },
+        },
+        {
+            "name": "doc_tax_advice",
+            "description": (
+                "세법·세무 규정에 관한 질문에 전용 RAG(세법 조문·국세청 예규·조세심판례 3축)로 답한다. "
+                "부가가치세·소득세·법인세·원천세·4대보험 규정·국세기본법(가산세·불복)·"
+                "조세특례·지방세·상속세·증여세 등 세금 관련 법령 자문 전담. "
+                "세금 계산·신고서 작성이 아닌 **세법 규정 자체에 대한 자문** 일 때 선택. "
+                "[카테고리: Tax&HR — 세무 자문]"
+            ),
+            "handler": run_tax_advice,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "세무 질문 원문"},
+                    "topic":    {"type": "string", "description": "vat/income_tax/corporate_tax 등 세목 힌트(선택)"},
                 },
                 "required": ["question"],
             },

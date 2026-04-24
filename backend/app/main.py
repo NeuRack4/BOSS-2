@@ -34,6 +34,7 @@ from app.routers import (
     costs,
     dashboard,
     dm_campaigns,
+    docx,
     evaluations,
     kanban,
     marketing,
@@ -89,6 +90,7 @@ app.include_router(subsidies.router)
 app.include_router(stats.router)
 app.include_router(employees_router)
 app.include_router(work_records_router)
+app.include_router(docx.router)
 
 
 @app.get("/health")
