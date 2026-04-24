@@ -1442,7 +1442,9 @@ async def run_interview_evaluation(
         log.warning("[interview_evaluation] artifact insert failed for applicant=%s", name)
 
     return (
-        f"**{name}** 면접 평가표를 캔버스에 생성했습니다 ({categories_desc}).\n\n"
+        f"**{name}** 면접 평가표를 생성했습니다 ({categories_desc}).\n\n"
+        f"{content_md}\n\n"
+        "---\n\n"
         "내용을 검토하고 수정하신 후, **DOCX로 저장해줘**라고 말씀하시면 파일로 내보내드릴게요."
     )
 
