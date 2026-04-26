@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-04-26
+
+### Changed — UI / Chat (refactor)
+
+- **초기 화면 퀵액션 버튼 전면 개편** — 도메인별 버튼 수 축소 (Sales 3 · Recruitment 3 · Marketing 4 · Documents 4). 레이아웃을 기존 가로 나열에서 2×2 도메인 그리드(1행: Sales·Recruitment / 2행: Marketing·Documents)로 변경. 각 도메인 내 버튼은 세로 정렬. 전체 그리드를 채팅 영역 정중앙에 플로팅 배치.
+- **ASK THE CHATBOT 텍스트 개선** — 글씨 크기 확대(`text-3xl`), 마침표 제거, 버튼 그리드와 간격 확대(`gap-12`).
+- **버튼·도메인 레이블 가운데 정렬** — 버튼 텍스트 `justify-center`, 도메인 레이블 `self-center` 적용.
+- **LAST SPEAKER 배지 제거** — `ChatCenterCard` 헤더에서 `SpeakerBadge` 컴포넌트 제거.
+
+### Fixed — Sales (refactor)
+
+- **SalesInputTable 저장 버그 완전 수정** — Save 클릭 후 "확인한 매출 N건 저장해줘." 메시지를 보내면 Planner가 `mode="ask"`로 응답해 항목 정보를 재요청하던 버그 수정. `orchestrator.py`에 `pending_save` 강제 override 블록 추가 — Planner 모드와 무관하게 `pending_save.items`가 존재하면 `sales_save_revenue` / `sales_save_costs`로 강제 dispatch. 기존 `upload_hint` override 패턴과 동일 구조 적용.
+- **run_revenue_entry pending_save 가드** — `pending_save.kind=="revenue"`이고 items가 있을 때 `run_save_revenue`로 즉시 위임 (orchestrator override의 보조 안전망).
+
+---
+
 ## [2.10.1] — 2026-04-24
 
 ### Fixed — Sales (feature/sales_bugfix)
