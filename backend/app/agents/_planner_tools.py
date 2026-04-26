@@ -46,19 +46,23 @@ def get_profile() -> dict:
     프로필이 없으면 빈 dict를 반환합니다.
     """
     account_id = get_account_id()
-    sb = get_supabase()
-    rows = (
-        sb.table("profiles")
-        .select(
-            "display_name,business_type,business_name,business_stage,"
-            "employees_count,location,channels,primary_goal,profile_meta"
+    try:
+        sb = get_supabase()
+        rows = (
+            sb.table("profiles")
+            .select(
+                "display_name,business_type,business_name,business_stage,"
+                "employees_count,location,channels,primary_goal,profile_meta"
+            )
+            .eq("id", account_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
         )
-        .eq("id", account_id)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
+    except Exception as exc:
+        log.warning("[get_profile] supabase error (returning empty): %s", exc)
+        return {}
     if not rows:
         return {}
     p = rows[0]
@@ -91,18 +95,22 @@ def get_recent_artifacts(domain: str = "", limit: int = 5) -> list[dict]:
     각 artifact의 id, title, type, 생성일을 반환합니다.
     """
     account_id = get_account_id()
-    sb = get_supabase()
-    q = (
-        sb.table("artifacts")
-        .select("id,title,type,domains,created_at")
-        .eq("account_id", account_id)
-        .eq("kind", "artifact")
-        .order("created_at", desc=True)
-        .limit(min(limit, 20))
-    )
-    if domain:
-        q = q.contains("domains", [domain])
-    rows = q.execute().data or []
+    try:
+        sb = get_supabase()
+        q = (
+            sb.table("artifacts")
+            .select("id,title,type,domains,created_at")
+            .eq("account_id", account_id)
+            .eq("kind", "artifact")
+            .order("created_at", desc=True)
+            .limit(min(limit, 20))
+        )
+        if domain:
+            q = q.contains("domains", [domain])
+        rows = q.execute().data or []
+    except Exception as exc:
+        log.warning("[get_recent_artifacts] supabase error (returning empty): %s", exc)
+        return []
     return [
         {
             "id": r["id"],
@@ -118,17 +126,21 @@ def get_recent_artifacts(domain: str = "", limit: int = 5) -> list[dict]:
 def get_memos(limit: int = 10) -> list[dict]:
     """사용자가 저장한 최근 메모 목록을 반환합니다. 각 메모의 내용(최대 200자)과 날짜를 반환합니다."""
     account_id = get_account_id()
-    sb = get_supabase()
-    rows = (
-        sb.table("memos")
-        .select("content,updated_at")
-        .eq("account_id", account_id)
-        .order("updated_at", desc=True)
-        .limit(min(limit, 20))
-        .execute()
-        .data
-        or []
-    )
+    try:
+        sb = get_supabase()
+        rows = (
+            sb.table("memos")
+            .select("content,updated_at")
+            .eq("account_id", account_id)
+            .order("updated_at", desc=True)
+            .limit(min(limit, 20))
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:
+        log.warning("[get_memos] supabase error (returning empty): %s", exc)
+        return []
     return [
         {
             "content": (r.get("content") or "")[:200],
