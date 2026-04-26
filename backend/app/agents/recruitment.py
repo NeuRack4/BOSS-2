@@ -1225,11 +1225,11 @@ async def run_posting_set(
     if location:
         lines.append(f"[근무지] {location}")
     if wage_hourly:
-        lines.append(f"[시급] {wage_hourly:,}원")
+        lines.append(f"[시급] {int(wage_hourly):,}원")
     if wage_monthly:
-        lines.append(f"[월급] {wage_monthly:,}원")
+        lines.append(f"[월급] {int(wage_monthly):,}원")
     if annual_salary:
-        lines.append(f"[연봉] {annual_salary:,}원")
+        lines.append(f"[연봉] {int(annual_salary):,}원")
     if weekly_hours:
         lines.append(f"[주 근무시간] {weekly_hours}시간")
     if work_days:
