@@ -92,6 +92,8 @@ _PLANNER_SYSTEM = """\
 - depends_on: null이면 병렬 실행, 이전 step 이름이면 순차 실행
 
 **[ask_user 규칙]**
+- 사용자에게 질문이 필요하면 **반드시 ask_user(question, choices) 도구를 호출**하세요.
+- 텍스트로 직접 질문을 작성하는 것은 절대 금지 — 항상 ask_user 도구 사용.
 - 한 번에 하나의 질문만 (question 필드에 정확히 하나)
 - choices는 3~4개 + 마지막은 "기타 (직접 입력)" 권장
 - 업종이 없고 업종-의존 작업이면 업종을 최우선으로 물어볼 것
@@ -111,13 +113,13 @@ dispatch 또는 ask_user의 profile_updates 파라미터에 이번 턴에서 확
 
 _TERMINAL_REMINDER = """
 [경고] terminal tool을 호출하지 않았습니다.
-이 요청은 도메인 처리가 필요합니다 — 텍스트 응답은 허용되지 않습니다.
 
-즉시 다음을 수행하세요:
-1. list_capabilities() 를 호출해 정확한 capability 이름 확인
-2. dispatch(steps, brief) 또는 ask_user(question, choices) 호출로 종료
+규칙:
+- 사용자에게 질문이 필요하면: ask_user(question="..", choices=[..]) 도구 즉시 호출
+- 도메인 실행이 필요하면: list_capabilities() → dispatch(steps, brief) 호출
+- 텍스트로 직접 질문·응답 작성 금지
 
-capability 이름을 절대 추측하지 마세요. list_capabilities() 결과만 사용하세요.
+지금 즉시 ask_user 또는 dispatch 중 하나를 호출하세요.
 """
 
 
@@ -147,11 +149,28 @@ def _make_model():
 # ──────────────────────────────────────────────────────────────────────────
 
 def _extract_direct_reply(messages: list) -> str | None:
-    """마지막 AIMessage 텍스트 반환 (chitchat/refuse 경로용)."""
+    """마지막 AIMessage의 텍스트 부분만 반환 (chitchat/refuse 경로용).
+    content가 list인 경우(tool_use 혼합) text 블록만 추출한다.
+    """
     from langchain_core.messages import AIMessage
     for msg in reversed(messages):
-        if isinstance(msg, AIMessage) and msg.content:
-            return str(msg.content).strip()
+        if not isinstance(msg, AIMessage) or not msg.content:
+            continue
+        content = msg.content
+        if isinstance(content, str):
+            text = content.strip()
+            return text if text else None
+        if isinstance(content, list):
+            texts = [
+                block["text"]
+                for block in content
+                if isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+                and block["text"].strip()
+            ]
+            if texts:
+                return " ".join(texts).strip()
     return None
 
 
