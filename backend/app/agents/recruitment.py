@@ -1479,11 +1479,47 @@ async def run_resume_parse(
     if not saved:
         return "이력서 파싱에 실패했습니다. 파일이 텍스트를 포함하는지 확인해주세요."
 
-    # 파싱 완료 → 장기기억에 지원자 정보 누적
+    # artifact 생성 + 장기기억 누적
     try:
         from app.memory.long_term import log_artifact_to_memory
+        from app.agents._artifact import pick_sub_hub_id
         for s in saved:
             a = s["applicant"]
+            art_title = f"{s['name']} 이력서"
+            art_content = _format_resume_table(s["name"], a)
+            try:
+                art_row = (
+                    sb.table("artifacts")
+                    .insert({
+                        "account_id": account_id,
+                        "domains":    ["recruitment"],
+                        "kind":       "artifact",
+                        "type":       "resume_parsed",
+                        "title":      art_title[:180],
+                        "content":    art_content,
+                        "status":     "active",
+                        "metadata":   {"resume_id": s["id"], "applicant": a},
+                    })
+                    .execute()
+                    .data
+                )
+                if art_row:
+                    artifact_id = art_row[0]["id"]
+                    s["artifact_id"] = artifact_id
+                    hub_id = pick_sub_hub_id(
+                        sb, account_id, "recruitment",
+                        prefer_keywords=("Evaluations", "평가", "이력서"),
+                    )
+                    if hub_id:
+                        sb.table("artifact_edges").insert({
+                            "account_id": account_id,
+                            "parent_id":  hub_id,
+                            "child_id":   artifact_id,
+                            "relation":   "contains",
+                        }).execute()
+            except Exception:
+                log.exception("[resume_parse] artifact insert failed for %s", s["name"])
+
             mem_lines = [f"지원자 {s['name']} 이력서 파싱 완료."]
             if a.get("desired_position"):
                 mem_lines.append(f"희망직종: {a['desired_position']}.")
@@ -1497,25 +1533,38 @@ async def run_resume_parse(
             if skills:
                 mem_lines.append(f"주요 기술: {', '.join(skills[:6])}.")
             await log_artifact_to_memory(
-                account_id, "recruitment", "resume_parse", f"{s['name']} 이력서",
+                account_id, "recruitment", "resume_parse", art_title,
                 content=" ".join(mem_lines),
                 metadata={"resume_id": s["id"]},
             )
     except Exception:
         pass
 
-    summaries: list[str] = []
+    # [[RESUME_PARSED]] 마커 생성 (프론트 카드 렌더링용)
+    markers: list[str] = []
     for s in saved:
         a = s["applicant"]
-        summaries.append(_format_resume_table(s["name"], a))
+        payload = {
+            "resume_id":   s["id"],
+            "artifact_id": s.get("artifact_id", ""),
+            "name":        s["name"],
+            "applicant": {
+                k: a.get(k)
+                for k in ("phone", "email", "age", "address", "skills",
+                           "education", "experience", "projects", "training",
+                           "certifications", "desired_position", "desired_salary",
+                           "introduction")
+            },
+        }
+        markers.append(f"[[RESUME_PARSED]]{_json.dumps(payload, ensure_ascii=False)}[[/RESUME_PARSED]]")
 
-    summary = "\n\n---\n\n".join(summaries)
+    intro = f"이력서 {len(saved)}건 파싱 완료했습니다."
 
     # 사용자가 면접 질문을 원하면 파싱 직후 바로 생성 (2단계 → 1단계 통합)
     interview_kw = ("면접", "질문", "인터뷰", "interview")
     wants_interview = any(kw in message for kw in interview_kw)
     if wants_interview:
-        parts = [f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n---\n"]
+        parts = [intro] + markers
         for s in saved:
             questions = await run_resume_interview(
                 account_id=account_id,
@@ -1530,8 +1579,9 @@ async def run_resume_parse(
 
     choices_items = "\n".join(f"{s['name']} 면접 질문 생성" for s in saved)
     return (
-        f"이력서 {len(saved)}건 파싱 완료:\n\n{summary}\n\n"
-        f"[CHOICES]\n{choices_items}\n다른 이력서도 올릴게요\n[/CHOICES]"
+        intro + "\n\n"
+        + "\n\n".join(markers)
+        + f"\n\n[CHOICES]\n{choices_items}\n다른 이력서도 올릴게요\n[/CHOICES]"
     )
 
 

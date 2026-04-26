@@ -102,6 +102,11 @@ import {
   extractJobPostingsPayload,
   type JobPostingsPayload,
 } from "./JobPostingCard";
+import {
+  ResumeCard,
+  extractResumePayloads,
+  type ResumePayload,
+} from "./ResumeCard";
 
 type UploadCategory =
   | "documents"
@@ -153,6 +158,7 @@ type Message = {
   employeePicker?: EmployeePickerPayload;
   adminApp?: { payload: AdminApplicationPayload; content: string };
   jobPostings?: JobPostingsPayload;
+  resumes?: ResumePayload[];
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -691,8 +697,10 @@ export const InlineChat = () => {
               extractEventPlanForm(afterInstagram);
             const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
               extractScheduleForm(afterEventForm);
-            const { cleaned: cleanedContent, payload: employeePicker } =
+            const { cleaned: afterEmployeePicker, payload: employeePicker } =
               extractEmployeePickerPayload(afterScheduleForm);
+            const { cleaned: cleanedContent, payloads: resumes } =
+              extractResumePayloads(afterEmployeePicker);
             return {
               role: m.role === "user" ? "user" : "assistant",
               content: cleanedContent,
@@ -716,6 +724,7 @@ export const InlineChat = () => {
               eventPlanForm: eventPlanForm || undefined,
               scheduleForm: scheduleForm || undefined,
               employeePicker: employeePicker ?? undefined,
+              resumes: resumes.length > 0 ? resumes : undefined,
             };
           },
         );
@@ -1308,8 +1317,10 @@ export const InlineChat = () => {
           extractReviewReplyForm(afterBlogForm);
         const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
           extractScheduleForm(afterReviewForm);
-        const { cleaned: cleanReply, payload: employeePicker } =
+        const { cleaned: afterEmployeePicker2, payload: employeePicker } =
           extractEmployeePickerPayload(afterScheduleForm);
+        const { cleaned: cleanReply, payloads: resumes } =
+          extractResumePayloads(afterEmployeePicker2);
         setMessages((prev) => [
           ...prev,
           {
@@ -1335,6 +1346,7 @@ export const InlineChat = () => {
             reviewReplyForm: reviewReplyForm || undefined,
             scheduleForm: scheduleForm || undefined,
             employeePicker: employeePicker ?? undefined,
+            resumes: resumes.length > 0 ? resumes : undefined,
             adminApp: adminAppPayloadNew
               ? { payload: adminAppPayloadNew, content: adminAppDocContent }
               : undefined,
@@ -1851,6 +1863,15 @@ export const InlineChat = () => {
                       <JobPostingCard payload={msg.jobPostings} />
                     </div>
                   )}
+                  {msg.role === "assistant" &&
+                    msg.resumes?.map((resume, ri) => (
+                      <div
+                        key={resume.resume_id ?? ri}
+                        className="ml-8 max-w-[90%]"
+                      >
+                        <ResumeCard payload={resume} />
+                      </div>
+                    ))}
                   {msg.role === "assistant" && adminAppPayload && userId && (
                     <div className="ml-8 max-w-[90%]">
                       <AdminApplicationCard
