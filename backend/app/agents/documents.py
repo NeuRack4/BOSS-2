@@ -1038,7 +1038,6 @@ async def run_estimate(
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_proposal", run_type="chain")
 @traceable(name="documents.run_proposal")
 async def run_proposal(
     *,
@@ -1048,14 +1047,16 @@ async def run_proposal(
     rag_context: str = "",
     long_term_context: str = "",
     client: str | None = None,
-    project_summary: str | None = None,
-    budget: str | None = None,
+    scope: str | None = None,
+    amount: str | None = None,
+    reply_by: str | None = None,
     **_kwargs,
 ) -> str:
     ctx = "\n".join(filter(None, [
         f"제안 대상: {client}" if client else "",
-        f"프로젝트 요약: {project_summary}" if project_summary else "",
-        f"예산: {budget}" if budget else "",
+        f"업무 범위: {scope}" if scope else "",
+        f"예산/금액: {amount}" if amount else "",
+        f"회신 기한: {reply_by}" if reply_by else "",
     ]))
     system = f"""{SYSTEM_PROMPT}
 
@@ -1079,15 +1080,15 @@ async def run_notice(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
-    target: str | None = None,
-    content_summary: str | None = None,
-    effective_date: str | None = None,
+    audience: str | None = None,
+    topic: str | None = None,
+    post_date: str | None = None,
     **_kwargs,
 ) -> str:
     ctx = "\n".join(filter(None, [
-        f"공지 대상: {target}" if target else "",
-        f"내용 요약: {content_summary}" if content_summary else "",
-        f"게시일: {effective_date}" if effective_date else "",
+        f"공지 대상: {audience}" if audience else "",
+        f"공지 주제: {topic}" if topic else "",
+        f"게시일: {post_date}" if post_date else "",
     ]))
     system = f"""{SYSTEM_PROMPT}
 
@@ -1098,8 +1099,8 @@ async def run_notice(
 [수행 순서]
 1. get_sub_hubs() 호출
 2. 완성된 공지문 작성
-3. write_document(doc_type="notice", title="공지 — <내용 요약>", content="<전체 본문>",
-   due_date="<effective_date>", due_label="공지 게시일") 호출
+3. write_document(doc_type="notice", title="공지 — <주제>", content="<전체 본문>",
+   due_date="<post_date>", due_label="공지 게시일") 호출
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
