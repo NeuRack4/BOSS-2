@@ -1061,7 +1061,7 @@ async def _execute_generate_posting_poster(account_id: str, result_data: dict) -
         posting_set_id = target["id"]
 
     from app.core.poster_gen import generate_job_posting_poster
-    results: list[str] = []
+    generated: list[tuple[str, dict]] = []  # (platform, artifact)
     errors: list[str] = []
     for platform in platforms:
         try:
@@ -1071,19 +1071,30 @@ async def _execute_generate_posting_poster(account_id: str, result_data: dict) -
                 platform=platform,
                 style_prompt=style,
             )
-            url = poster_artifact.get("public_url") or ""
-            link = f"[미리보기]({url})" if url else ""
-            results.append(f"**{PLATFORM_LABELS[platform]}** — `{poster_artifact['artifact_id']}`  {link}")
+            generated.append((platform, poster_artifact))
         except Exception:
             log.exception("poster generation failed for platform=%s", platform)
             errors.append(PLATFORM_LABELS.get(platform, platform))
 
-    notice = ""
-    if results:
-        notice += "포스터 생성 완료:\n" + "\n".join(f"- {r}" for r in results)
+    if not generated:
+        err_msg = "생성 실패: " + ", ".join(errors) if errors else "포스터 생성에 실패했습니다."
+        return err_msg
+
+    label_list = " · ".join(PLATFORM_LABELS.get(p, p) for p, _ in generated)
+    notice = f"{label_list} 포스터가 완성되었어요!"
     if errors:
-        notice += ("\n" if notice else "") + "생성 실패: " + ", ".join(errors)
-    return notice or "포스터 생성에 실패했습니다."
+        notice += f"\n생성 실패: {', '.join(errors)}"
+
+    for platform, pa in generated:
+        title = f"{PLATFORM_LABELS.get(platform, platform)} 채용공고 포스터"
+        poster_json = _json.dumps({
+            "artifact_id": pa["artifact_id"],
+            "title": title,
+            "public_url": pa.get("public_url") or "",
+        }, ensure_ascii=False)
+        notice += f"\n\n[[EVENT_POSTER]]{poster_json}[[/EVENT_POSTER]]"
+
+    return notice
 
 
 async def _run_recruitment_agent(
@@ -1331,12 +1342,23 @@ async def run_posting_poster(
         )
         return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
+    # 디자인 스타일 확인 필요
+    if not style:
+        system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+        system += (
+            "\n\n[포스터 생성 요청 — 디자인 스타일 선택]\n"
+            "공고와 플랫폼이 확정되었습니다. 사용자에게 포스터 디자인 스타일 선호를 물어보세요. "
+            "[CHOICES] 로 3가지 예시를 제시하고, 직접 원하는 스타일을 입력할 수도 있다고 안내하세요.\n"
+            "예시 선택지: '따뜻한 브라운·베이지 파스텔' / '모던 다크 블루·화이트 심플' / '감성적 소프트 그린·민트'"
+        )
+        return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
+
     # 포스터 생성 — generate_posting_poster tool 호출 유도
     platforms_json = _json.dumps(valid_platforms, ensure_ascii=False)
     system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
     system += (
         f"\n\n[포스터 생성 요청 — 모든 정보 확정]\n"
-        f"posting_set_id={posting_set_id}, platforms={platforms_json}, style={style or '깔끔하고 모던한 톤, 따뜻한 브라운 계열'}\n"
+        f"posting_set_id={posting_set_id}, platforms={platforms_json}, style={style}\n"
         "즉시 generate_posting_poster 도구를 호출하세요."
     )
     return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system)
@@ -2325,6 +2347,7 @@ def describe(account_id: str) -> list[dict]:
                 "저장된 채용공고 세트를 선택해 GPT-4o 로 standalone HTML 포스터를 생성한다. "
                 "플랫폼 복수 선택 가능(당근알바·알바천국·사람인). "
                 "posting_set_id 미확정 시 목록을 보여주고, platforms 미확정 시 선택을 요청한다. "
+                "style 미확정 시 에이전트가 사용자에게 직접 물어보므로 생략 가능. "
                 "사용자가 '이미지/포스터/배너/썸네일' 을 요청할 때만 호출."
             ),
             "handler": run_posting_poster,
@@ -2337,7 +2360,13 @@ def describe(account_id: str) -> list[dict]:
                         "items": {"type": "string", "enum": list(VALID_PLATFORMS)},
                         "description": "포스터를 만들 플랫폼 목록 (복수 가능). 미확정이면 생략.",
                     },
-                    "style":          {"type": "string", "description": "자유 디자인 지시 (예: '따뜻한 브라운 톤, 미니멀')"},
+                    "style": {
+                        "type": "string",
+                        "description": (
+                            "사용자가 언급한 디자인 스타일 (예: '따뜻한 브라운 톤, 미니멀'). "
+                            "히스토리에서 스타일 선호를 찾을 수 없으면 생략 — 에이전트가 자동으로 질문함."
+                        ),
+                    },
                 },
             },
         })
