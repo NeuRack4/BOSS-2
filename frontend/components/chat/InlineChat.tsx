@@ -1031,8 +1031,8 @@ export const InlineChat = () => {
         );
 
         if (otherNonDocs.length > 0) {
-          // "other" 카테고리 파일은 이력서일 수 있으므로 upload_payloads 로 보관해
-          // 다음 chat 요청에 함께 전송한다 (recruit_resume_parse 라우팅용).
+          // "other" 카테고리 파일(이력서 등)은 upload_payloads 로 즉시 orchestrator에 전달.
+          // 오케스트레이터가 upload_override 로 recruit_resume_parse 를 자동 실행한다.
           const payloads = otherNonDocs
             .filter((it) => it.storage_path)
             .map((it) => ({
@@ -1046,18 +1046,11 @@ export const InlineChat = () => {
               parsed_len: it.parsed_len ?? 0,
               uploaded_at: new Date().toISOString(),
             }));
-          if (payloads.length > 0) setPendingUploads(payloads);
-
-          const lines = otherNonDocs.map((it) => {
-            const cat = (it.final_category ?? "other") as UploadCategory;
-            if (cat === "other")
-              return `- **${it.title}** 파일을 저장했어요. 이력서 분석이나 면접 질문 생성이 필요하면 말씀해주세요.`;
-            return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
-          });
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: lines.join("\n") },
-          ]);
+          if (payloads.length > 0) {
+            setPendingUploads(payloads);
+            const names = otherNonDocs.map((it) => `"${it.title}"`).join(", ");
+            await sendRef.current?.(`업로드한 파일 ${names} 을 분석해주세요.`);
+          }
         }
 
         if (receiptItems.length > 0 && userId) {
