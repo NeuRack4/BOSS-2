@@ -25,6 +25,10 @@ croniter==3.0.3
 
 # LangGraph (agent graph)
 langgraph>=0.2
+deepagents
+langchain-openai>=0.2
+langchain-anthropic>=0.3
+langchain-core>=0.3
 
 # Utilities
 python-dotenv==1.0.1
