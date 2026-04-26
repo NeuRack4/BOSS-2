@@ -1569,7 +1569,7 @@ export const InlineChat = () => {
           <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-4">
             <div className="flex flex-col items-center gap-12">
               <div className="text-center font-mono text-3xl font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
-                Ask the chatbot.
+                Ask the chatbot
               </div>
               <div className="grid w-fit grid-cols-2 gap-3">
                 {DOMAIN_CAPABILITIES.map((domain) => (
