@@ -42,6 +42,14 @@ from app.agents._admin_templates import (
     ADMIN_TYPE_LABELS,
     build_admin_context,
 )
+from deepagents import create_deep_agent
+from app.agents._agent_context import inject_agent_context
+from app.agents._documents_tools import (
+    DOCUMENTS_TOOLS,
+    init_docs_result_store,
+    get_docs_result_store,
+)
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +100,23 @@ _UPLOADED_DOC_WINDOW_MIN = 60
 
 def suggest_today(account_id: str) -> list[dict]:
     return suggest_today_for_domain(account_id, "documents")
+
+
+def _make_docs_model():
+    """Documents DeepAgent용 LLM 모델 생성."""
+    if settings.planner_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=settings.planner_claude_model,
+            temperature=0.3,
+            api_key=settings.anthropic_api_key,
+        )
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model=settings.planner_openai_model,
+        temperature=0.3,
+        api_key=settings.openai_api_key,
+    )
 
 
 SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
@@ -277,6 +302,135 @@ def _build_upload_context(uploaded_doc: dict | None, account_id: str, include_an
             (analysis.get("content") or "")[:500],
         ]
     return "\n".join(chunks)
+
+
+async def _execute_write(account_id: str, result_data: dict) -> str:
+    """write_document terminal tool 결과를 Supabase에 저장하고 reply 반환."""
+    doc_type  = result_data.get("doc_type", "")
+    title     = result_data.get("title", "문서")
+    content   = result_data.get("content", "")
+    subtype   = result_data.get("subtype")
+    due_date  = result_data.get("due_date")
+    due_label = result_data.get("due_label")
+
+    subhub = _TYPE_TO_SUBHUB.get(doc_type, "Operations")
+    meta_lines = [f"type: {doc_type}", f"title: {title}", f"sub_domain: {subhub}"]
+    if subtype:
+        meta_lines.append(f"contract_subtype: {subtype}")
+    if due_date:
+        meta_lines.append(f"due_date: {due_date}")
+    if due_label:
+        meta_lines.append(f"due_label: {due_label}")
+
+    artifact_block = "[ARTIFACT]\n" + "\n".join(meta_lines) + "\n\n" + content + "\n[/ARTIFACT]"
+    reply_with_artifact = f"서류를 작성했습니다.\n\n{artifact_block}"
+
+    artifact_id = await save_artifact_from_reply(
+        account_id=account_id,
+        domain="documents",
+        reply=reply_with_artifact,
+        default_title=title,
+        valid_types=VALID_TYPES,
+        extra_meta_keys=("due_label", "contract_subtype"),
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+
+    doc_label = {
+        "contract": "계약서", "estimate": "견적서", "proposal": "제안서",
+        "notice": "공지문", "checklist": "체크리스트", "guide": "가이드",
+        "subsidy_recommendation": "지원사업 추천서", "admin_application": "행정 신청서",
+        "hr_evaluation": "인사평가서", "payroll_doc": "급여명세서", "tax_calendar": "세무 캘린더",
+    }.get(doc_type, "서류")
+
+    return f"{doc_label} **{title}**을 작성하고 저장했습니다." + (
+        f"\n\n캔버스에서 확인하실 수 있어요. (artifact id: `{artifact_id}`)" if artifact_id else ""
+    )
+
+
+async def _execute_analyze(account_id: str, result_data: dict) -> str:
+    """analyze_document terminal tool 결과로 실제 공정성 분석을 실행."""
+    user_role        = result_data.get("user_role", "미지정")
+    doc_type_str     = result_data.get("doc_type", "계약서")
+    contract_subtype = result_data.get("contract_subtype")
+
+    uploaded_doc = _find_recent_uploaded_doc(account_id)
+    if not uploaded_doc:
+        return "분석할 업로드 문서를 찾을 수 없습니다. 문서를 다시 업로드해 주세요."
+
+    try:
+        result = await dispatch_review(
+            account_id=account_id,
+            doc_artifact_id=uploaded_doc.get("id") if not uploaded_doc.get("_ephemeral") else None,
+            ephemeral_doc=uploaded_doc if uploaded_doc.get("_ephemeral") else None,
+            user_role=user_role,
+            doc_type=doc_type_str,
+            contract_subtype=contract_subtype,
+        )
+    except InvalidDocumentError as e:
+        return f"문서 분석 실패: {e}"
+
+    return "분석을 시작하겠습니다." + _format_review_append(result)
+
+
+_DOCS_TERMINAL_REMINDER = """
+[경고] terminal tool을 호출하지 않았습니다.
+반드시 다음 중 하나를 즉시 호출하세요:
+- write_document(doc_type, title, content, ...) — 서류 작성·저장
+- analyze_document(user_role, ...) — 공정성 분석
+
+서류 작성 요청에서 terminal tool 미호출은 오류입니다.
+"""
+
+
+async def _run_documents_agent(
+    account_id: str,
+    message: str,
+    history: list[dict],
+    rag_context: str,
+    long_term_context: str,
+    system_prompt: str,
+) -> str:
+    """Documents DeepAgent 실행 공통 함수."""
+    inject_agent_context(account_id, message, history, rag_context, long_term_context)
+    store = init_docs_result_store()
+
+    model = _make_docs_model()
+    messages_in = [*history[-6:], {"role": "user", "content": message}]
+
+    async def _invoke(sys: str) -> list:
+        agent = create_deep_agent(model=model, tools=DOCUMENTS_TOOLS, system_prompt=sys)
+        result = await agent.ainvoke({"messages": messages_in})
+        return result.get("messages", [])
+
+    try:
+        out_messages = await _invoke(system_prompt)
+    except Exception as exc:
+        log.exception("[documents] deepagent invoke failed")
+        return f"서류 처리 중 오류가 발생했습니다: {exc}"
+
+    result_data = get_docs_result_store()
+    if not result_data:
+        log.info("[documents] account=%s no terminal tool — retry", account_id)
+        try:
+            out_messages = await _invoke(system_prompt + "\n\n" + _DOCS_TERMINAL_REMINDER)
+        except Exception as exc:
+            log.exception("[documents] retry invoke failed")
+            return f"서류 처리 중 오류가 발생했습니다: {exc}"
+        result_data = get_docs_result_store()
+
+    if not result_data:
+        from langchain_core.messages import AIMessage
+        for msg in reversed(out_messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                return str(msg.content).strip()
+        return "처리 결과를 반환하지 못했습니다."
+
+    action = result_data.get("action")
+    if action == "write":
+        return await _execute_write(account_id, result_data)
+    if action == "analyze":
+        return await _execute_analyze(account_id, result_data)
+    return "알 수 없는 action입니다."
 
 
 def _parse_review_marker(reply: str) -> dict | None:
