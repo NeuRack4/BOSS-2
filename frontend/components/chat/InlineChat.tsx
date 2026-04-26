@@ -97,6 +97,11 @@ import {
   extractSubsidyPayload,
   type SubsidyPayload,
 } from "./SubsidyRecommendCard";
+import {
+  JobPostingCard,
+  extractJobPostingsPayload,
+  type JobPostingsPayload,
+} from "./JobPostingCard";
 
 type UploadCategory =
   | "documents"
@@ -146,6 +151,7 @@ type Message = {
   scheduleForm?: boolean;
   employeePicker?: EmployeePickerPayload;
   adminApp?: { payload: AdminApplicationPayload; content: string };
+  jobPostings?: JobPostingsPayload;
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -1690,6 +1696,13 @@ export const InlineChat = () => {
                 const sbExtracted = extractSubsidyPayload(displayText || "");
                 displayText = sbExtracted.cleaned;
                 if (sbExtracted.payload) subsidyPayload = sbExtracted.payload;
+
+                const jpExtracted = extractJobPostingsPayload(
+                  displayText || "",
+                );
+                displayText = jpExtracted.cleaned;
+                if (jpExtracted.payload)
+                  (msg as Message).jobPostings = jpExtracted.payload;
               }
 
               return (
@@ -1829,6 +1842,11 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && subsidyPayload && (
                     <div className="ml-8 max-w-[85%]">
                       <SubsidyRecommendCard payload={subsidyPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.jobPostings && (
+                    <div className="ml-8 max-w-[90%]">
+                      <JobPostingCard payload={msg.jobPostings} />
                     </div>
                   )}
                   {msg.role === "assistant" && adminAppPayload && userId && (

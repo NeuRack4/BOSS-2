@@ -386,9 +386,16 @@ async def _execute_write_posting_set(account_id: str, result_data: dict) -> str:
     }
     parent_id = await _save_posting_set(account_id, parsed)
     if parent_id:
+        import json as _json
+        job_postings_json = _json.dumps({
+            "karrot": parsed["sections"].get("karrot") or "",
+            "albamon": parsed["sections"].get("albamon") or "",
+            "saramin": parsed["sections"].get("saramin") or "",
+        }, ensure_ascii=False)
         return (
             f"채용공고 3종이 캔버스에 저장되었어요 (세트 artifact: `{parent_id}`).\n\n"
             "채용공고 포스터 이미지도 만들어 드릴까요?"
+            f"\n\n[[JOB_POSTINGS_JSON]]{job_postings_json}[[/JOB_POSTINGS_JSON]]"
         )
     return "공고 저장 중 오류가 발생했어요. 다시 시도해주세요."
 
