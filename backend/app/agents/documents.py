@@ -3,15 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-import uuid
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, TypedDict
 
 from langsmith import traceable
-
-from langgraph.graph import StateGraph, END
 
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
@@ -26,22 +22,8 @@ from app.agents._artifact import (
     list_sub_hub_titles,
     today_context,
 )
-from app.agents._doc_templates import (
-    VALID_CONTRACT_SUBTYPES,
-    TYPE_TO_CATEGORY,
-    CATEGORY_LABELS,
-    build_doc_context,
-    detect_doc_category,
-    detect_doc_intent,
-)
+from app.agents._doc_templates import VALID_CONTRACT_SUBTYPES
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
-from app.agents._legal import classify_legal_intent, handle_legal_question
-from app.agents._tax_legal import TaxIntent, classify_tax_intent, handle_tax_question
-from app.agents._admin_templates import (
-    VALID_ADMIN_TYPES,
-    ADMIN_TYPE_LABELS,
-    build_admin_context,
-)
 from deepagents import create_deep_agent
 from app.agents._agent_context import inject_agent_context
 from app.agents._documents_tools import (
@@ -272,38 +254,6 @@ def _find_recent_analysis(account_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def _build_upload_context(uploaded_doc: dict | None, account_id: str, include_analysis: bool = False) -> str:
-    if not uploaded_doc:
-        return ""
-    meta = uploaded_doc.get("metadata") or {}
-    preview = (uploaded_doc.get("content") or "")[:600]
-    chunks = [
-        "[최근 업로드 문서]",
-        f"doc_id: {uploaded_doc.get('id') or 'ephemeral'}",
-        f"title: {uploaded_doc.get('title','')}",
-        f"original_name: {meta.get('original_name','')}",
-        f"mime: {meta.get('mime_type','')}  ·  size: {meta.get('size_bytes',0)} bytes",
-        f"uploaded_at: {uploaded_doc.get('created_at','')}",
-        "--- 본문 앞부분 ---",
-        preview,
-    ]
-    # 분석 대기 중인 문서가 있을 때는 이전 분석을 context에 넣지 않음 (LLM 혼동 방지)
-    analysis = _find_recent_analysis(account_id) if include_analysis else None
-    if analysis:
-        am = analysis.get("metadata") or {}
-        chunks += [
-            "",
-            "[최근 분석 결과]",
-            f"analysis_id: {analysis['id']}",
-            f"user_role: {am.get('user_role','미지정')}  ·  contract_subtype: {am.get('contract_subtype') or '—'}",
-            f"gap_ratio: {am.get('gap_ratio','?')}%  ·  eul_ratio: {am.get('eul_ratio','?')}%",
-            f"risk_clauses_count: {len(am.get('risk_clauses') or [])}",
-            "--- summary ---",
-            (analysis.get("content") or "")[:500],
-        ]
-    return "\n".join(chunks)
-
-
 async def _execute_write(account_id: str, result_data: dict) -> str:
     """write_document terminal tool 결과를 Supabase에 저장하고 reply 반환."""
     doc_type  = result_data.get("doc_type", "")
@@ -488,38 +438,7 @@ def _format_review_append(result: dict) -> str:
     return "\n".join(lines)
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# LangGraph state
-# ──────────────────────────────────────────────────────────────────────────
-
-DocCategory = Literal["review", "tax_hr", "legal", "operations"]
-DocIntent = Literal[
-    "legal",            # 법률 자문 → _legal_node
-    "review",           # 업로드 문서 공정성 분석 → _review_node
-    "write_review",     # 계약서·제안서 작성 → _write_review_node
-    "write_tax_hr",     # 세무·인사평가·체크리스트·가이드 → _write_tax_hr_node
-    "write_operations", # 견적서·공지문·지원사업·행정 → _write_operations_node
-    "ask_category",     # 카테고리 불명 → _ask_category_node (4-category CHOICES)
-]
-
-
-class DocState(TypedDict):
-    message: str
-    account_id: str
-    history: list[dict]
-    rag_context: str
-    long_term_context: str
-    # set by classify node
-    intent: DocIntent
-    category: DocCategory | None
-    uploaded_doc: dict | None
-    # output
-    reply: str
-
-
 # 카테고리별 system prompt 추가 블록 — write 경로에서 사용.
-# Planner 가 capability 레벨에서 이미 톤을 결정했더라도, legacy 폴백·직접 run() 호출 시
-# 이 블록이 에이전트의 톤과 타입 CHOICES 를 4카테고리 축으로 고정해준다.
 _CATEGORY_GUIDANCE: dict[str, str] = {
     "review": """\
 [카테고리: Review — 공정 중립이 필요한 서류]
@@ -563,400 +482,13 @@ _CATEGORY_GUIDANCE: dict[str, str] = {
   [/CHOICES]
 - 저장 시 `sub_domain: Operations`.
 """,
-    # legal 은 `_legal_node` 경로에서 별도 처리되므로 write 에 주입되지 않지만,
-    # 형식상 키를 포함해둔다.
     "legal": "",
 }
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Graph nodes
-# ──────────────────────────────────────────────────────────────────────────
-
-async def _classify_node(state: DocState) -> DocState:
-    """intent 분류 (v1.3 2단 라우터).
-
-    1. 업로드된 문서 있음 → review (기존 공정성 분석)
-    2. type 잡힘 → TYPE_TO_CATEGORY 로 write_<category>
-    3. type 없음 + legal 의도 → legal
-    4. type 없음 + category 키워드 잡힘 → write_<category>
-    5. 둘 다 없음 → ask_category (4-카테고리 CHOICES)
-
-    동시 감지는 하되 타입이 잡히면 타입을 우선한다. (사용자 지시: Q2)
-    """
-    message = state["message"]
-    account_id = state["account_id"]
-    history = state["history"]
-
-    uploaded_doc = _find_recent_uploaded_doc(account_id)
-    if uploaded_doc:
-        log.info(
-            "[documents/graph] classify → review (account=%s doc=%s)",
-            account_id, uploaded_doc.get("id") or "ephemeral",
-        )
-        return {
-            **state,
-            "intent": "review",
-            "category": "review",
-            "uploaded_doc": uploaded_doc,
-        }
-
-    # type + category 동시 감지 — 타입 우선
-    type_guess, _ = detect_doc_intent(message)
-    category: str | None = None
-    if type_guess:
-        category = TYPE_TO_CATEGORY.get(type_guess)
-
-    # type 이 안 잡힌 경우에만 legal / category 키워드 분기
-    if not type_guess:
-        intent_obj = await classify_legal_intent(message, history)
-        if intent_obj.is_legal:
-            log.info("[documents/graph] classify → legal (account=%s)", account_id)
-            return {
-                **state,
-                "intent": "legal",
-                "category": "legal",
-                "uploaded_doc": None,
-            }
-        category = detect_doc_category(message)
-
-    # 분기 매핑
-    intent: DocIntent
-    if category == "review":
-        intent = "write_review"
-    elif category == "tax_hr":
-        intent = "write_tax_hr"
-    elif category == "operations":
-        intent = "write_operations"
-    elif category == "legal":
-        log.info("[documents/graph] classify → legal (via category kw) (account=%s)", account_id)
-        return {
-            **state,
-            "intent": "legal",
-            "category": "legal",
-            "uploaded_doc": None,
-        }
-    else:
-        intent = "ask_category"
-
-    log.info(
-        "[documents/graph] classify → %s (account=%s type=%s category=%s)",
-        intent, account_id, type_guess, category,
-    )
-    return {
-        **state,
-        "intent": intent,
-        "category": category if category in ("review", "tax_hr", "operations") else None,
-        "uploaded_doc": None,
-    }
-
-
-async def _legal_node(state: DocState) -> DocState:
-    """법률 질의 처리."""
-    reply = await handle_legal_question(
-        state["message"],
-        state["account_id"],
-        state["history"],
-        rag_context=state["rag_context"],
-        long_term_context=state["long_term_context"],
-    )
-    return {**state, "reply": reply}
-
-
-_REVIEW_NODE_EXTRA = """
-[공정성 분석 노드 전용 규칙 — 반드시 준수]
-- 이 노드의 유일한 임무는 역할(갑/을/미지정)과 서브타입을 확정한 뒤 [REVIEW_REQUEST] 마커를 출력하는 것입니다.
-- **분석 결과(갑/을 비율, 위험 조항 목록, 요약 텍스트)를 직접 생성하는 것은 절대 금지**입니다.
-  실제 분석은 시스템이 [REVIEW_REQUEST] 마커를 처리한 후 자동으로 수행합니다.
-- 역할이 아직 불명확하면 [CHOICES] 로 한 번만 물어보고, 역할이 확정되면 즉시 [REVIEW_REQUEST] 블록을 출력하세요.
-- 분석 결과처럼 보이는 문장("갑의 비율은 N%", "위험 조항 X건" 등)을 생성하면 시스템이 무효 처리합니다.
-"""
-
-_ANALYSIS_HALLUCINATION_SIGNALS = (
-    "갑의 비율", "을의 비율", "갑 비율", "을 비율",
-    "위험 조항", "불리한 조건", "손해 비율", "갑에게 불리", "을에게 불리",
-    "공정성 분석 결과", "분석 완료", "분석 결과에 따르면",
-)
-
-
-def _looks_like_hallucinated_analysis(reply: str) -> bool:
-    """LLM이 마커 없이 분석 결과를 직접 생성했는지 휴리스틱 감지."""
-    low = reply.lower()
-    hits = sum(1 for sig in _ANALYSIS_HALLUCINATION_SIGNALS if sig in low)
-    return hits >= 2
-
-
-def _infer_user_role_from_context(message: str, history: list[dict]) -> str:
-    """메시지·히스토리에서 갑/을 역할 키워드를 추출. 불명확하면 '미지정'."""
-    combined = message + " " + " ".join(h.get("content") or "" for h in history[-6:])
-    low = combined.lower()
-    if any(k in low for k in ("고용인", "발주자", "임대인", "사용자", "갑")):
-        return "갑"
-    if any(k in low for k in ("피고용인", "수주자", "임차인", "근로자", "을")):
-        return "을"
-    return "미지정"
-
-
-async def _review_node(state: DocState) -> DocState:
-    """업로드된 문서 공정성 분석 처리.
-
-    LLM이 [REVIEW_REQUEST] 마커를 출력하면 dispatch_review 실행.
-    마커 없이 분석을 hallucination 하면 역할 추론 후 강제 dispatch.
-    역할이 미확정이면 CHOICES 응답 반환.
-    """
-    account_id = state["account_id"]
-    uploaded_doc = state["uploaded_doc"]
-    # 분석 대기 중 — 이전 분석 결과를 context에 주입하지 않음
-    upload_ctx = _build_upload_context(uploaded_doc, account_id, include_analysis=False)
-
-    hubs = list_sub_hub_titles(account_id, "documents")
-    system = SYSTEM_PROMPT + _REVIEW_NODE_EXTRA + "\n\n" + today_context()
-    if upload_ctx:
-        system += "\n\n" + upload_ctx
-    if hubs:
-        system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
-    if state["long_term_context"]:
-        system += f"\n\n[사용자 장기 기억]\n{state['long_term_context']}"
-    if state["rag_context"]:
-        system += f"\n\n{state['rag_context']}"
-    fb = feedback_context(account_id, "documents")
-    if fb:
-        system += f"\n\n{fb}"
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *state["history"],
-            {"role": "user", "content": state["message"]},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-
-    marker = _parse_review_marker(reply)
-
-    # LLM이 마커 없이 분석을 직접 생성한 경우 → 강제 dispatch
-    if not marker and _looks_like_hallucinated_analysis(reply):
-        log.warning(
-            "[documents/graph] hallucinated analysis detected (account=%s doc=%s) — force dispatch",
-            account_id, uploaded_doc.get("id") or "ephemeral",
-        )
-        user_role = _infer_user_role_from_context(state["message"], state["history"])
-        marker = {
-            "doc_id": uploaded_doc.get("id") or "ephemeral",
-            "user_role": user_role,
-            "doc_type": "계약서",
-            "contract_subtype": None,
-        }
-        reply = ""  # hallucinated text 버림
-
-    if not marker:
-        # 역할 미확정 — CHOICES 응답 그대로 반환
-        return {**state, "reply": reply}
-
-    doc_id = marker["doc_id"]
-    user_role = marker.get("user_role") or "미지정"
-    if user_role not in ("갑", "을", "미지정"):
-        user_role = "미지정"
-    doc_type = marker.get("doc_type") or "계약서"
-    if doc_type not in ("계약서", "제안서", "견적서", "기타"):
-        doc_type = "계약서"
-    subtype = marker.get("contract_subtype") or None
-    if subtype in ("", "없음"):
-        subtype = None
-
-    cleaned = _strip_review_marker(reply)
-    # ephemeral (upload_payload) 경로 vs legacy DB artifact 경로 분기
-    dispatch_kwargs: dict = {
-        "account_id":        account_id,
-        "user_role":         user_role,
-        "doc_type":          doc_type,
-        "contract_subtype":  subtype,
-    }
-    if uploaded_doc.get("_ephemeral") or not uploaded_doc.get("id"):
-        dispatch_kwargs["ephemeral_doc"] = uploaded_doc
-    else:
-        dispatch_kwargs["doc_artifact_id"] = doc_id
-    try:
-        result = await dispatch_review(**dispatch_kwargs)
-        final = cleaned + _format_review_append(result)
-    except InvalidDocumentError as e:
-        final = cleaned + f"\n\n---\n_(분석 실패: {e} — 비즈니스 문서가 맞는지 확인해주세요.)_"
-    except ValueError as e:
-        final = cleaned + f"\n\n---\n_(분석 실패: {e})_"
-    except Exception:
-        log.exception("[documents/graph] review dispatch failed")
-        final = cleaned + "\n\n---\n_(분석 중 예기치 못한 오류가 발생했어요. 잠시 후 다시 시도해주세요.)_"
-
-    return {**state, "reply": final}
-
-
-async def _run_write(state: DocState, category: DocCategory) -> DocState:
-    """카테고리 공통 서류 작성 — system prompt 의 category guidance 블록만 다름.
-
-    Review/Tax&HR/Operations 세 write 노드가 공유하는 실제 로직.
-    Legal 은 `_legal_node` 에서 별도 처리되므로 여기 오지 않는다.
-    """
-    account_id = state["account_id"]
-    message = state["message"]
-
-    type_guess, subtype_guess = detect_doc_intent(message)
-    if not type_guess:
-        for h in reversed(state["history"][-6:]):
-            if h.get("role") == "user":
-                t2, s2 = detect_doc_intent(h.get("content") or "")
-                if t2:
-                    type_guess, subtype_guess = t2, s2
-                    break
-
-    doc_ctx = build_doc_context(type_guess, subtype_guess)
-    cat_block = _CATEGORY_GUIDANCE.get(category, "")
-    hubs = list_sub_hub_titles(account_id, "documents")
-    system = SYSTEM_PROMPT + "\n\n" + today_context()
-    if cat_block:
-        system += "\n\n" + cat_block
-    system += "\n\n" + doc_ctx
-    if hubs:
-        system += "\n\n[이 계정의 documents 서브허브]\n- " + "\n- ".join(hubs)
-    # 분석 결과 후속 질문 대응 — 이전 분석 context 를 write 노드에서만 주입
-    analysis = _find_recent_analysis(account_id)
-    if analysis:
-        am = analysis.get("metadata") or {}
-        prev_analysis_ctx = "\n".join([
-            "[최근 분석 결과]",
-            f"analysis_id: {analysis['id']}",
-            f"user_role: {am.get('user_role','미지정')}  ·  contract_subtype: {am.get('contract_subtype') or '—'}",
-            f"gap_ratio: {am.get('gap_ratio','?')}%  ·  eul_ratio: {am.get('eul_ratio','?')}%",
-            f"risk_clauses_count: {len(am.get('risk_clauses') or [])}",
-            "--- summary ---",
-            (analysis.get("content") or "")[:500],
-        ])
-        system += "\n\n" + prev_analysis_ctx
-    if state["long_term_context"]:
-        system += f"\n\n[사용자 장기 기억]\n{state['long_term_context']}"
-    if state["rag_context"]:
-        system += f"\n\n{state['rag_context']}"
-    fb = feedback_context(account_id, "documents")
-    if fb:
-        system += f"\n\n{fb}"
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *state["history"],
-            {"role": "user", "content": message},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title="서류",
-        valid_types=VALID_TYPES,
-        extra_meta_keys=("due_label", "contract_subtype"),
-        subtype_whitelist={"contract_subtype": VALID_CONTRACT_SUBTYPES},
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return {**state, "reply": reply}
-
-
-async def _write_review_node(state: DocState) -> DocState:
-    return await _run_write(state, "review")
-
-
-async def _write_tax_hr_node(state: DocState) -> DocState:
-    return await _run_write(state, "tax_hr")
-
-
-async def _write_operations_node(state: DocState) -> DocState:
-    return await _run_write(state, "operations")
-
-
-async def _ask_category_node(state: DocState) -> DocState:
-    """카테고리 모호 — 4-category CHOICES 를 즉시 반환 (LLM 호출 없음).
-
-    사용자가 선택한 라벨은 다음 턴 message 로 들어와서 `detect_doc_category`
-    또는 `detect_doc_intent` 가 재판정한다 (라벨에 "계약서/세무/법률 자문/견적서"
-    등 대표 키워드 포함).
-    """
-    lines = [
-        "어떤 도움이 필요하신가요? 아래 네 가지 중에서 골라주세요.",
-        "",
-        "[CHOICES]",
-        CATEGORY_LABELS["review"],
-        CATEGORY_LABELS["tax_hr"],
-        CATEGORY_LABELS["legal"],
-        CATEGORY_LABELS["operations"],
-        "[/CHOICES]",
-    ]
-    return {**state, "reply": "\n".join(lines)}
-
-
-def _route_intent(state: DocState) -> DocIntent:
-    return state["intent"]
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Build graph
-# ──────────────────────────────────────────────────────────────────────────
-
-def _build_graph():
-    g = StateGraph(DocState)
-    g.add_node("classify", _classify_node)
-    g.add_node("legal", _legal_node)
-    g.add_node("review", _review_node)
-    g.add_node("write_review", _write_review_node)
-    g.add_node("write_tax_hr", _write_tax_hr_node)
-    g.add_node("write_operations", _write_operations_node)
-    g.add_node("ask_category", _ask_category_node)
-    g.set_entry_point("classify")
-    g.add_conditional_edges("classify", _route_intent, {
-        "legal":            "legal",
-        "review":           "review",
-        "write_review":     "write_review",
-        "write_tax_hr":     "write_tax_hr",
-        "write_operations": "write_operations",
-        "ask_category":     "ask_category",
-    })
-    g.add_edge("legal", END)
-    g.add_edge("review", END)
-    g.add_edge("write_review", END)
-    g.add_edge("write_tax_hr", END)
-    g.add_edge("write_operations", END)
-    g.add_edge("ask_category", END)
-    return g.compile()
-
-
-_graph = _build_graph()
-
-
-# ──────────────────────────────────────────────────────────────────────────
 # Public entrypoints
 # ──────────────────────────────────────────────────────────────────────────
-
-@traceable(name="documents.run", run_type="chain")
-async def run(
-    message: str,
-    account_id: str,
-    history: list[dict],
-    rag_context: str = "",
-    long_term_context: str = "",
-) -> str:
-    initial: DocState = {
-        "message": message,
-        "account_id": account_id,
-        "history": history,
-        "rag_context": rag_context,
-        "long_term_context": long_term_context,
-        "intent": "ask_category",  # classify_node 가 반드시 덮어쓴다
-        "category": None,
-        "uploaded_doc": None,
-        "reply": "",
-    }
-    result = await _graph.ainvoke(initial)
-    return result["reply"]
-
 
 @traceable(name="documents.run_contract")
 async def run_contract(
@@ -1137,367 +669,86 @@ async def run_checklist_guide(
 # Step 3-B — Operations: 지원사업 추천
 # ──────────────────────────────────────────────────────────────────────────
 
-@traceable(name="documents.run_subsidy_recommend", run_type="chain")
+@traceable(name="documents.run_subsidy_recommend")
 async def run_subsidy_recommend(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    count: int = 1,
-    confirm_deadline: bool = False,
-    **kw,
+    long_term_context: str = "",
+    **_kwargs,
 ) -> str:
-    """사용자 프로필+메모리 기반 지원사업 추천.
-
-    subsidy_programs DB 를 RRF 검색 → 활성 공고만 필터 → LLM 이
-    각 공고에 대해 10점 만점 점수 + 매칭 이유 생성 → subsidy_recommendation artifact 저장.
-    """
-    import asyncio
-    from datetime import date, timedelta
-    from app.core.supabase import get_supabase
-    from app.core.embedder import embed_text
-
     sb = get_supabase()
-
-    # 마감 일정 추가 확인 경로
-    if confirm_deadline:
-        try:
-            row = (
-                sb.table("artifacts")
-                .select("id,metadata")
-                .eq("account_id", account_id)
-                .eq("type", "subsidy_recommendation")
-                .order("created_at", desc=True)
-                .limit(1)
-                .maybe_single()
-                .execute()
-            )
-            artifact = row.data
-        except Exception:
-            artifact = None
-
-        if artifact:
-            meta = artifact.get("metadata") or {}
-            candidate = meta.get("candidate_deadline")
-            if candidate:
-                try:
-                    sb.table("artifacts").update(
-                        {"metadata": {**meta, "due_date": candidate, "due_label": "지원사업 신청 마감"}}
-                    ).eq("id", artifact["id"]).execute()
-                except Exception:
-                    pass
-                return f"📅 신청 마감일 **{candidate}**을 일정에 추가했어요. 스케줄 카드에서 확인하실 수 있어요."
-        return "일정에 추가할 마감일 정보를 찾지 못했어요. 지원사업 추천을 다시 요청해 보세요."
-
-    # 프로필 조회
     try:
-        profile_row = (
-            sb.table("profiles")
-            .select("business_type,location,business_stage,employees_count,primary_goal")
-            .eq("id", account_id)
-            .maybe_single()
+        programs = (
+            sb.table("subsidy_programs")
+            .select("name,description,target,deadline,max_amount")
+            .order("deadline", desc=False)
+            .limit(10)
             .execute()
+            .data or []
         )
-        profile = profile_row.data or {}
     except Exception:
-        profile = {}
+        programs = []
+    programs_ctx = "\n".join(
+        f"- {p.get('name','?')}: {(p.get('description','') or '')[:80]} "
+        f"(마감: {p.get('deadline','?')}, 최대 {p.get('max_amount','?')})"
+        for p in programs
+    ) if programs else "현재 조회된 지원사업 없음"
 
-    # 프로필 핵심 필드 부족 시 폼 유도
-    missing = [k for k in ("business_type", "location") if not profile.get(k)]
-    if missing:
-        return (
-            "맞춤 추천을 위해 업종과 지역 정보가 필요해요. "
-            "아래 폼을 채워주시면 바로 찾아드릴게요!\n\n"
-            "[[ONBOARDING_FORM]]"
-        )
+    system = f"""{SYSTEM_PROMPT}
 
-    # 검색 쿼리: 메시지 + 프로필 + 장기 기억 일부
-    query_parts = [message]
-    if profile.get("business_type"):
-        query_parts.append(profile["business_type"])
-    if profile.get("location"):
-        query_parts.append(profile["location"])
-    if profile.get("business_stage"):
-        query_parts.append(profile["business_stage"])
-    if long_term_context:
-        query_parts.append(long_term_context[:300])
-    query = " ".join(p for p in query_parts if p)
+[이번 요청 — 국가 지원사업 추천]
+{_CATEGORY_GUIDANCE['operations']}
 
-    # search_subsidy_programs RPC (vector+FTS RRF)
-    def _rpc_search(q: str, n: int) -> list[dict]:
-        emb = embed_text(q)
-        try:
-            return (
-                sb.rpc(
-                    "search_subsidy_programs",
-                    {"query_embedding": emb, "query_text": q, "match_count": n},
-                )
-                .execute()
-                .data or []
-            )
-        except Exception:
-            return []
+현재 등록된 지원사업 목록:
+{programs_ctx}
 
-    try:
-        raw_rows = await asyncio.to_thread(_rpc_search, query, count * 6)
-    except Exception:
-        raw_rows = []
-
-    today = date.today()
-    cutoff = today + timedelta(days=7)
-
-    def _visible(p: dict) -> bool:
-        if p.get("is_ongoing"):
-            return True
-        end = p.get("end_date")
-        if end:
-            try:
-                if date.fromisoformat(end) < today:
-                    return False
-            except ValueError:
-                pass
-        start = p.get("start_date")
-        if start:
-            try:
-                if date.fromisoformat(start) > cutoff:
-                    return False
-            except ValueError:
-                pass
-        return True
-
-    programs: list[dict] = []
-    if raw_rows:
-        row_ids = [r["row_id"] for r in raw_rows]
-        score_map = {r["row_id"]: r.get("score", 0.0) for r in raw_rows}
-        try:
-            detail_result = (
-                sb.table("subsidy_programs")
-                .select(
-                    "id,title,organization,region,program_kind,"
-                    "start_date,end_date,period_raw,is_ongoing,"
-                    "description,detail_url,form_files"
-                )
-                .in_("id", row_ids)
-                .execute()
-            )
-            details = detail_result.data or []
-        except Exception:
-            details = []
-
-        for d in details:
-            d["_score"] = score_map.get(d["id"], 0.0)
-        details.sort(key=lambda x: x["_score"], reverse=True)
-        programs = [p for p in details if _visible(p)][:20]  # LLM에 최대 20개 후보 전달
-
-    if not programs:
-        return (
-            "현재 조건에 맞는 활성 지원사업을 찾지 못했어요. "
-            "지원사업 모달에서 직접 검색해보시거나, 업종·지역 프로필을 설정하시면 더 정확한 추천이 가능해요."
-        )
-
-    # 공고 후보 블록 조립
-    prog_blocks: list[str] = []
-    for i, p in enumerate(programs, 1):
-        if p.get("is_ongoing"):
-            period = "상시 모집"
-        elif p.get("start_date") and p.get("end_date"):
-            period = f"{p['start_date']} ~ {p['end_date']}"
-        elif p.get("end_date"):
-            period = f"~ {p['end_date']}"
-        else:
-            period = p.get("period_raw") or "기간 미정"
-
-        url = p.get("external_url") or p.get("detail_url") or ""
-        prog_blocks.append(
-            f"[후보 {i}]\n"
-            f"  공고명: {p['title']}\n"
-            f"  주관기관: {p.get('organization') or '미상'}\n"
-            f"  지역: {p.get('region') or '전국'}\n"
-            f"  지원기간: {period}\n"
-            f"  내용: {(p.get('description') or '')[:300]}\n"
-            f"  공고URL: {url or '없음'}"
-        )
-
-    profile_block = (
-        f"업종: {profile.get('business_type') or '미상'} | "
-        f"지역: {profile.get('location') or '미상'} | "
-        f"단계: {profile.get('business_stage') or '미상'} | "
-        f"직원: {profile.get('employees_count') or '미상'}"
-    )
-
-    system_prompt = (
-        "당신은 소상공인 전문 어시스턴트입니다.\n"
-        "아래 후보 공고들 중 사용자 프로필에 실제로 적합한 것만 골라 추천하세요.\n\n"
-        "규칙:\n"
-        "- 업종·지역·사업 단계와 무관한 공고는 절대 포함하지 말고 무시하세요.\n"
-        "- 적합한 공고가 없으면 왜 맞는 공고가 없는지 이유를 1~2문장으로 친절하게 설명하고, "
-        "어떤 조건이 갖춰지면 추천이 가능한지 간단히 안내하세요. 이 경우 [ARTIFACT] 블록을 절대 포함하지 마세요.\n"
-        "- 가장 적합한 공고 1개만 추천하세요.\n"
-        "- 각 추천 항목 형식:\n"
-        "  **공고명**\n"
-        "  주관기관 | 신청기간\n"
-        "  추천 이유: (업종·지역 연결 1~2문장)\n"
-        "  공고URL이 있으면 반드시 마지막에 [공고 보러 가기](URL) 형식으로 링크를 포함하세요.\n\n"
-        "- 점수, 등급, 수치 평가는 절대 쓰지 마세요.\n"
-        "- [ARTIFACT] 블록에 start_date/end_date/due_date 를 포함하지 마세요.\n"
-        "- 응답 마지막에 반드시 아래 [ARTIFACT] 블록을 추가하세요:\n"
-        "[ARTIFACT]\ntype: subsidy_recommendation\ntitle: 지원사업 추천\n"
-        "content: <추천된 공고명 요약>\n[/ARTIFACT]\n\n"
-        f"[사용자 프로필]\n{profile_block}\n\n"
-        f"[후보 공고 목록]\n" + "\n\n".join(prog_blocks)
-    )
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message},
-        ],
-        model="gpt-4o",
-    )
-    reply = resp.choices[0].message.content or ""
-    artifact_id = await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title="지원사업 추천",
-        valid_types=tuple(VALID_TYPES),
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-
-    # 추천 성공 시 마감일을 candidate_deadline 으로 저장 (사용자 확인 후 due_date 로 이동)
-    actually_recommended = "[ARTIFACT]" in reply and "찾지 못" not in reply and "없습니다" not in reply[:200]
-    if actually_recommended and artifact_id:
-        deadline = next(
-            (p.get("end_date") for p in programs if p.get("end_date") and not p.get("is_ongoing")),
-            None,
-        )
-        if deadline:
-            try:
-                sb.table("artifacts").update(
-                    {"metadata": {"candidate_deadline": deadline}}
-                ).eq("id", artifact_id).execute()
-            except Exception:
-                pass
-            reply += (
-                f"\n\n📅 신청 마감일은 **{deadline}**이에요. 일정에 추가할까요?\n"
-                "[CHOICES]\n마감 일정 추가\n아니요\n[/CHOICES]"
-            )
-    return reply
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 위 지원사업 중 이 계정에 맞는 것을 추천하고 신청 방법 안내
+3. write_document(doc_type="subsidy_recommendation", title="지원사업 추천 보고서", content="<전체 내용>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_admin_application", run_type="chain")
+@traceable(name="documents.run_admin_application")
 async def run_admin_application(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    application_type: str,
-    purpose: str = "",
-    extra_note: str | None = None,
+    long_term_context: str = "",
+    admin_type: str | None = None,
+    **_kwargs,
 ) -> str:
-    """행정 신청서 초안 — 프로필 자동 채움 + 양식 모사 마크다운."""
-    from datetime import date
+    ADMIN_TYPES = {
+        "사업자등록": "사업자 등록 신청서 — 상호·대표자·업종·소재지·개업일 포함",
+        "폐업신고": "폐업 신고서 — 폐업 사유·날짜·잔여 재고 처리 방법",
+        "임직원변경": "임직원 변경 신고서 — 신임·퇴임 임원 정보",
+        "영업허가": "영업 허가 신청서 — 업종별 필요 서류 목록 + 신청서 양식",
+        "근로계약변경": "근로계약 변경 합의서 — 변경 전후 조건 명시",
+    }
+    type_labels = "\n".join(f"- {k}: {v}" for k, v in ADMIN_TYPES.items())
+    admin_ctx = f"\n선택된 서류 유형: {admin_type}" if admin_type else ""
 
-    # application_type 정규화 — enum 외 값이면 사용자 메시지에서 추론
-    if application_type not in VALID_ADMIN_TYPES:
-        msg_lower = (message + " " + application_type).lower()
-        if any(k in msg_lower for k in ("통신판매업", "전자상거래 신고")):
-            application_type = "mail_order_registration"
-        elif any(k in msg_lower for k in ("구매안전", "비적용")):
-            application_type = "purchase_safety_exempt"
-        else:
-            application_type = "business_registration"
+    system = f"""{SYSTEM_PROMPT}
 
-    sb = get_supabase()
+[이번 요청 — 행정 신청서 작성]
+{_CATEGORY_GUIDANCE['operations']}
 
-    # 프로필 조회 (신규 컬럼 포함 전체)
-    try:
-        profile_row = (
-            sb.table("profiles")
-            .select(
-                "display_name,business_name,business_type,location,employees_count,"
-                "business_reg_no,phone_mobile,phone_business,email,"
-                "opening_date,business_form,industry_code,profile_meta"
-            )
-            .eq("id", account_id)
-            .maybe_single()
-            .execute()
-        )
-        profile = profile_row.data or {}
-    except Exception:
-        profile = {}
+지원 행정서류 종류:
+{type_labels}
+{admin_ctx}
 
-    profile_meta: dict = profile.pop("profile_meta", None) or {}
-
-    # opening_date: date → str 변환
-    if profile.get("opening_date"):
-        try:
-            od = profile["opening_date"]
-            if hasattr(od, "isoformat"):
-                profile["opening_date"] = od.isoformat()
-        except Exception:
-            pass
-
-    admin_ctx = build_admin_context(application_type, profile, profile_meta)
-    label = ADMIN_TYPE_LABELS.get(application_type, application_type)
-
-    extra_parts: list[str] = []
-    if purpose:
-        extra_parts.append(f"[신청 목적] {purpose}")
-    if extra_note:
-        extra_parts.append(f"[특이사항] {extra_note}")
-
-    system = (
-        SYSTEM_PROMPT
-        + "\n\n"
-        + _CATEGORY_GUIDANCE["operations"]
-        + f"\n\n[작업 지시]\n"
-        f"아래 양식 지식자산과 프로필 데이터를 사용해 '{label}' 초안을 작성하세요.\n"
-        f"- 양식 구조(표·체크박스·섹션)를 그대로 유지하세요.\n"
-        f"- 프로필 값이 있는 placeholder 는 실제 값으로 교체하세요.\n"
-        f"- 값이 없는 placeholder 는 {{{{...}}}} 형태로 유지하세요.\n"
-        f"- 주민등록번호·법인등록번호는 절대 생성하지 마세요.\n"
-        f"- 응답 마지막에 아래 [ARTIFACT] 블록을 반드시 포함하세요:\n"
-        f"  [ARTIFACT]\n"
-        f"  type: admin_application\n"
-        f"  application_type: {application_type}\n"
-        f"  title: {label}\n"
-        f"  sub_domain: Operations\n"
-        f"  [/ARTIFACT]\n"
-        + "\n\n"
-        + admin_ctx
-        + "\n\n"
-        + today_context()
-    )
-    if long_term_context:
-        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-
-    user_content = message
-    if extra_parts:
-        user_content = "\n".join(extra_parts) + f"\n\n원본 요청: {message}"
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *history,
-            {"role": "user", "content": user_content},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title=label,
-        valid_types=VALID_TYPES,
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return reply
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 완성된 행정 신청서 작성
+3. write_document(doc_type="admin_application", title="<행정서류명>", content="<전체 내용>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1584,428 +835,58 @@ async def run_hr_evaluation(
     return reply
 
 
-@traceable(name="documents.run_payroll_doc", run_type="chain")
+@traceable(name="documents.run_payroll_doc")
 async def run_payroll_doc(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    doc_kind: str,
-    target: str,
-    pay_month: str,
-    extra_note: str | None = None,
+    long_term_context: str = "",
+    year_month: str | None = None,
+    **_kwargs,
 ) -> str:
-    """급여명세서(Excel 자동생성) · 원천징수영수증 · 4대보험신고서 초안."""
-    import asyncio as _asyncio
-    from app.agents._payroll_excel import generate_payroll_excel
+    month_ctx = f"\n대상 연월: {year_month}" if year_month else ""
 
-    _PAYROLL_SLIP_KEYWORDS = ("급여명세서", "임금명세서", "급여 명세서", "임금 명세서")
-    is_payslip = any(k in doc_kind for k in _PAYROLL_SLIP_KEYWORDS)
+    system = f"""{SYSTEM_PROMPT}
 
-    sb = get_supabase()
+[이번 요청 — 급여명세서 작성]
+{_CATEGORY_GUIDANCE['tax_hr']}
+{month_ctx}
 
-    # ── 원천징수영수증 / 4대보험 신고서 → LLM 마크다운 ──
-    if not is_payslip:
-        knowledge = _load_knowledge("tax_calendar_2026.md")
-        sub_hub_list = await list_sub_hub_titles(account_id, "documents")
-        feedback = await feedback_context(account_id, "documents")
-        user_msg = message
-        if extra_note:
-            user_msg = f"[특이사항] {extra_note}\n\n{message}"
-        system = (
-            SYSTEM_PROMPT
-            + "\n\n"
-            + _CATEGORY_GUIDANCE["tax_hr"]
-            + f"\n\n[작업 지시]\n"
-            f"'{doc_kind}' 문서를 작성하세요. 대상자: {target}, 기간: {pay_month}.\n"
-            f"2026년 기준 4대보험 요율·소득세 간이세액표를 적용하고, 신고 전 재확인 안내 포함.\n"
-            f"응답 마지막에 [ARTIFACT](type=payroll_doc, sub_domain=Tax&HR) 포함.\n"
-            + (f"\n\n[세무 기준 자료]\n{knowledge}" if knowledge else "")
-            + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
-            + today_context()
-        )
-        if long_term_context:
-            system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-        if feedback:
-            system += f"\n\n[피드백]\n{feedback}"
-        resp = await chat_completion(
-            messages=[{"role": "system", "content": system}, *history, {"role": "user", "content": user_msg}],
-        )
-        reply = resp.choices[0].message.content or ""
-        await save_artifact_from_reply(
-            account_id, "documents", reply,
-            default_title=f"{doc_kind} — {target}",
-            valid_types=VALID_TYPES,
-            type_to_subhub=_TYPE_TO_SUBHUB,
-        )
-        return reply
-
-    # ── 급여명세서 — Excel 자동생성 경로 ──
-
-    import asyncio as _asyncio
-    from app.agents._payroll_excel import generate_payroll_excel
-
-    _PREVIEW_MARKER = "[PAYROLL_PREVIEW_DATA:"
-
-    # ── Path A: Recruitment 미리보기에서 확정된 계산 결과 재사용 ──
-    preview_data: dict | None = None
-    for h in reversed(history or []):
-        content = h.get("content", "") if isinstance(h, dict) else ""
-        if _PREVIEW_MARKER in content:
-            try:
-                idx = content.index(_PREVIEW_MARKER) + len(_PREVIEW_MARKER)
-                depth = 0
-                end = -1
-                for i in range(idx, len(content)):
-                    if content[i] == "{":
-                        depth += 1
-                    elif content[i] == "}":
-                        depth -= 1
-                        if depth == 0:
-                            end = i
-                            break
-                if end != -1:
-                    preview_data = json.loads(content[idx:end + 1])
-            except Exception:
-                pass
-            break
-
-    if preview_data:
-        emp_name = preview_data.get("employee_name", target)
-        confirmed_month = preview_data.get("pay_month", pay_month)
-        pay_day_num = preview_data.get("pay_day", 25)
-        emp_type = preview_data.get("employment_type", "시급제")
-
-        payroll_data = {
-            "name": emp_name,
-            "employment_type": emp_type,
-            "pay_date": f"{confirmed_month}-{int(pay_day_num):02d}",
-            "hourly_rate": preview_data.get("hourly_rate", 0),
-            "hours_worked": preview_data.get("hours_worked", 0),
-            "base_pay": preview_data.get("base_pay", 0),
-            "overtime_hours": preview_data.get("overtime_hours", 0),
-            "overtime_pay": preview_data.get("overtime_pay", 0),
-            "night_hours": preview_data.get("night_hours", 0),
-            "night_pay": preview_data.get("night_pay", 0),
-            "holiday_hours": preview_data.get("holiday_hours", 0),
-            "holiday_pay": preview_data.get("holiday_pay", 0),
-            "meal_allowance": preview_data.get("meal_allowance", 0),
-            "family_allowance": 0,
-            "income_tax": preview_data.get("income_tax", 0),
-            "local_income_tax": preview_data.get("local_income_tax", 0),
-            "national_pension": preview_data.get("national_pension", 0),
-            "health_insurance": preview_data.get("health_insurance", 0),
-            "ltc_insurance": preview_data.get("ltc_insurance", 0),
-            "employment_insurance": preview_data.get("employment_insurance", 0),
-            "total_pay": preview_data.get("gross_pay", 0),
-            "total_deductions": preview_data.get("total_deductions", 0),
-            "net_pay": preview_data.get("net_pay", 0),
-            "has_allowances": bool(preview_data.get("meal_allowance", 0)),
-        }
-
-        try:
-            excel_bytes, _ = generate_payroll_excel(payroll_data)
-        except Exception as exc:
-            log.exception("급여명세서 Excel 생성 실패: %s", exc)
-            return (
-                f"{emp_name} 급여명세서 엑셀 생성 중 오류가 발생했어요.\n\n"
-                f"[ARTIFACT]\ntype: payroll_doc\ntitle: {emp_name} 급여명세서 {confirmed_month}\nsub_domain: Tax&HR\n[/ARTIFACT]"
-            )
-
-        _BUCKET = "documents-uploads"
-        _safe_month = confirmed_month.replace("-", "")
-        storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/payroll_{_safe_month}.xlsx"
-
-        def _upload_from_preview():
-            try:
-                sb.storage.from_(_BUCKET).upload(
-                    path=storage_key,
-                    file=excel_bytes,
-                    file_options={
-                        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        "upsert": "false",
-                    },
-                )
-                res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
-                if isinstance(res, dict):
-                    return res.get("signedURL") or res.get("signedUrl") or ""
-                return ""
-            except Exception as exc:
-                log.warning("급여명세서 Storage 업로드 실패: %s", exc)
-                return ""
-
-        download_url = await _asyncio.to_thread(_upload_from_preview)
-
-        net_pay_val = payroll_data["net_pay"]
-        gross_val = payroll_data["total_pay"]
-        total_ded = payroll_data["total_deductions"]
-
-        lines_out = [f"**{emp_name}** ({confirmed_month}) 급여명세서를 생성했어요."]
-        lines_out.append(f"- 고용 유형: {emp_type}")
-        hours = preview_data.get("hours_worked", 0)
-        if hours:
-            ot = preview_data.get("overtime_hours", 0)
-            lines_out.append(f"- 근무시간: {hours}h" + (f" (연장 {ot}h)" if ot else ""))
-        if gross_val:
-            lines_out.append(f"- 지급액 합계: {gross_val:,}원")
-        if total_ded:
-            lines_out.append(f"- 공제액 합계: {total_ded:,}원")
-        if net_pay_val:
-            lines_out.append(f"- **실수령액: {net_pay_val:,}원**")
-
-        reply = "\n".join(lines_out)
-        if download_url:
-            reply += f"\n\n[📥 급여명세서 엑셀 다운로드]({download_url})"
-        else:
-            reply += "\n\n(파일 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.)"
-        reply += "\n\n> ⚠️ 4대보험 요율·소득세는 2026년 기준이며, 신고 전 국세청·공단 공식 자료로 재확인하세요."
-        reply += (
-            f"\n\n[ARTIFACT]\ntype: payroll_doc\ntitle: {emp_name} 급여명세서 {confirmed_month}\n"
-            f"sub_domain: Tax&HR\n"
-            + (f"file_url: {download_url}\n" if download_url else "")
-            + "[/ARTIFACT]"
-        )
-        await save_artifact_from_reply(
-            account_id, "documents", reply,
-            default_title=f"{emp_name} 급여명세서 {confirmed_month}",
-            valid_types=VALID_TYPES,
-            extra_meta_keys=("file_url",),
-            type_to_subhub=_TYPE_TO_SUBHUB,
-        )
-        return reply
-
-    # ── Path B: 직원 DB 조회 → 선택 UI 반환 ─────────────────
-
-    try:
-        emp_list_res = (
-            sb.table("employees")
-            .select("id,name,employment_type,hourly_rate,monthly_salary,pay_day,department,position")
-            .eq("account_id", account_id)
-            .eq("status", "active")
-            .order("name")
-            .execute()
-        )
-        employees = emp_list_res.data or []
-    except Exception:
-        employees = []
-
-    if employees:
-        picker_payload = json.dumps(
-            {"employees": employees, "pay_month": pay_month},
-            ensure_ascii=False,
-        )
-        return (
-            f"어떤 직원의 **{pay_month}** 급여명세서를 만들까요? "
-            f"아래에서 직원을 선택해 주세요.\n\n"
-            f"[ACTION:SELECT_EMPLOYEE_FOR_PAYROLL:{picker_payload}]"
-        )
-
-    # ── Path C: 직원 DB 없음 → LLM 추출 폴백 ────────────────
-    try:
-        profile_row = (
-            sb.table("profiles")
-            .select("business_type,employees_count")
-            .eq("id", account_id)
-            .maybe_single()
-            .execute()
-        )
-        profile = profile_row.data or {}
-    except Exception:
-        profile = {}
-
-    # LLM으로 급여 구조화 데이터 추출 (gpt-4o-mini, JSON only)
-    _RATES_BLOCK = (
-        "[2026년 4대보험 요율 — 근로자 부담]\n"
-        "- 국민연금: 4.5% (상한 590만원)\n"
-        "- 건강보험: 3.545%\n"
-        "- 장기요양보험: 건강보험료 × 12.95%\n"
-        "- 고용보험: 0.9%\n"
-        "- 소득세: 간이세액표 기준 (비과세 식대 월 20만원 공제 후)\n"
-        "- 초단시간(주 15h 미만): 4대보험 미적용, 소득세만 공제\n\n"
-        "[고용 유형]\n"
-        "- 초단시간: 1주 소정근로 15시간 미만 (단시간 알바)\n"
-        "- 시급제: 1주 15시간 이상 시급/일급\n"
-        "- 월급제: 월 고정급"
-    )
-    json_system = (
-        "당신은 급여 계산 전문가입니다. 사용자 요청에서 급여명세서 데이터를 추출해 JSON만 반환하세요. 설명 없이 JSON만.\n\n"
-        + _RATES_BLOCK
-        + f"\n\n[사업장 프로필] 업종: {profile.get('business_type') or '미상'}"
-        + f" | 직원수: {profile.get('employees_count') or '미상'}\n\n"
-        'JSON 스키마 (알 수 없는 항목은 0):\n'
-        '{"employment_type":"초단시간|시급제|월급제","has_allowances":bool,'
-        '"name":"string","pay_date":"YYYY-MM-DD",'
-        '"hourly_rate":0,"hours_worked":0.0,"base_pay":0,'
-        '"overtime_hours":0.0,"overtime_pay":0,'
-        '"night_hours":0.0,"night_pay":0,'
-        '"holiday_hours":0.0,"holiday_pay":0,'
-        '"meal_allowance":0,"family_allowance":0,'
-        '"income_tax":0,"national_pension":0,"health_insurance":0,'
-        '"ltc_insurance":0,"employment_insurance":0,'
-        '"total_pay":0,"total_deductions":0,"net_pay":0}'
-    )
-    user_context = f"대상자: {target}, 지급월: {pay_month}"
-    if extra_note:
-        user_context += f", 특이사항: {extra_note}"
-    user_context += f"\n\n{message}"
-
-    json_resp = await chat_completion(
-        messages=[{"role": "system", "content": json_system}, {"role": "user", "content": user_context}],
-        model="gpt-4o-mini",
-        temperature=0,
-    )
-    raw_json = (json_resp.choices[0].message.content or "{}").strip()
-    try:
-        if raw_json.startswith("```"):
-            raw_json = re.sub(r"^```[a-z]*\n?", "", raw_json).rstrip("`").strip()
-        payroll_data = json.loads(raw_json)
-    except Exception:
-        payroll_data = {}
-
-    if not payroll_data.get("name"):
-        payroll_data["name"] = target
-    if not payroll_data.get("pay_date"):
-        try:
-            payroll_data["pay_date"] = f"{pay_month.strip()[:7]}-25"
-        except Exception:
-            pass
-
-    # Excel 생성
-    try:
-        excel_bytes, filename = generate_payroll_excel(payroll_data)
-    except Exception as exc:
-        log.exception("급여명세서 Excel 생성 실패: %s", exc)
-        return (
-            "급여명세서 엑셀 생성 중 오류가 발생했어요. 데이터를 확인 후 다시 시도해 주세요.\n\n"
-            f"[ARTIFACT]\ntype: payroll_doc\ntitle: {target} 급여명세서\nsub_domain: Tax&HR\n[/ARTIFACT]"
-        )
-
-    # Supabase Storage 업로드 — filename 에 한글이 포함될 수 있으므로 ASCII-safe 경로 사용
-    _BUCKET = "documents-uploads"
-    _safe_name = re.sub(r"[^\x20-\x7E]", "", filename) or "payroll_slip.xlsx"
-    storage_key = f"{account_id}/payroll/{uuid.uuid4().hex}/{_safe_name}"
-
-    def _upload_excel() -> str:
-        try:
-            sb.storage.from_(_BUCKET).upload(
-                path=storage_key,
-                file=excel_bytes,
-                file_options={
-                    "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "upsert": "false",
-                },
-            )
-            res = sb.storage.from_(_BUCKET).create_signed_url(storage_key, expires_in=604800)
-            if isinstance(res, dict):
-                return res.get("signedURL") or res.get("signedUrl") or ""
-            return ""
-        except Exception as exc:
-            log.warning("급여명세서 Storage 업로드 실패: %s", exc)
-            return ""
-
-    download_url = await _asyncio.to_thread(_upload_excel)
-
-    # 답변 조합
-    emp = payroll_data.get("employment_type", "")
-    total_pay = payroll_data.get("total_pay", 0)
-    total_ded = payroll_data.get("total_deductions", 0)
-    net_pay = payroll_data.get("net_pay", 0)
-
-    lines = [f"**{target}** ({pay_month}) 급여명세서를 작성했어요."]
-    if emp:
-        lines.append(f"- 고용 유형: {emp}")
-    if total_pay:
-        lines.append(f"- 지급액 합계: {total_pay:,}원")
-    if total_ded:
-        lines.append(f"- 공제액 합계: {total_ded:,}원")
-    if net_pay:
-        lines.append(f"- **실수령액: {net_pay:,}원**")
-
-    reply = "\n".join(lines)
-    if download_url:
-        reply += f"\n\n[📥 급여명세서 엑셀 다운로드]({download_url})"
-    else:
-        reply += "\n\n(파일 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.)"
-    reply += "\n\n> ⚠️ 4대보험 요율·소득세는 2026년 기준이며, 신고 전 국세청·공단 공식 자료로 재확인하세요."
-    reply += (
-        f"\n\n[ARTIFACT]\ntype: payroll_doc\ntitle: {target} 급여명세서 {pay_month}\n"
-        f"sub_domain: Tax&HR\n"
-        + (f"file_url: {download_url}\n" if download_url else "")
-        + "[/ARTIFACT]"
-    )
-
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title=f"{target} 급여명세서 {pay_month}",
-        valid_types=VALID_TYPES,
-        extra_meta_keys=("file_url",),
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return reply
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 급여명세서 내용 작성 (직원별 급여 항목 표 포함, 기본급·수당·공제항목·실지급액)
+3. write_document(doc_type="payroll_doc", title="급여명세서{' ' + year_month if year_month else ''}", content="<전체 내용>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_tax_calendar", run_type="chain")
+@traceable(name="documents.run_tax_calendar")
 async def run_tax_calendar(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    business_type: str,
-    target_year: int,
-    extra_note: str | None = None,
+    long_term_context: str = "",
+    year: str | None = None,
+    **_kwargs,
 ) -> str:
-    """세무 신고 캘린더 — 지식 파일 주입 + 프로필 업종 활용."""
-    knowledge = _load_knowledge("tax_calendar_2026.md")
-    sub_hub_list = await list_sub_hub_titles(account_id, "documents")
-    feedback = await feedback_context(account_id, "documents")
+    year_ctx = f"\n대상 연도: {year}" if year else "\n올해 기준"
 
-    system = (
-        SYSTEM_PROMPT
-        + "\n\n"
-        + _CATEGORY_GUIDANCE["tax_hr"]
-        + "\n\n[작업 지시]\n"
-        f"'{business_type}' 사업자의 {target_year}년 세무 신고 캘린더를 작성하세요.\n"
-        "작성 규칙:\n"
-        "1. 월별 표 형식 (월 | 신고·납부 항목 | 기한 | 근거 법조)\n"
-        "2. 사업자 유형(개인 일반/간이/법인)에 따라 해당 항목만 포함\n"
-        "3. 4대보험 납부일도 포함\n"
-        "4. 기한이 주말·공휴일이면 다음 영업일로 자동 연장됨을 안내 (국세기본법 §5)\n"
-        "5. 마지막에 '당해 연도 세율은 법령 개정 시 변동 가능, 신고 전 국세청 재확인' 주의 문구\n"
-        f"6. 응답 마지막에 [ARTIFACT](type=tax_calendar, sub_domain=Tax&HR, title={target_year}년 세무 캘린더) 포함\n"
-        + (f"\n\n[세무 기준 자료]\n{knowledge}" if knowledge else "")
-        + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
-        + today_context()
-    )
-    if long_term_context:
-        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-    if extra_note:
-        system += f"\n\n[특이사항] {extra_note}"
-    if feedback:
-        system += f"\n\n[피드백]\n{feedback}"
+    system = f"""{SYSTEM_PROMPT}
 
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *history,
-            {"role": "user", "content": message},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title=f"{target_year}년 세무 캘린더",
-        valid_types=VALID_TYPES,
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return reply
+[이번 요청 — 세무 캘린더 작성]
+{_CATEGORY_GUIDANCE['tax_hr']}
+{year_ctx}
+
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 월별 세무 신고 일정 정리 (부가세, 종합소득세, 4대보험, 원천세 등 포함)
+3. write_document(doc_type="tax_calendar", title="세무 캘린더{' ' + year if year else ''}", content="<전체 내용>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 @traceable(name="documents.run_review")
