@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
-from typing import Any
-
 from langchain_core.tools import tool
 
 from app.agents._agent_context import get_account_id, get_history, get_rag_context, get_long_term_context
