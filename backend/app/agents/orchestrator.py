@@ -19,6 +19,8 @@ _SET_NICKNAME_RE = re.compile(r"\[SET_NICKNAME\](.*?)\[/SET_NICKNAME\]", re.DOTA
 _SET_PROFILE_RE = re.compile(r"\[SET_PROFILE\](.*?)\[/SET_PROFILE\]", re.DOTALL)
 _ARTIFACT_RE = re.compile(r"\[ARTIFACT\](.*?)\[/ARTIFACT\]", re.DOTALL)
 _CHOICES_RE = re.compile(r"\[CHOICES\](.*?)\[/CHOICES\]", re.DOTALL)
+# [[TAG]]...[[/TAG]] — 프론트 인라인 카드용 이중 브래킷 마커 (합성 시 passthrough 대상)
+_DOUBLE_BRACKET_MARKER_RE = re.compile(r"\[\[[A-Z_]+\]\][\s\S]*?\[\[/[A-Z_]+\]\]", re.DOTALL)
 
 CORE_PROFILE_KEYS = (
     "business_type",
@@ -1001,10 +1003,15 @@ async def _synthesize_cross_domain(
     """
     artifact_summaries: list[dict] = []
     clean_map: dict[str, str] = {}
+    passthrough_markers: list[str] = []
     for dom, raw in per_domain_replies.items():
         for a in _extract_artifact_summaries(raw):
             artifact_summaries.append({"domain": dom, **a})
-        clean_map[dom] = _strip_inline_blocks(raw)
+        stripped = _strip_inline_blocks(raw)
+        # [[TAG]]...[[/TAG]] 마커 수집 후 제거 — LLM 합성 후 재첨부
+        markers = _DOUBLE_BRACKET_MARKER_RE.findall(stripped)
+        passthrough_markers.extend(markers)
+        clean_map[dom] = _DOUBLE_BRACKET_MARKER_RE.sub("", stripped).strip()
 
     parts = [f"[{dom} 모듈 응답]\n{txt}" for dom, txt in clean_map.items()]
     if artifact_summaries:
@@ -1036,6 +1043,8 @@ async def _synthesize_cross_domain(
         temperature=0.3,
     )
     reply = resp.choices[0].message.content or ""
+    if passthrough_markers:
+        reply = reply.rstrip() + "\n\n" + "\n\n".join(passthrough_markers)
     return _extract_and_save_nickname(account_id, reply)
 
 
