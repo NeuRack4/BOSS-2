@@ -1039,112 +1039,97 @@ async def run_estimate(
 
 
 @traceable(name="documents.run_proposal", run_type="chain")
+@traceable(name="documents.run_proposal")
 async def run_proposal(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    client: str,
-    scope: str | None = None,
-    amount: str | None = None,
-    reply_by: str | None = None,
+    long_term_context: str = "",
+    client: str | None = None,
+    project_summary: str | None = None,
+    budget: str | None = None,
+    **_kwargs,
 ) -> str:
-    lines = [f"[제안 대상] {client}"]
-    if scope:
-        lines.append(f"[제안 범위] {scope}")
-    if amount:
-        lines.append(f"[제안가] {amount}")
-    if reply_by:
-        lines.append(f"[회신 기한] {reply_by}")
-    synthetic = (
-        "제안서 초안을 작성해주세요. [ARTIFACT] 블록(type=proposal, due_date=회신기한, due_label='제안 회신 기한') 포함.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
-    )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    ctx = "\n".join(filter(None, [
+        f"제안 대상: {client}" if client else "",
+        f"프로젝트 요약: {project_summary}" if project_summary else "",
+        f"예산: {budget}" if budget else "",
+    ]))
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 제안서 작성]
+{_CATEGORY_GUIDANCE['review']}
+{ctx}
+
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 완성된 제안서 작성 (배경·목적·범위·일정·비용 포함)
+3. write_document(doc_type="proposal", title="제안서 — <프로젝트명>", content="<전체 본문>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_notice", run_type="chain")
+@traceable(name="documents.run_notice")
 async def run_notice(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    audience: str,
-    topic: str,
-    post_date: str | None = None,
+    long_term_context: str = "",
+    target: str | None = None,
+    content_summary: str | None = None,
+    effective_date: str | None = None,
+    **_kwargs,
 ) -> str:
-    lines = [f"[대상] {audience}", f"[주제] {topic}"]
-    if post_date:
-        lines.append(f"[게시일] {post_date}")
-    synthetic = (
-        "공지문을 작성해주세요. [ARTIFACT] 블록(type=notice, due_date=게시일, due_label='공지 게시일') 포함.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
-    )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    ctx = "\n".join(filter(None, [
+        f"공지 대상: {target}" if target else "",
+        f"내용 요약: {content_summary}" if content_summary else "",
+        f"게시일: {effective_date}" if effective_date else "",
+    ]))
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 공지문 작성]
+{_CATEGORY_GUIDANCE['operations']}
+{ctx}
+
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 완성된 공지문 작성
+3. write_document(doc_type="notice", title="공지 — <내용 요약>", content="<전체 본문>",
+   due_date="<effective_date>", due_label="공지 게시일") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_checklist_guide", run_type="chain")
+@traceable(name="documents.run_checklist_guide")
 async def run_checklist_guide(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    topic: str,
-    kind: str = "checklist",
+    long_term_context: str = "",
+    checklist_type: str | None = None,
+    topic: str | None = None,
+    **_kwargs,
 ) -> str:
-    """체크리스트·가이드 작성 — 연말정산 특화 지식 주입."""
-    artifact_type = "checklist" if kind == "checklist" else "guide"
+    doc_type = "checklist" if (checklist_type or "").lower() == "checklist" else "guide"
+    ctx = f"\n주제: {topic}" if topic else ""
+    system = f"""{SYSTEM_PROMPT}
 
-    knowledge = ""
-    if any(k in topic for k in ("연말정산", "year-end", "연말 정산")):
-        knowledge = _load_knowledge("year_end_checklist.md")
+[이번 요청 — {'체크리스트' if doc_type == 'checklist' else '가이드'} 작성]
+{_CATEGORY_GUIDANCE['tax_hr']}
+{ctx}
 
-    sub_hub_list = await list_sub_hub_titles(account_id, "documents")
-    feedback = await feedback_context(account_id, "documents")
-
-    system = (
-        SYSTEM_PROMPT
-        + "\n\n"
-        + _CATEGORY_GUIDANCE["tax_hr"]
-        + f"\n\n[작업 지시]\n"
-        f"'{topic}' 주제로 {kind} 문서를 작성하세요.\n"
-        f"- 실용적·완결된 체크 항목으로 구성\n"
-        f"- 법적 근거 있는 항목은 법조 명시\n"
-        f"- 응답 마지막에 [ARTIFACT](type={artifact_type}, sub_domain=Tax&HR) 포함\n"
-        + (f"\n\n[참조 지식]\n{knowledge}" if knowledge else "")
-        + (f"\n\n[등록된 서브허브]\n{sub_hub_list}" if sub_hub_list else "")
-        + today_context()
-    )
-    if long_term_context:
-        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
-    if feedback:
-        system += f"\n\n[피드백]\n{feedback}"
-
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *history,
-            {"role": "user", "content": message},
-        ],
-    )
-    reply = resp.choices[0].message.content or ""
-    await save_artifact_from_reply(
-        account_id,
-        "documents",
-        reply,
-        default_title=f"{topic} {kind}",
-        valid_types=VALID_TYPES,
-        type_to_subhub=_TYPE_TO_SUBHUB,
-    )
-    return reply
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 완성된 {'체크리스트 (항목별 확인란 포함)' if doc_type == 'checklist' else '가이드 (단계별 절차)'} 작성
+3. write_document(doc_type="{doc_type}", title="<적절한 제목>", content="<전체 본문>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -2083,30 +2068,28 @@ async def run_legal_advice(
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_tax_advice", run_type="chain")
+@traceable(name="documents.run_tax_advice")
 async def run_tax_advice(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    question: str,
-    topic: str | None = None,
+    long_term_context: str = "",
+    question: str | None = None,
+    **_kwargs,
 ) -> str:
-    intent = await classify_tax_intent(question, history)
-    if not intent.is_tax and topic:
-        intent = TaxIntent(is_tax=True, topic=topic, reason="tool-invoked")
-    if not intent.is_tax:
-        return await run(question, account_id, history, rag_context, long_term_context)
-    return await handle_tax_question(
-        question,
-        account_id,
-        history,
-        rag_context=rag_context,
-        long_term_context=long_term_context,
-        intent=intent,
-    )
+    q_ctx = f"\n질문: {question}" if question else ""
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 세무·노무 자문]
+소상공인 세무·노무 관련 질문에 답합니다. 세법·노동법 근거로만 답하고 날조 금지.
+{q_ctx}
+
+이 질문은 artifact 저장 없이 텍스트 응답만 반환합니다.
+write_document나 analyze_document를 호출하지 마세요.
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 def describe(account_id: str) -> list[dict]:
