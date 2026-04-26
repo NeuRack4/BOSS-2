@@ -71,6 +71,10 @@ _PLANNER_SYSTEM = """\
 - SNS·블로그·이벤트·리뷰 마케팅 → mkt_* 계열
 - 매출·비용·POS·세금계산서 등 영업 데이터 → sales_* 계열
 
+**[ask_user 보기 힌트]**
+- 지원사업 추천 시 사업 단계를 물어볼 때 보기: 창업 준비 중 | 창업 초기 (1년 미만) | 성장기 (1~3년) | 안정기 (3년 이상) | 기타 (직접 입력)
+- 사업 단계가 이미 프로필에 있으면 묻지 말 것
+
 **[RULE] capability 이름은 반드시 list_capabilities() 결과에서 가져올 것**
 절대로 추측하거나 기억에 의존해 capability 이름을 사용하지 마세요.
 도메인 요청이 확인되면 즉시 `list_capabilities()` 를 호출해 정확한 이름과 required_params 를 확인한 뒤 dispatch 하세요.

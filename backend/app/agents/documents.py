@@ -680,38 +680,81 @@ async def run_subsidy_recommend(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
+    count: int = 1,
+    confirm_deadline: bool = False,
     **_kwargs,
 ) -> str:
-    sb = get_supabase()
+    import asyncio
+    from app.routers.subsidies import _search_subsidies_rpc, _is_visible, _build_profile_query
+    from app.core.supabase import get_supabase as _get_sb
+
+    # 프로필 조회 → 검색 쿼리 구성
     try:
-        programs = (
-            sb.table("subsidy_programs")
-            .select("name,description,target,deadline,max_amount")
-            .order("deadline", desc=False)
-            .limit(10)
+        profile_rows = (
+            _get_sb()
+            .table("profiles")
+            .select("business_type,location,business_stage")
+            .eq("id", account_id)
+            .limit(1)
             .execute()
             .data or []
         )
+        profile = profile_rows[0] if profile_rows else {}
     except Exception:
-        programs = []
-    programs_ctx = "\n".join(
-        f"- {p.get('name','?')}: {(p.get('description','') or '')[:80]} "
-        f"(마감: {p.get('deadline','?')}, 최대 {p.get('max_amount','?')})"
-        for p in programs
-    ) if programs else "현재 조회된 지원사업 없음"
+        profile = {}
+
+    # 메시지 + 프로필 + 히스토리 최근 내용으로 쿼리 구성
+    history_text = " ".join(
+        m.get("content", "") for m in history[-4:]
+        if isinstance(m.get("content"), str)
+    )
+    base_query = _build_profile_query(profile)
+    search_query = f"{base_query} {message} {history_text}".strip()
+
+    # vector+FTS RRF 검색 (동기 → thread)
+    n_fetch = max(count * 3, 10)
+    try:
+        results = await asyncio.to_thread(_search_subsidies_rpc, search_query, n_fetch)
+        results = [r for r in results if _is_visible(r)]
+        results = results[:max(count * 2, 5)]
+    except Exception:
+        results = []
+
+    # 검색 결과를 시스템 프롬프트에 주입
+    if results:
+        lines = []
+        for i, p in enumerate(results, 1):
+            end = p.get("end_date") or (p.get("period_raw") or "상시")
+            ongoing = " (상시)" if p.get("is_ongoing") else f" (마감: {end})"
+            lines.append(
+                f"{i}. **{p.get('title','?')}**\n"
+                f"   주관: {p.get('organization','?')} | 지역: {p.get('region','전국')}{ongoing}\n"
+                f"   대상: {p.get('target','?')}\n"
+                f"   내용: {(p.get('description','') or '')[:200]}\n"
+                f"   링크: {p.get('detail_url') or p.get('external_url','')}"
+            )
+        programs_ctx = "\n\n".join(lines)
+    else:
+        programs_ctx = "현재 조회된 지원사업 없음 (내용 없이 일반 추천 제공)"
 
     system = f"""{SYSTEM_PROMPT}
 
 [이번 요청 — 국가 지원사업 추천]
 {_CATEGORY_GUIDANCE['operations']}
 
-현재 등록된 지원사업 목록:
+검색된 지원사업 목록 (이 데이터를 반드시 활용할 것):
 {programs_ctx}
 
 [수행 순서]
 1. get_sub_hubs() 호출
-2. 위 지원사업 중 이 계정에 맞는 것을 추천하고 신청 방법 안내
-3. write_document(doc_type="subsidy_recommendation", title="지원사업 추천 보고서", content="<전체 내용>") 호출
+2. 위 지원사업 데이터를 기반으로 사용자에게 맞는 {count}개를 선택해 추천:
+   - 각 공고: 지원사업명, 주관기관, 지역, 마감일, 내용 요약, 매칭 점수(10점), 매칭 이유 포함
+   - 신청 방법 및 유의사항도 안내
+3. write_document(doc_type="subsidy_recommendation", title="지원사업 추천 보고서 — <요약>", content="<전체 내용>") 호출
+
+[중요]
+- 반드시 위 목록에서 실제 공고명과 주관기관을 그대로 사용할 것 (지어내기 금지)
+- 목록이 비어있으면 "현재 조건에 맞는 공고를 찾지 못했습니다"로 안내
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
@@ -1121,10 +1164,11 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "doc_subsidy_recommend",
             "description": (
-                "사용자 업종·지역·사업 단계에 맞는 정부 지원사업을 검색·추천. "
+                "사용자 업종·지역·사업 단계에 맞는 정부 지원사업을 vector+FTS 하이브리드 검색으로 추천. "
                 "'지원사업 뭐가 있어', '보조금 받을 수 있어', '정부 지원 받고 싶어', "
                 "'어떤 지원사업이 잘 맞을까', '지원사업 추천해줘', '보조금 추천' 같은 맥락이면 이 tool. "
-                "각 공고에 대해 10점 만점 점수 + 매칭 이유 제공. 기본 1개, 요청 시 N개. "
+                "각 공고: 지원사업명·주관기관·내용 요약·매칭 점수(10점) 제공. 기본 1개, 요청 시 N개. "
+                "사업 단계(business_stage) 값: 창업 준비 중 | 창업 초기 (1년 미만) | 성장기 (1~3년) | 안정기 (3년 이상). "
                 "추천 후 [CHOICES]에서 '마감 일정 추가'를 선택한 경우 confirm_deadline=true 로 재호출. "
                 "[카테고리: Operations — 지원사업 추천]"
             ),
@@ -1133,7 +1177,7 @@ def describe(account_id: str) -> list[dict]:
                 "type": "object",
                 "properties": {
                     "count": {"type": "integer", "description": "추천 개수 (기본 1)", "default": 1},
-                    "confirm_deadline": {"type": "boolean", "description": "마감 일정 추가 확인 (사용자가 CHOICES에서 '마감 일정 추가'를 선택한 경우 true)", "default": False},
+                    "confirm_deadline": {"type": "boolean", "description": "마감 일정 추가 확인", "default": False},
                 },
             },
         },
