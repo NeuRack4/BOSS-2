@@ -1881,6 +1881,13 @@ async def _execute_write_sns_post(account_id: str, result_data: dict) -> str:
     except Exception:
         log.exception("[marketing] write_sns_post artifact insert failed")
 
+    if artifact_id:
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, "marketing", "sns_post", title, content=content[:500])
+        except Exception:
+            pass
+
     # Instagram 카드 생성
     instagram_marker = ""
     _needs_instagram = "instagram" in platform.lower() or "인스타" in platform.lower()
@@ -2023,6 +2030,11 @@ async def _execute_write_review_reply(account_id: str, result_data: dict) -> str
                     }).execute()
                 except Exception:
                     pass
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, "marketing", "review_reply", title, content=reply_text[:500])
+        except Exception:
+            pass
     except Exception:
         log.exception("[marketing] write_review_reply artifact insert failed")
 
@@ -2071,6 +2083,11 @@ async def _execute_write_ad_copy(account_id: str, result_data: dict) -> str:
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "ad_copy", title, content=content[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_ad_copy artifact insert failed")
 
@@ -2137,6 +2154,11 @@ async def _execute_write_event_plan(account_id: str, result_data: dict) -> str:
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "event_plan", title, content=cleaned[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_event_plan artifact insert failed")
 
@@ -2198,6 +2220,11 @@ async def _execute_write_campaign(account_id: str, result_data: dict) -> str:
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "campaign", title, content=content[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_campaign artifact insert failed")
 
@@ -2243,6 +2270,11 @@ async def _execute_write_notice(account_id: str, result_data: dict) -> str:
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "notice", title, content=content[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_notice artifact insert failed")
 
@@ -2281,6 +2313,11 @@ async def _execute_write_marketing_plan(account_id: str, result_data: dict) -> s
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "marketing_plan", title, content=content[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_marketing_plan artifact insert failed")
 
@@ -2330,6 +2367,11 @@ async def _execute_write_product_post(account_id: str, result_data: dict) -> str
                     }).execute()
                 except Exception:
                     pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "product_post", title, content=content[:500])
+            except Exception:
+                pass
     except Exception:
         log.exception("[marketing] write_product_post artifact insert failed")
 
