@@ -15,6 +15,8 @@ from app.core.supabase import get_supabase
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     ARTIFACT_RULE,
+    NICKNAME_RULE,
+    PROFILE_RULE,
 )
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
@@ -176,7 +178,7 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
 납품/공급 계약서
 기타 (직접 입력)
 [/CHOICES]"
-"""
+""" + NICKNAME_RULE + PROFILE_RULE
 
 
 # ──────────────────────────────────────────────────────────────────────────

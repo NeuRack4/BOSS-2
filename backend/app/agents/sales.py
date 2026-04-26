@@ -31,6 +31,8 @@ from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     ARTIFACT_RULE,
+    NICKNAME_RULE,
+    PROFILE_RULE,
 )
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
@@ -319,6 +321,8 @@ artifact 저장 시 sub_domain 필드를 반드시 포함:
 → [CHOICES] 버튼 출력 금지
 → 반드시 [ACTION:OPEN_SALES_TABLE:{"date":"오늘날짜","items":[]}] 마커만 출력
 """
+    + NICKNAME_RULE
+    + PROFILE_RULE
 )
 
 

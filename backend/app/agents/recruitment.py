@@ -19,7 +19,7 @@ from langsmith import traceable
 
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
-from app.agents.orchestrator import CLARIFY_RULE
+from app.agents.orchestrator import CLARIFY_RULE, NICKNAME_RULE, PROFILE_RULE
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
 from app.agents._artifact import (
@@ -169,7 +169,7 @@ AGENT_SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
 - 사용자가 "최저시급" / "최저임금" / "최저"라고 하면 **10,320원으로 바로 확정**하세요. 재확인 질문 금지.
 - 모르면 [CHOICES] 로 먼저 물어보세요.
 
-""" + CLARIFY_RULE
+""" + CLARIFY_RULE + NICKNAME_RULE + PROFILE_RULE
 
 
 def _make_recruit_model():

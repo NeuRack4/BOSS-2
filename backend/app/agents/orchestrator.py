@@ -563,7 +563,7 @@ def _nickname_context(account_id: str) -> str:
     return "\n\n[사용자 닉네임]\n(아직 미설정 — 사용자가 이름/호칭/가게 이름을 알려주면 [SET_NICKNAME] 블록으로 저장할 것)"
 
 
-PROFILE_NUDGE_THRESHOLD = 3
+PROFILE_NUDGE_THRESHOLD = 5
 
 
 def _profile_nudge_context(account_id: str) -> str:

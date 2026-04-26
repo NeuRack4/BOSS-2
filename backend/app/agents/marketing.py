@@ -16,6 +16,8 @@ from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     ARTIFACT_RULE,
+    NICKNAME_RULE,
+    PROFILE_RULE,
 )
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
@@ -355,6 +357,8 @@ SYSTEM_PROMPT = (
 - 해시태그는 '#태그1 #태그2 ...' 형식으로 한 줄에 붙여 출력
 - 추천 게시 시간은 '💡 추천 게시 시간: ...' 형식으로 출력
 """
+    + NICKNAME_RULE
+    + PROFILE_RULE
 )
 
 
