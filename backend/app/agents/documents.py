@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -24,6 +25,7 @@ from app.agents._artifact import (
 )
 from app.agents._doc_templates import VALID_CONTRACT_SUBTYPES
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
+from app.agents._legal import _retrieve_legal_context
 from deepagents import create_deep_agent
 from app.agents._agent_context import inject_agent_context
 from app.agents._documents_tools import (
@@ -1025,14 +1027,19 @@ async def run_legal_advice(
     **_kwargs,
 ) -> str:
     q_ctx = f"\n질문: {question}" if question else ""
+    query = question or message
+
+    legal_rag, _ = await asyncio.to_thread(_retrieve_legal_context, query, None, 6)
+    rag_block = f"\n\n{legal_rag}" if legal_rag else ""
 
     system = f"""{SYSTEM_PROMPT}
 
 [이번 요청 — 법률 자문]
 소상공인 관련 법률 질문에 답합니다. 실제 법령·판례에 근거해서만 답하고, 날조 금지.
-{q_ctx}
+{q_ctx}{rag_block}
 
 [수행 방법]
+- 위 [관련 법령 조문]이 있으면 반드시 해당 조문을 근거로 인용하며 답하세요.
 - 법령·관행 근거가 있는 범위 안에서만 자세히 답하세요.
 - 전문 변호사 상담을 권유하는 문구를 적절히 포함하세요.
 - 이 질문은 artifact 저장 없이 텍스트 응답만 반환합니다.
@@ -1054,14 +1061,22 @@ async def run_tax_advice(
     **_kwargs,
 ) -> str:
     q_ctx = f"\n질문: {question}" if question else ""
+    query = question or message
+
+    tax_rag, _ = await asyncio.to_thread(_retrieve_legal_context, query, "tax", 6)
+    rag_block = f"\n\n{tax_rag}" if tax_rag else ""
+
     system = f"""{SYSTEM_PROMPT}
 
 [이번 요청 — 세무·노무 자문]
 소상공인 세무·노무 관련 질문에 답합니다. 세법·노동법 근거로만 답하고 날조 금지.
-{q_ctx}
+{q_ctx}{rag_block}
 
-이 질문은 artifact 저장 없이 텍스트 응답만 반환합니다.
-write_document나 analyze_document를 호출하지 마세요.
+[수행 방법]
+- 위 [관련 법령 조문]이 있으면 해당 조문을 근거로 인용하며 답하세요.
+- 이 질문은 artifact 저장 없이 텍스트 응답만 반환합니다.
+  write_document나 analyze_document를 호출하지 마세요.
+  도구 없이 직접 텍스트로 답변을 작성하면 됩니다.
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
