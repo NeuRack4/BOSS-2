@@ -118,7 +118,7 @@ export const JobPostingCard = ({
       <div className="p-4 text-xs text-foreground leading-relaxed min-h-[120px]">
         {currentContent ? (
           <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkBreaks]}
+            remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkBreaks]}
             components={MD_COMPONENTS}
           >
             {currentContent}

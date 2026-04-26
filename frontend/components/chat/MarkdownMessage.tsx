@@ -89,7 +89,10 @@ export const MarkdownMessage = ({
   className?: string;
 }) => (
   <div className={cn("text-sm leading-relaxed text-[#2e2719]", className)}>
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+    <ReactMarkdown
+      remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
+      components={COMPONENTS}
+    >
       {content}
     </ReactMarkdown>
   </div>
