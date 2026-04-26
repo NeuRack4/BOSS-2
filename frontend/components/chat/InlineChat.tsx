@@ -84,10 +84,7 @@ import {
   ReviewReplyFormCard,
   extractReviewReplyForm,
 } from "./ReviewReplyFormCard";
-import {
-  ScheduleFormCard,
-  extractScheduleForm,
-} from "./ScheduleFormCard";
+import { ScheduleFormCard, extractScheduleForm } from "./ScheduleFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -95,6 +92,11 @@ import {
   extractEmployeePickerPayload,
   type EmployeePickerPayload,
 } from "./EmployeePickerCard";
+import {
+  SubsidyRecommendCard,
+  extractSubsidyPayload,
+  type SubsidyPayload,
+} from "./SubsidyRecommendCard";
 
 type UploadCategory =
   | "documents"
@@ -1618,6 +1620,7 @@ export const InlineChat = () => {
                 msg.menuChart ?? null;
               let salesInsightPayload: SalesInsightPayload | null =
                 msg.salesInsight ?? null;
+              let subsidyPayload: SubsidyPayload | null = null;
               // real-time: msg.adminApp 에 저장된 값 우선 사용
               let adminAppPayload: AdminApplicationPayload | null =
                 msg.adminApp?.payload ?? null;
@@ -1683,6 +1686,10 @@ export const InlineChat = () => {
                 const mcExtracted = extractMenuChartPayload(displayText || "");
                 displayText = mcExtracted.cleaned;
                 if (mcExtracted.payload) menuChartPayload = mcExtracted.payload;
+
+                const sbExtracted = extractSubsidyPayload(displayText || "");
+                displayText = sbExtracted.cleaned;
+                if (sbExtracted.payload) subsidyPayload = sbExtracted.payload;
               }
 
               return (
@@ -1817,6 +1824,11 @@ export const InlineChat = () => {
                   {msg.role === "assistant" && menuChartPayload && (
                     <div className="ml-8 max-w-[85%]">
                       <MenuAnalysisCard payload={menuChartPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && subsidyPayload && (
+                    <div className="ml-8 max-w-[85%]">
+                      <SubsidyRecommendCard payload={subsidyPayload} />
                     </div>
                   )}
                   {msg.role === "assistant" && adminAppPayload && userId && (

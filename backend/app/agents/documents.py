@@ -756,7 +756,28 @@ async def run_subsidy_recommend(
 - 반드시 위 목록에서 실제 공고명과 주관기관을 그대로 사용할 것 (지어내기 금지)
 - 목록이 비어있으면 "현재 조건에 맞는 공고를 찾지 못했습니다"로 안내
 """
-    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
+    agent_reply = await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
+
+    # 프론트 카드 렌더링용 구조화 데이터 주입
+    if results:
+        import json as _json
+        subsidy_items = [
+            {
+                "title": p.get("title", ""),
+                "organization": p.get("organization", ""),
+                "region": p.get("region", "전국"),
+                "target": (p.get("target") or "")[:60],
+                "end_date": p.get("end_date") or "",
+                "is_ongoing": bool(p.get("is_ongoing")),
+                "description": (p.get("description") or "")[:150],
+                "detail_url": p.get("detail_url") or p.get("external_url") or "",
+            }
+            for p in results[:count]
+        ]
+        json_str = _json.dumps({"programs": subsidy_items}, ensure_ascii=False)
+        agent_reply += f"\n\n[[SUBSIDY_JSON]]{json_str}[[/SUBSIDY_JSON]]"
+
+    return agent_reply
 
 
 @traceable(name="documents.run_admin_application")
