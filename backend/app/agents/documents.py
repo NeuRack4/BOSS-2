@@ -349,8 +349,14 @@ async def _run_documents_agent(
     rag_context: str,
     long_term_context: str,
     system_prompt: str,
+    *,
+    text_only: bool = False,
 ) -> str:
-    """Documents DeepAgent 실행 공통 함수."""
+    """Documents DeepAgent 실행 공통 함수.
+
+    text_only=True: 법률/세무 자문처럼 terminal tool 없이 텍스트만 반환하는 경로.
+    terminal tool 미호출 retry를 건너뛰고 AIMessage 텍스트를 바로 추출.
+    """
     inject_agent_context(account_id, message, history, rag_context, long_term_context)
     init_docs_result_store()
 
@@ -369,6 +375,20 @@ async def _run_documents_agent(
         return f"서류 처리 중 오류가 발생했습니다: {exc}"
 
     result_data = get_docs_result_store()
+
+    if not result_data and text_only:
+        from langchain_core.messages import AIMessage
+        for msg in reversed(out_messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                content = msg.content
+                if isinstance(content, list):
+                    texts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
+                    if texts:
+                        return " ".join(texts).strip()
+                elif isinstance(content, str) and content.strip():
+                    return content.strip()
+        return "처리 결과를 반환하지 못했습니다."
+
     if not result_data:
         log.info("[documents] account=%s no terminal tool — retry", account_id)
         try:
@@ -1046,7 +1066,7 @@ async def run_legal_advice(
   write_document나 analyze_document를 호출하지 마세요.
   도구 없이 직접 텍스트로 답변을 작성하면 됩니다.
 """
-    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
 
 @traceable(name="documents.run_tax_advice")
@@ -1078,7 +1098,7 @@ async def run_tax_advice(
   write_document나 analyze_document를 호출하지 마세요.
   도구 없이 직접 텍스트로 답변을 작성하면 됩니다.
 """
-    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
 
 async def run(
