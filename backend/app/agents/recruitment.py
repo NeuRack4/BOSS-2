@@ -1321,12 +1321,15 @@ async def run_posting_poster(
     platforms: list[str] | None = None,
     style: str = "",
 ) -> str:
-    """선택한 job_posting_set 을 근거로 HTML 포스터 생성 (복수 플랫폼 지원)."""
+    """선택한 job_posting_set 한 건 + 플랫폼 한 종으로 HTML 포스터 생성."""
     import json as _json
 
-    valid_platforms = [p for p in (platforms or []) if p in VALID_PLATFORMS]
+    # 플랫폼은 항상 1개만 — 복수 전달됐으면 첫 번째만 사용
+    valid_platform: str | None = next(
+        (p for p in (platforms or []) if p in VALID_PLATFORMS), None
+    )
 
-    # 공고 선택이 필요한 경우
+    # 공고 선택이 필요한 경우 — 항상 확인 (1건이어도 안내)
     if not posting_set_id:
         posting_sets = _list_posting_sets(account_id)
         if not posting_sets:
@@ -1336,7 +1339,7 @@ async def run_posting_poster(
         else:
             system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
             items = "\n".join(
-                f"- [{ps['title']}] (작성일: {ps['created_at'][:10]}, id: {ps['id']})"
+                f"- {ps['title']} (작성일: {ps['created_at'][:10]})"
                 for ps in posting_sets
             )
             system += (
@@ -1345,13 +1348,13 @@ async def run_posting_poster(
             )
             return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
-    # 플랫폼 선택이 필요한 경우
-    if not valid_platforms:
+    # 플랫폼 선택이 필요한 경우 — 항상 1개만 선택
+    if not valid_platform:
         system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
         system += (
             "\n\n[포스터 생성 요청 — 플랫폼 선택 필요]\n"
-            "[CHOICES] 로 당근알바·알바천국·사람인 중 선택하게 해주세요. "
-            "복수 선택도 가능하다고 안내하세요."
+            "[CHOICES] 로 당근알바·알바천국·사람인 중 하나만 선택하게 해주세요. "
+            "한 번에 한 플랫폼씩만 만들 수 있다고 안내하세요."
         )
         return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
@@ -1366,12 +1369,12 @@ async def run_posting_poster(
         )
         return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system, text_only=True)
 
-    # 포스터 생성 — generate_posting_poster tool 호출 유도
-    platforms_json = _json.dumps(valid_platforms, ensure_ascii=False)
+    # 포스터 생성 — generate_posting_poster tool 호출 유도 (플랫폼 1개)
+    platform_json = _json.dumps([valid_platform], ensure_ascii=False)
     system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
     system += (
         f"\n\n[포스터 생성 요청 — 모든 정보 확정]\n"
-        f"posting_set_id={posting_set_id}, platforms={platforms_json}, style={style}\n"
+        f"posting_set_id={posting_set_id}, platforms={platform_json}, style={style}\n"
         "즉시 generate_posting_poster 도구를 호출하세요."
     )
     return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system)
