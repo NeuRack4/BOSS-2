@@ -1949,8 +1949,9 @@ def describe(account_id: str) -> list[dict]:
         {
             "name": "recruit_resume_parse",
             "description": (
-                "구직자 이력서 파일을 파싱해 DB에 저장한다. "
-                "사용자가 이력서 파일을 업로드하고 파싱/분석을 요청할 때 호출. "
+                "구직자 이력서(Resume/CV) 파일을 파싱해 DB에 저장한다. "
+                "사용자가 이력서·지원서 파일을 업로드하고 파싱/분석을 요청할 때만 호출. "
+                "⚠️ 계약서·공정성 분석·문서 검토 요청은 이 tool이 아닌 doc_review를 사용할 것. "
                 "upload_payload 또는 upload_payloads contextvar 에 파일 내용이 있어야 한다. "
                 "⚠️ 사용자 메시지에 면접/질문 키워드가 있으면 파싱 후 내부에서 면접 질문까지 직접 생성하므로 "
                 "recruit_resume_interview 를 별도 dispatch 하지 말 것."
