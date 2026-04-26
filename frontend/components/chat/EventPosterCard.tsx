@@ -35,14 +35,24 @@ export function extractEventPosterPayload(text: string): {
   return { cleaned, payload: payloads[0] ?? null, payloads };
 }
 
+const resolveUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  if (url.startsWith("/")) {
+    const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+    return `${base}${url}`;
+  }
+  return url;
+};
+
 export function EventPosterCard({ payload }: { payload: EventPosterPayload }) {
   const [downloading, setDownloading] = useState(false);
+  const resolvedUrl = resolveUrl(payload.public_url);
 
   const handleDownload = () => {
-    if (!payload.public_url) return;
+    if (!resolvedUrl) return;
     setDownloading(true);
     const a = document.createElement("a");
-    a.href = payload.public_url;
+    a.href = resolvedUrl;
     const filename = (payload.title || "event-poster")
       .replace(/[\\/:*?"<>|]/g, "_")
       .slice(0, 100);
@@ -52,7 +62,7 @@ export function EventPosterCard({ payload }: { payload: EventPosterPayload }) {
     setDownloading(false);
   };
 
-  if (!payload.public_url && !payload.html) return null;
+  if (!resolvedUrl && !payload.html) return null;
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-sm">
@@ -65,16 +75,16 @@ export function EventPosterCard({ payload }: { payload: EventPosterPayload }) {
           variant="outline"
           className="flex-shrink-0 flex items-center gap-1.5 h-7 text-[12px] px-2.5"
           onClick={handleDownload}
-          disabled={downloading || !payload.public_url}
+          disabled={downloading || !resolvedUrl}
         >
           <Download className="h-3.5 w-3.5" />
           HTML 저장
         </Button>
       </div>
       <div className="w-full bg-neutral-50 p-4">
-        {payload.public_url ? (
+        {resolvedUrl ? (
           <iframe
-            src={payload.public_url}
+            src={resolvedUrl}
             title={payload.title || "이벤트 포스터"}
             className="w-full rounded border border-neutral-200 bg-white"
             style={{ height: "620px" }}
