@@ -596,6 +596,7 @@ async def run_shorts_wizard(
     )
 
 
+@traceable(name="marketing.run_sns_post", run_type="chain")
 async def run_sns_post(
     *,
     account_id: str,
@@ -647,6 +648,7 @@ async def run_sns_post(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_blog_post", run_type="chain")
 async def run_blog_post(
     *,
     account_id: str,
@@ -707,6 +709,7 @@ async def run_blog_post(
     )
 
 
+@traceable(name="marketing.run_review_reply", run_type="chain")
 async def run_review_reply(
     *,
     account_id: str,
@@ -750,6 +753,7 @@ async def run_review_reply(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_ad_copy", run_type="chain")
 async def run_ad_copy(
     *,
     account_id: str,
@@ -796,6 +800,7 @@ async def run_ad_copy(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_campaign_plan", run_type="chain")
 async def run_campaign_plan(
     *,
     account_id: str,
@@ -909,6 +914,7 @@ async def run_schedule_form(
     return "자동화할 작업과 실행 주기를 설정해주세요.\n\n[[SCHEDULE_FORM]][[/SCHEDULE_FORM]]"
 
 
+@traceable(name="marketing.run_event_plan", run_type="chain")
 async def run_event_plan(
     *,
     account_id: str,
@@ -963,6 +969,7 @@ async def run_event_plan(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_notice", run_type="chain")
 async def run_notice(
     *,
     account_id: str,
@@ -1017,6 +1024,7 @@ async def run_notice(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_marketing_plan", run_type="chain")
 async def run_marketing_plan(
     *,
     account_id: str,
@@ -1728,6 +1736,7 @@ def _make_marketing_model():
     )
 
 
+@traceable(name="marketing._run_marketing_agent", run_type="chain")
 async def _run_marketing_agent(
     account_id: str,
     message: str,
