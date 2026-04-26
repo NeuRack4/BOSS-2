@@ -456,6 +456,24 @@ def _save_profile_updates(account_id: str, core: dict, meta: dict) -> None:
 _PROFILE_STAGE_ALLOWED = {"창업 준비", "오픈 직전", "영업 중", "확장 중"}
 _PROFILE_CHANNELS_ALLOWED = {"offline", "online", "both"}
 
+# Planner/LLM이 유사 표현으로 저장할 때 정규 값으로 매핑
+_STAGE_NORMALIZE: dict[str, str] = {
+    "창업 준비": "창업 준비",
+    "창업 준비 중": "창업 준비",
+    "창업 준비중": "창업 준비",
+    "오픈 직전": "오픈 직전",
+    "창업 초기": "오픈 직전",
+    "창업 초기 (1년 미만)": "오픈 직전",
+    "영업 중": "영업 중",
+    "영업중": "영업 중",
+    "성장기": "영업 중",
+    "성장기 (1~3년)": "영업 중",
+    "확장 중": "확장 중",
+    "확장중": "확장 중",
+    "안정기": "확장 중",
+    "안정기 (3년 이상)": "확장 중",
+}
+
 
 def _extract_and_save_profile(account_id: str, reply: str) -> str:
     """응답에서 [SET_PROFILE] 블록을 파싱해 저장, 본문에선 제거."""
@@ -473,8 +491,10 @@ def _extract_and_save_profile(account_id: str, reply: str) -> str:
             if not key or not val:
                 continue
             if key in CORE_PROFILE_KEYS:
-                if key == "business_stage" and val not in _PROFILE_STAGE_ALLOWED:
-                    continue
+                if key == "business_stage":
+                    val = _STAGE_NORMALIZE.get(val, val)
+                    if val not in _PROFILE_STAGE_ALLOWED:
+                        continue
                 if key == "channels" and val.lower() not in _PROFILE_CHANNELS_ALLOWED:
                     continue
                 core[key] = val[:200]
@@ -715,8 +735,10 @@ async def _dispatch_via_planner(
             if not isinstance(v, str) or not v.strip():
                 continue
             if k in CORE_PROFILE_KEYS:
-                if k == "business_stage" and v not in _PROFILE_STAGE_ALLOWED:
-                    continue
+                if k == "business_stage":
+                    v = _STAGE_NORMALIZE.get(v, v)
+                    if v not in _PROFILE_STAGE_ALLOWED:
+                        continue
                 if k == "channels" and v.lower() not in _PROFILE_CHANNELS_ALLOWED:
                     continue
                 core[k] = v[:200]

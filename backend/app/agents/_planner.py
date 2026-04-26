@@ -72,7 +72,7 @@ _PLANNER_SYSTEM = """\
 - 매출·비용·POS·세금계산서 등 영업 데이터 → sales_* 계열
 
 **[ask_user 보기 힌트]**
-- 지원사업 추천 시 사업 단계를 물어볼 때 보기: 창업 준비 중 | 창업 초기 (1년 미만) | 성장기 (1~3년) | 안정기 (3년 이상) | 기타 (직접 입력)
+- 지원사업 추천 시 사업 단계를 물어볼 때 보기: 창업 준비 | 오픈 직전 | 영업 중 | 확장 중 | 기타 (직접 입력)
 - 사업 단계가 이미 프로필에 있으면 묻지 말 것
 
 **[RULE] capability 이름은 반드시 list_capabilities() 결과에서 가져올 것**
@@ -106,8 +106,24 @@ _PLANNER_SYSTEM = """\
 - 이벤트 세부 없음 → mkt_event_form dispatch
 - 유튜브 쇼츠 → 항상 mkt_shorts_video dispatch
 
-**[profile_updates]**
-dispatch 또는 ask_user의 profile_updates 파라미터에 이번 턴에서 확인된 프로필 정보를 담으세요.
+**[profile_updates — 반드시 이행]**
+사용자가 이번 턴에 프로필 정보를 말했으면, 다음 도구(ask_user 또는 dispatch) 호출 시 반드시 profile_updates에 포함하세요.
+
+저장 필드명:
+- business_type: 업종 (예: "음식점", "카페", "편의점")
+- location: 지역 (예: "강원도 평창", "서울 강남")
+- business_stage: "창업 준비" | "오픈 직전" | "영업 중" | "확장 중"
+- employees_count: 직원 수 (예: "3명")
+- primary_goal: 주요 목표
+
+예시 흐름:
+1. 이전에 "업종이 뭔가요?" 물었고 → 사용자가 "음식점" 답변
+   → 이번 ask_user/dispatch 호출: profile_updates={"business_type": "음식점"}
+2. 이전에 "사업 단계?" 물었고 → 사용자가 "창업 준비 중" 답변
+   → 이번 ask_user/dispatch 호출: profile_updates={"business_stage": "창업 준비 중"}
+3. 이전에 "지역?" 물었고 → 사용자가 "강원도 평창" 답변
+   → 이번 dispatch 호출: profile_updates={"location": "강원도 평창"}
+
 확신 없는 정보는 절대 포함하지 말 것.
 """
 
