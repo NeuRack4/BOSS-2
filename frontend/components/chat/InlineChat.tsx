@@ -227,12 +227,6 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "매출 입력", prompt: "오늘 매출 입력하기" },
       { name: "비용 입력", prompt: "오늘 비용 입력하기" },
       { name: "매출 리포트", prompt: "이번 달 매출 요약 정리해줘" },
-      { name: "가격 전략", prompt: "가격 전략 추천해줘" },
-      { name: "메뉴 관리", prompt: "메뉴 목록 보여줘" },
-      { name: "메뉴 수익성 분석", prompt: "메뉴 수익성 분석해줘" },
-      { name: "고객 스크립트", prompt: "고객 응대 스크립트 만들어줘" },
-      { name: "고객 분석", prompt: "고객 분석 리포트 만들어줘" },
-      { name: "프로모션", prompt: "프로모션 기획해줘" },
     ],
   },
   {
@@ -240,11 +234,9 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#d4a588",
     bg: "#f7e6da",
     items: [
-      { name: "채용 공고 작성", prompt: "채용 공고 초안 작성해줘" },
-      { name: "채용 공고 포스터", prompt: "채용 공고 포스터 이미지 만들어줘" },
-      { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
-      { name: "이력서 분석", prompt: "이력서 분석해줘." },
+      { name: "채용 공고", prompt: "채용 공고 초안 작성해줘" },
       { name: "면접 질문지", prompt: "이력서 바탕으로 면접 질문 뽑아줘." },
+      { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
     ],
   },
   {
@@ -339,13 +331,7 @@ const DOMAIN_CAPABILITIES: Array<{
           </svg>
         ),
       },
-      { name: "이벤트 기획", prompt: "프로모션 이벤트 기획해줘" },
-      { name: "리뷰 답글", prompt: "리뷰 답글 작성해줘" },
       { name: "성과 리포트", prompt: "인스타그램·유튜브 성과 리포트 보여줘" },
-      {
-        name: "자동화 스케줄",
-        prompt: "마케팅 자동화 스케줄 설정해줘",
-      },
     ],
   },
   {
@@ -353,11 +339,9 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#7977a0",
     bg: "#c8c7d6",
     items: [
-      { name: "서류 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
-      { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
-      { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
-      { name: "급여 명세서", prompt: "급여명세서 만들어줘" },
-      { name: "세무 자문", prompt: "세무 자문 받고 싶어" },
+      { name: "공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
+      { name: "지원사업", prompt: "지원사업 추천해줘" },
+      { name: "신청서 초안", prompt: "행정 신청서 작성해줘" },
       { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
     ],
   },
@@ -1582,16 +1566,19 @@ export const InlineChat = () => {
       )}
       <div className="flex h-full min-h-0 flex-col">
         {messages.length === 0 && !loading ? (
-          <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-            <div className="mb-4 text-center font-mono text-lg font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
-              Ask the chatbot.
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto flex max-w-md flex-col gap-4 pb-2">
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-4">
+            <div className="flex flex-col items-center gap-12">
+              <div className="text-center font-mono text-3xl font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
+                Ask the chatbot.
+              </div>
+              <div className="grid w-fit grid-cols-2 gap-3">
                 {DOMAIN_CAPABILITIES.map((domain) => (
-                  <div key={domain.label}>
+                  <div
+                    key={domain.label}
+                    className="flex w-36 flex-col gap-1.5"
+                  >
                     <div
-                      className="mb-2 inline-block rounded-[4px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
+                      className="mb-0.5 inline-block self-center rounded-[4px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
                       style={{
                         backgroundColor: domain.bg,
                         color: domain.accent,
@@ -1599,20 +1586,18 @@ export const InlineChat = () => {
                     >
                       {domain.label}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {domain.items.map((item) => (
-                        <button
-                          key={item.name}
-                          type="button"
-                          disabled={loading}
-                          onClick={() => send(item.prompt)}
-                          className="flex items-center gap-1.5 rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
-                        >
-                          {item.icon}
-                          {item.name}
-                        </button>
-                      ))}
-                    </div>
+                    {domain.items.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => send(item.prompt)}
+                        className="flex items-center justify-center gap-1.5 rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1.5 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
+                      >
+                        {item.icon}
+                        {item.name}
+                      </button>
+                    ))}
                   </div>
                 ))}
               </div>
