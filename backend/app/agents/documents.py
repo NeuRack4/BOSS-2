@@ -958,68 +958,84 @@ async def run(
     return result["reply"]
 
 
-@traceable(name="documents.run_contract", run_type="chain")
+@traceable(name="documents.run_contract")
 async def run_contract(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    subtype: str,
-    party_a: str,
-    party_b: str,
+    long_term_context: str = "",
+    subtype: str | None = None,
+    party_a: str | None = None,
+    party_b: str | None = None,
     amount: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
     extra_note: str | None = None,
+    **_kwargs,
 ) -> str:
-    if subtype not in VALID_CONTRACT_SUBTYPES:
-        subtype = "service"
-    lines = [f"[subtype] {subtype}", f"[갑] {party_a}", f"[을] {party_b}"]
-    if amount:
-        lines.append(f"[금액/조건] {amount}")
-    if start_date:
-        lines.append(f"[시작일] {start_date}")
-    if end_date:
-        lines.append(f"[종료일] {end_date}")
-    if extra_note:
-        lines.append(f"[특이사항] {extra_note}")
-    synthetic = (
-        f"{subtype} 계약서 초안을 작성해주세요. 아래 조건이 모두 확정되었으니 "
-        "추가 질문 없이 바로 [ARTIFACT] 블록(type=contract, contract_subtype 포함) + 본문을 출력하세요.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
-    )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    sub_ctx = f"subtype={subtype}" if subtype else ""
+    party_ctx = ""
+    if party_a or party_b:
+        party_ctx = f"\n갑: {party_a or '미정'}  을: {party_b or '미정'}"
+    amount_ctx = f"\n계약금액: {amount}" if amount else ""
+    date_ctx = ""
+    if start_date or end_date:
+        date_ctx = f"\n계약기간: {start_date or '?'} ~ {end_date or '?'}"
+    note_ctx = f"\n추가요청: {extra_note}" if extra_note else ""
+
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 계약서 작성]
+{_CATEGORY_GUIDANCE['review']}
+
+확정된 정보:
+{sub_ctx}{party_ctx}{amount_ctx}{date_ctx}{note_ctx}
+
+[수행 순서]
+1. get_sub_hubs() 호출로 서브허브 목록 확인
+2. 위 확정 정보를 바탕으로 완성된 계약서 본문을 마크다운으로 작성
+3. write_document(doc_type="contract", title="<적절한 제목>", content="<전체 본문>",
+   subtype="{subtype or 'labor'}", due_date="<YYYY-MM-DD>", due_label="계약 만료") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_estimate", run_type="chain")
+@traceable(name="documents.run_estimate")
 async def run_estimate(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    client: str,
+    long_term_context: str = "",
+    client: str | None = None,
     items: str | None = None,
     total_amount: str | None = None,
     valid_until: str | None = None,
+    **_kwargs,
 ) -> str:
-    lines = [f"[발주처] {client}"]
-    if items:
-        lines.append(f"[품목] {items}")
-    if total_amount:
-        lines.append(f"[총액] {total_amount}")
-    if valid_until:
-        lines.append(f"[유효기간] {valid_until}")
-    synthetic = (
-        "견적서 초안을 작성해주세요. [ARTIFACT] 블록(type=estimate, due_date=유효기간, due_label='견적 유효기간') 포함.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
-    )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    client_ctx  = f"\n고객명: {client}" if client else ""
+    items_ctx   = f"\n품목/내용: {items}" if items else ""
+    amount_ctx  = f"\n총액: {total_amount}" if total_amount else ""
+    valid_ctx   = f"\n견적 유효기간: {valid_until}" if valid_until else ""
+
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 견적서 작성]
+{_CATEGORY_GUIDANCE['operations']}
+
+확정된 정보:
+{client_ctx}{items_ctx}{amount_ctx}{valid_ctx}
+
+[수행 순서]
+1. get_sub_hubs() 호출
+2. 완성된 견적서 본문 작성 (품목·단가·합계·유효기간 포함)
+3. write_document(doc_type="estimate", title="견적서 — <고객명>", content="<전체 본문>",
+   due_date="<valid_until YYYY-MM-DD>", due_label="견적 유효기간") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 @traceable(name="documents.run_proposal", run_type="chain")
@@ -2006,53 +2022,65 @@ async def run_tax_calendar(
     return reply
 
 
-@traceable(name="documents.run_review", run_type="chain")
+@traceable(name="documents.run_review")
 async def run_review(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    user_role: str = "미지정",
+    long_term_context: str = "",
+    user_role: str | None = None,
     contract_subtype: str | None = None,
+    **_kwargs,
 ) -> str:
-    if user_role not in ("갑", "을", "미지정"):
-        user_role = "미지정"
-    sub = f", contract_subtype={contract_subtype}" if contract_subtype else ""
-    synthetic = (
-        f"최근 업로드한 문서의 공정성을 분석해주세요 (user_role={user_role}{sub}). "
-        "추가 CHOICES 없이 바로 [REVIEW_REQUEST] 마커를 출력하세요.\n\n"
-        f"원본 사용자 요청: {message}"
-    )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    role_ctx    = f"\n요청된 역할: {user_role}" if user_role else ""
+    subtype_ctx = f"\n계약 subtype: {contract_subtype}" if contract_subtype else ""
+
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 공정성 분석]
+업로드된 문서에 대한 공정성 분석을 수행합니다.
+
+확정된 정보:
+{role_ctx}{subtype_ctx}
+
+[수행 순서]
+1. get_uploaded_doc() 호출로 문서 내용과 doc_id 확인
+2. user_role이 확정되지 않았으면 문서를 보고 판단, 혹은 "미지정"으로 진행
+3. analyze_document(user_role="<갑|을|미지정>", doc_type="계약서",
+   contract_subtype="<subtype 또는 None>") 호출
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
-@traceable(name="documents.run_legal_advice", run_type="chain")
+@traceable(name="documents.run_legal_advice")
 async def run_legal_advice(
     *,
     account_id: str,
     message: str,
     history: list[dict],
-    long_term_context: str = "",
     rag_context: str = "",
-    question: str,
-    topic: str | None = None,
+    long_term_context: str = "",
+    question: str | None = None,
+    **_kwargs,
 ) -> str:
-    from app.agents._legal import LegalIntent
-    intent = await classify_legal_intent(question, history)
-    if not intent.is_legal and topic:
-        intent = LegalIntent(is_legal=True, topic=topic, reason="tool-invoked")
-    if not intent.is_legal:
-        return await run(question, account_id, history, rag_context, long_term_context)
-    return await handle_legal_question(
-        question,
-        account_id,
-        history,
-        rag_context=rag_context,
-        long_term_context=long_term_context,
-        intent=intent,
-    )
+    q_ctx = f"\n질문: {question}" if question else ""
+
+    system = f"""{SYSTEM_PROMPT}
+
+[이번 요청 — 법률 자문]
+소상공인 관련 법률 질문에 답합니다. 실제 법령·판례에 근거해서만 답하고, 날조 금지.
+{q_ctx}
+
+[수행 방법]
+- 법령·관행 근거가 있는 범위 안에서만 자세히 답하세요.
+- 전문 변호사 상담을 권유하는 문구를 적절히 포함하세요.
+- 이 질문은 artifact 저장 없이 텍스트 응답만 반환합니다.
+  write_document나 analyze_document를 호출하지 마세요.
+  도구 없이 직접 텍스트로 답변을 작성하면 됩니다.
+"""
+    return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
 @traceable(name="documents.run_tax_advice", run_type="chain")
