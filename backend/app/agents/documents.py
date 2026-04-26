@@ -337,8 +337,13 @@ async def _execute_write_admin_docx(account_id: str, result_data: dict) -> str:
         return f"DOCX 파일 생성 중 오류가 발생했습니다: {exc}"
 
     filename = _ADMIN_DOCX_FILENAMES.get(doc_type, "신청서.docx")
+    _ASCII_NAMES = {
+        "business_registration":   "business_registration.docx",
+        "mail_order_registration": "mail_order_registration.docx",
+        "purchase_safety_exempt":  "purchase_safety_exempt.docx",
+    }
     file_id = _uuid_mod.uuid4().hex
-    storage_key = f"{account_id}/admin_application/{file_id}/{filename}"
+    storage_key = f"{account_id}/admin_application/{file_id}/{_ASCII_NAMES.get(doc_type, 'application.docx')}"
 
     sb = get_supabase()
     try:
