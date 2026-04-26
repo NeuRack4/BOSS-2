@@ -1001,6 +1001,21 @@ write_document나 analyze_document를 호출하지 마세요.
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
 
+async def run(
+    message: str,
+    account_id: str,
+    history: list[dict],
+    rag_context: str = "",
+    long_term_context: str = "",
+) -> str:
+    """Legacy entrypoint — orchestrator legacy_fallback 경로에서 호출됨.
+    DeepAgent에게 SYSTEM_PROMPT만 주입하고 도구 선택은 에이전트에게 위임.
+    """
+    return await _run_documents_agent(
+        account_id, message, history, rag_context, long_term_context, SYSTEM_PROMPT
+    )
+
+
 def describe(account_id: str) -> list[dict]:
     caps: list[dict] = [
         {
