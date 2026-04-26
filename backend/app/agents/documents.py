@@ -79,6 +79,12 @@ _TYPE_TO_SUBHUB: dict[str, str] = {
 _REVIEW_REQUEST_RE = re.compile(r"\[REVIEW_REQUEST\](.*?)\[/REVIEW_REQUEST\]", re.DOTALL)
 _UPLOADED_DOC_WINDOW_MIN = 60
 
+VALID_ADMIN_TYPES = (
+    "business_registration",
+    "mail_order_registration",
+    "purchase_safety_exempt",
+)
+
 
 def suggest_today(account_id: str) -> list[dict]:
     return suggest_today_for_domain(account_id, "documents")
@@ -721,18 +727,22 @@ async def run_admin_application(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
-    admin_type: str | None = None,
+    application_type: str | None = None,
+    purpose: str | None = None,
+    extra_note: str | None = None,
     **_kwargs,
 ) -> str:
-    ADMIN_TYPES = {
-        "사업자등록": "사업자 등록 신청서 — 상호·대표자·업종·소재지·개업일 포함",
-        "폐업신고": "폐업 신고서 — 폐업 사유·날짜·잔여 재고 처리 방법",
-        "임직원변경": "임직원 변경 신고서 — 신임·퇴임 임원 정보",
-        "영업허가": "영업 허가 신청서 — 업종별 필요 서류 목록 + 신청서 양식",
-        "근로계약변경": "근로계약 변경 합의서 — 변경 전후 조건 명시",
+    _ADMIN_LABELS = {
+        "business_registration": "사업자 등록 신청서 — 상호·대표자·업종·소재지·개업일 포함",
+        "mail_order_registration": "통신판매업 신고서 — 온라인 쇼핑몰·SNS 판매 신고",
+        "purchase_safety_exempt": "구매안전서비스 비적용대상 확인서 — 전자상거래법 §13의2",
     }
-    type_labels = "\n".join(f"- {k}: {v}" for k, v in ADMIN_TYPES.items())
-    admin_ctx = f"\n선택된 서류 유형: {admin_type}" if admin_type else ""
+    type_labels = "\n".join(f"- {k}: {v}" for k, v in _ADMIN_LABELS.items())
+    admin_ctx = "\n".join(filter(None, [
+        f"신청서 유형: {application_type}" if application_type else "",
+        f"신청 목적: {purpose}" if purpose else "",
+        f"특이사항: {extra_note}" if extra_note else "",
+    ]))
 
     system = f"""{SYSTEM_PROMPT}
 
@@ -843,21 +853,31 @@ async def run_payroll_doc(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
-    year_month: str | None = None,
+    doc_kind: str | None = None,
+    target: str | None = None,
+    pay_month: str | None = None,
+    extra_note: str | None = None,
     **_kwargs,
 ) -> str:
-    month_ctx = f"\n대상 연월: {year_month}" if year_month else ""
+    ctx = "\n".join(filter(None, [
+        f"서류 종류: {doc_kind}" if doc_kind else "",
+        f"대상자: {target}" if target else "",
+        f"지급월: {pay_month}" if pay_month else "",
+        f"특이사항: {extra_note}" if extra_note else "",
+    ]))
+    title_month = f" {pay_month}" if pay_month else ""
+    title_target = f" — {target}" if target else ""
 
     system = f"""{SYSTEM_PROMPT}
 
-[이번 요청 — 급여명세서 작성]
+[이번 요청 — {doc_kind or '급여명세서'} 작성]
 {_CATEGORY_GUIDANCE['tax_hr']}
-{month_ctx}
+{ctx}
 
 [수행 순서]
 1. get_sub_hubs() 호출
-2. 급여명세서 내용 작성 (직원별 급여 항목 표 포함, 기본급·수당·공제항목·실지급액)
-3. write_document(doc_type="payroll_doc", title="급여명세서{' ' + year_month if year_month else ''}", content="<전체 내용>") 호출
+2. {doc_kind or '급여명세서'} 내용 작성 (직원별 급여 항목 표 포함, 기본급·수당·공제항목·실지급액)
+3. write_document(doc_type="payroll_doc", title="{doc_kind or '급여명세서'}{title_month}{title_target}", content="<전체 내용>") 호출
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
@@ -870,21 +890,28 @@ async def run_tax_calendar(
     history: list[dict],
     rag_context: str = "",
     long_term_context: str = "",
-    year: str | None = None,
+    business_type: str | None = None,
+    target_year: int | str | None = None,
+    extra_note: str | None = None,
     **_kwargs,
 ) -> str:
-    year_ctx = f"\n대상 연도: {year}" if year else "\n올해 기준"
+    ctx = "\n".join(filter(None, [
+        f"사업자 형태: {business_type}" if business_type else "",
+        f"대상 연도: {target_year}" if target_year else "올해 기준",
+        f"특이사항: {extra_note}" if extra_note else "",
+    ]))
+    year_str = f" {target_year}" if target_year else ""
 
     system = f"""{SYSTEM_PROMPT}
 
 [이번 요청 — 세무 캘린더 작성]
 {_CATEGORY_GUIDANCE['tax_hr']}
-{year_ctx}
+{ctx}
 
 [수행 순서]
 1. get_sub_hubs() 호출
-2. 월별 세무 신고 일정 정리 (부가세, 종합소득세, 4대보험, 원천세 등 포함)
-3. write_document(doc_type="tax_calendar", title="세무 캘린더{' ' + year if year else ''}", content="<전체 내용>") 호출
+2. 월별 세무 신고 일정 정리 (부가세, 종합소득세, 4대보험, 원천세 등 포함; 사업자 형태 구분 적용)
+3. write_document(doc_type="tax_calendar", title="세무 캘린더{year_str}", content="<전체 내용>") 호출
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
