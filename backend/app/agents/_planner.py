@@ -53,13 +53,31 @@ _PLANNER_SYSTEM = """\
 - `ask_user(question, choices)` — 사용자에게 되묻기 (정보 부족 시)
 - `trigger_planning(opening)` — 기간별 할 일 정리 요청 시
 
-**[CRITICAL] Terminal tool 미호출 = 오류**
-terminal tool을 호출하지 않으면 시스템이 오류로 처리합니다.
-chitchat(인사, BOSS 사용법 안내)이나 refuse(범위 외 요청)는 opening에 응답을 담아 dispatch([]) 또는 ask_user로 우회하지 말고, 텍스트 응답만 작성하세요 (terminal tool 미사용).
+**[chitchat / refuse 판단 기준 — 매우 엄격하게 적용]**
+텍스트 직접 응답(terminal tool 미사용)은 오직 아래 두 경우에만 허용됩니다:
+1. 순수 인사: "안녕", "고마워", "잘 있어" 등 완전한 소셜 메시지
+2. 명백한 범위 외: BOSS와 전혀 무관한 주제 (날씨, 스포츠, 연애 등)
+
+아래는 **반드시 dispatch 해야 하는** 도메인 요청입니다. chitchat·refuse 절대 금지:
+- 법률·법령·노동·임대차·계약 관련 질문 → doc_legal_advice
+- 지원사업·보조금·정부지원 추천 → doc_subsidy_recommend
+- 행정 신청서 (사업자등록·통신판매업·구매안전서비스) → doc_admin_application
+- 계약서 작성·검토·공정성 분석 → doc_contract 또는 doc_review
+- 견적서·제안서·안내문·체크리스트 작성 → doc_estimate / doc_proposal / doc_notice / doc_checklist_guide
+- 급여명세서·원천징수·4대보험 서류 → doc_payroll_doc
+- 세무 일정·부가세·소득세 일정 캘린더 → doc_tax_calendar
+- 세법·세무 규정 자문 → doc_tax_advice
+- 채용공고·이력서·급여계산 등 채용 업무 → recruit_* 계열
+- SNS·블로그·이벤트·리뷰 마케팅 → mkt_* 계열
+- 매출·비용·POS·세금계산서 등 영업 데이터 → sales_* 계열
+
+**[RULE] capability 이름은 반드시 list_capabilities() 결과에서 가져올 것**
+절대로 추측하거나 기억에 의존해 capability 이름을 사용하지 마세요.
+도메인 요청이 확인되면 즉시 `list_capabilities()` 를 호출해 정확한 이름과 required_params 를 확인한 뒤 dispatch 하세요.
 
 **[컨텍스트 수집 가이드]**
-- 간단한 인사·거절: 도구 호출 없이 바로 텍스트 응답
-- 도메인 요청: `list_capabilities()`로 capability 이름·required 파라미터 확인 필수
+- 순수 인사·범위 외: 도구 호출 없이 바로 텍스트 응답
+- 도메인 요청: `list_capabilities()` 먼저 호출 (필수)
 - 사용자 맞춤 응답 필요 시: `get_profile()` 호출
 - 이전 대화 참조 시: `search_memory(query)` 호출
 - 특정 artifact 언급 시: `get_recent_artifacts(domain)` 호출
@@ -89,12 +107,13 @@ dispatch 또는 ask_user의 profile_updates 파라미터에 이번 턴에서 확
 
 _TERMINAL_REMINDER = """
 [경고] terminal tool을 호출하지 않았습니다.
-반드시 다음 중 하나를 즉시 호출하세요:
-- dispatch(steps, brief) — 도메인 실행
-- ask_user(question, choices) — 되묻기
-- trigger_planning() — 플래닝 모드
+이 요청은 도메인 처리가 필요합니다 — 텍스트 응답은 허용되지 않습니다.
 
-텍스트 응답만 작성하는 것은 chitchat/refuse에서만 허용됩니다.
+즉시 다음을 수행하세요:
+1. list_capabilities() 를 호출해 정확한 capability 이름 확인
+2. dispatch(steps, brief) 또는 ask_user(question, choices) 호출로 종료
+
+capability 이름을 절대 추측하지 마세요. list_capabilities() 결과만 사용하세요.
 """
 
 

@@ -155,7 +155,7 @@ def list_capabilities() -> list[dict]:
         required = set(params.get("required") or [])
         result.append({
             "name": f.get("name", ""),
-            "description": (f.get("description") or "")[:120],
+            "description": (f.get("description") or "")[:200],
             "required_params": [k for k in props if k in required],
             "optional_params": [k for k in props if k not in required],
         })
