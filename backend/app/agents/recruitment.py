@@ -1087,11 +1087,14 @@ async def _execute_generate_posting_poster(account_id: str, result_data: dict) -
         notice += f"\n생성 실패: {', '.join(errors)}"
 
     for platform, pa in generated:
+        artifact_id = pa["artifact_id"]
         title = f"{PLATFORM_LABELS.get(platform, platform)} 채용공고 포스터"
+        # 자체 백엔드 엔드포인트 사용 — Supabase Storage content-type 이슈 우회
+        serve_url = f"/api/recruitment/posters/{artifact_id}?account_id={account_id}"
         poster_json = _json.dumps({
-            "artifact_id": pa["artifact_id"],
+            "artifact_id": artifact_id,
             "title": title,
-            "public_url": pa.get("public_url") or "",
+            "public_url": serve_url,
         }, ensure_ascii=False)
         notice += f"\n\n[[EVENT_POSTER]]{poster_json}[[/EVENT_POSTER]]"
 

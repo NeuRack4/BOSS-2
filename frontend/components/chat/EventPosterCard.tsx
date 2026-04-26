@@ -11,23 +11,28 @@ export type EventPosterPayload = {
   public_url?: string;
 };
 
-const EVENT_POSTER_RE =
-  /\[\[EVENT_POSTER\]\]([\s\S]*?)\[\[\/EVENT_POSTER\]\]/;
+const EVENT_POSTER_RE = /\[\[EVENT_POSTER\]\]([\s\S]*?)\[\[\/EVENT_POSTER\]\]/g;
 
 export function extractEventPosterPayload(text: string): {
   cleaned: string;
   payload: EventPosterPayload | null;
+  payloads: EventPosterPayload[];
 } {
-  const m = EVENT_POSTER_RE.exec(text);
-  if (!m) return { cleaned: text, payload: null };
-  let payload: EventPosterPayload | null = null;
-  try {
-    payload = JSON.parse(m[1]);
-  } catch {
-    /* ignore */
+  const payloads: EventPosterPayload[] = [];
+  let cleaned = text;
+  let m: RegExpExecArray | null;
+  const re = new RegExp(EVENT_POSTER_RE.source, "g");
+  while ((m = re.exec(text)) !== null) {
+    try {
+      const p = JSON.parse(m[1]) as EventPosterPayload;
+      payloads.push(p);
+    } catch {
+      /* ignore */
+    }
+    cleaned = cleaned.replace(m[0], "");
   }
-  const cleaned = text.replace(m[0], "").trim();
-  return { cleaned, payload };
+  cleaned = cleaned.trim();
+  return { cleaned, payload: payloads[0] ?? null, payloads };
 }
 
 export function EventPosterCard({ payload }: { payload: EventPosterPayload }) {

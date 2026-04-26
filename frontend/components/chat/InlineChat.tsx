@@ -144,6 +144,7 @@ type Message = {
   salesInsight?: SalesInsightPayload;
   marketingReport?: MarketingReportPayload;
   eventPoster?: EventPosterPayload;
+  eventPosters?: EventPosterPayload[];
   eventPlanForm?: boolean;
   snsPostForm?: boolean;
   blogPostForm?: boolean;
@@ -679,8 +680,11 @@ export const InlineChat = () => {
               extractMenuChartPayload(afterShorts);
             const { cleaned: afterMktReport, payload: mktReport } =
               extractMarketingReportPayload(afterMenu);
-            const { cleaned: afterEventPoster, payload: eventPoster } =
-              extractEventPosterPayload(afterMktReport);
+            const {
+              cleaned: afterEventPoster,
+              payload: eventPoster,
+              payloads: eventPosters,
+            } = extractEventPosterPayload(afterMktReport);
             const { cleaned: afterInstagram, payload: igPayload } =
               extractInstagramPayload(afterEventPoster);
             const { cleaned: afterEventForm, hasForm: eventPlanForm } =
@@ -707,6 +711,7 @@ export const InlineChat = () => {
               menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
               eventPoster: eventPoster ?? undefined,
+              eventPosters: eventPosters.length > 0 ? eventPosters : undefined,
               instagram: igPayload ?? undefined,
               eventPlanForm: eventPlanForm || undefined,
               scheduleForm: scheduleForm || undefined,
@@ -1291,8 +1296,11 @@ export const InlineChat = () => {
           extractMenuChartPayload(afterInsight);
         const { cleaned: afterMarketing, payload: marketingReport } =
           extractMarketingReportPayload(afterMenu);
-        const { cleaned: afterEventPoster, payload: eventPoster } =
-          extractEventPosterPayload(afterMarketing);
+        const {
+          cleaned: afterEventPoster,
+          payload: eventPoster,
+          payloads: eventPosters,
+        } = extractEventPosterPayload(afterMarketing);
         const { cleaned: afterInstagram, payload: instagram } =
           extractInstagramPayload(afterEventPoster);
         const { cleaned: afterNaverBlog, payload: naverBlog } =
@@ -1325,6 +1333,7 @@ export const InlineChat = () => {
             salesInsight: salesInsight ?? undefined,
             marketingReport: marketingReport ?? undefined,
             eventPoster: eventPoster ?? undefined,
+            eventPosters: eventPosters.length > 0 ? eventPosters : undefined,
             instagram: instagram ?? undefined,
             naverBlog: naverBlog ?? undefined,
             eventPlanForm: eventPlanForm || undefined,
@@ -1865,11 +1874,18 @@ export const InlineChat = () => {
                       <MarketingReportCard payload={msg.marketingReport} />
                     </div>
                   )}
-                  {msg.role === "assistant" && msg.eventPoster && (
-                    <div className="ml-8 max-w-[85%]">
-                      <EventPosterCard payload={msg.eventPoster} />
-                    </div>
-                  )}
+                  {msg.role === "assistant" &&
+                    (
+                      msg.eventPosters ??
+                      (msg.eventPoster ? [msg.eventPoster] : [])
+                    ).map((ep, pi) => (
+                      <div
+                        key={ep.artifact_id ?? pi}
+                        className="ml-8 max-w-[85%]"
+                      >
+                        <EventPosterCard payload={ep} />
+                      </div>
+                    ))}
                   {msg.role === "assistant" && msg.eventPlanForm && (
                     <div className="ml-8">
                       <EventPlanFormCard
