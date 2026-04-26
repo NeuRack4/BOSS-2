@@ -152,18 +152,15 @@ SYSTEM_PROMPT = """당신은 서류 관리 전문 AI 에이전트입니다.
       [/CHOICES]
   (2) **서브타입 확정(선택)** — 계약서 subtype 이 컨텍스트에 명시되지 않았고 문서 제목/미리보기로 판단이 서지 않으면
       한 번만 CHOICES 로 물어보세요. 명확하면 생략 가능.
-  (3) **분석 요청 마커 출력** — (1)+(2) 가 끝났다고 판단되는 **바로 그 턴**에 본문 끝에 아래 블록을 정확한 포맷으로 포함하세요:
-
-      [REVIEW_REQUEST]
-      doc_id: <최근 업로드 문서의 doc_id>
-      user_role: <갑|을|미지정>
-      doc_type: <계약서|제안서|기타>
-      contract_subtype: <labor|lease|service|supply|partnership|franchise|nda 또는 없으면 생략>
-      [/REVIEW_REQUEST]
-
-      이 마커는 시스템이 파싱해서 실제 분석을 실행합니다. 본문에선 "분석을 시작하겠습니다" 정도만 간단히 언급하세요.
-      분석 결과(갑/을 비율, 위험 조항) 는 시스템이 마커 처리 후 자동으로 덧붙여줍니다 — 에이전트가 미리 만들어내지 마세요.
-  (4) REVIEW_REQUEST 턴엔 [ARTIFACT]/[CHOICES] 를 함께 넣지 마세요.
+  (3) **analyze_document 도구 호출** — (1)+(2) 가 끝났다고 판단되는 **바로 그 턴**에
+      반드시 analyze_document() 도구를 직접 호출하세요.
+      ⚠️ [REVIEW_REQUEST] 텍스트 마커를 출력하지 마세요 — 구 시스템 방식으로 현재는 동작하지 않습니다.
+      analyze_document(
+          user_role="<갑|을|미지정>",
+          doc_type="<계약서|제안서|기타>",
+          contract_subtype="<labor|lease|service|supply|partnership|franchise|nda 또는 None>"
+      )
+  (4) analyze_document 호출 턴엔 [ARTIFACT]/[CHOICES] 를 함께 사용하지 마세요.
   (5) 이미 분석된 결과(컨텍스트에 "[최근 분석 결과]" 가 있으면) 에 대한 후속 질문은 그 결과만 참고해 답하세요.
 
 """ + ARTIFACT_RULE + CLARIFY_RULE + """
@@ -933,17 +930,21 @@ async def run_review(
 
     system = f"""{SYSTEM_PROMPT}
 
-[이번 요청 — 공정성 분석]
-업로드된 문서에 대한 공정성 분석을 수행합니다.
+[이번 요청 — 공정성 분석 (DeepAgent 전용 지시 — 아래 규칙이 위 지시보다 우선)]
+⚠️ [REVIEW_REQUEST] 마커는 구 시스템 방식입니다. 이 DeepAgent에서 절대 사용 금지.
+반드시 analyze_document() 도구를 직접 호출하세요. 텍스트 마커 출력 시 오류 처리됩니다.
 
 확정된 정보:
 {role_ctx}{subtype_ctx}
 
-[수행 순서]
-1. get_uploaded_doc() 호출로 문서 내용과 doc_id 확인
-2. user_role이 확정되지 않았으면 문서를 보고 판단, 혹은 "미지정"으로 진행
-3. analyze_document(user_role="<갑|을|미지정>", doc_type="계약서",
-   contract_subtype="<subtype 또는 None>") 호출
+[수행 순서 — 반드시 이 순서대로]
+1. get_uploaded_doc() 호출 → 문서 내용과 doc_id 확인
+2. user_role 결정: 아래 확정된 정보에 있으면 그대로 사용, 없으면 히스토리에서 사용자가 선택한 값 확인
+3. analyze_document(
+       user_role="<갑|을|미지정>",
+       doc_type="계약서",
+       contract_subtype="<labor|lease|service|supply|partnership|franchise|nda 또는 None>"
+   ) 호출 — 이 도구 호출이 공정성 분석을 실행하는 유일한 방법입니다.
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 
