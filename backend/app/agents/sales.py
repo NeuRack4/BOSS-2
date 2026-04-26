@@ -473,6 +473,20 @@ async def run_revenue_entry(
     (기존 `_parse_sales_from_message` + `[ACTION:OPEN_SALES_TABLE]` 파이프라인 재사용).
     """
     log.info("[SALES] run_revenue_entry 진입 | account=%s", account_id)
+
+    # pending_save(kind=revenue)가 있으면 SalesInputTable Save 버튼 경로 — 저장으로 위임
+    from app.agents._sales_context import get_pending_save
+    pending = get_pending_save() or {}
+    if pending.get("kind") == "revenue" and pending.get("items"):
+        log.info("[SALES] run_revenue_entry → pending_save 감지, run_save_revenue 위임")
+        return await run_save_revenue(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
     text = (raw_text or "").strip() or message
     return await run(text, account_id, history, rag_context, long_term_context)
 
