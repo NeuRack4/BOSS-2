@@ -309,11 +309,15 @@ async def _execute_write(account_id: str, result_data: dict) -> str:
     doc_type  = result_data.get("doc_type", "")
     title     = result_data.get("title", "문서")
     content   = result_data.get("content", "")
+    if not content.strip():
+        return "서류 내용이 비어있습니다. 다시 시도해 주세요."
     subtype   = result_data.get("subtype")
     due_date  = result_data.get("due_date")
     due_label = result_data.get("due_label")
 
     subhub = _TYPE_TO_SUBHUB.get(doc_type, "Operations")
+    if doc_type and doc_type not in VALID_TYPES:
+        log.warning("[documents] unknown doc_type=%r, defaulting subhub to Operations", doc_type)
     meta_lines = [f"type: {doc_type}", f"title: {title}", f"sub_domain: {subhub}"]
     if subtype:
         meta_lines.append(f"contract_subtype: {subtype}")
@@ -322,7 +326,7 @@ async def _execute_write(account_id: str, result_data: dict) -> str:
     if due_label:
         meta_lines.append(f"due_label: {due_label}")
 
-    artifact_block = "[ARTIFACT]\n" + "\n".join(meta_lines) + "\n\n" + content + "\n[/ARTIFACT]"
+    artifact_block = "[ARTIFACT]\n" + "\n".join(meta_lines) + "\n[/ARTIFACT]\n\n" + content
     reply_with_artifact = f"서류를 작성했습니다.\n\n{artifact_block}"
 
     artifact_id = await save_artifact_from_reply(
@@ -367,6 +371,7 @@ async def _execute_analyze(account_id: str, result_data: dict) -> str:
             contract_subtype=contract_subtype,
         )
     except InvalidDocumentError as e:
+        log.warning("[documents] document analysis failed: %s", e)
         return f"문서 분석 실패: {e}"
 
     return "분석을 시작하겠습니다." + _format_review_append(result)
@@ -392,7 +397,7 @@ async def _run_documents_agent(
 ) -> str:
     """Documents DeepAgent 실행 공통 함수."""
     inject_agent_context(account_id, message, history, rag_context, long_term_context)
-    store = init_docs_result_store()
+    init_docs_result_store()
 
     model = _make_docs_model()
     messages_in = [*history[-6:], {"role": "user", "content": message}]
@@ -412,6 +417,7 @@ async def _run_documents_agent(
     if not result_data:
         log.info("[documents] account=%s no terminal tool — retry", account_id)
         try:
+            init_docs_result_store()
             out_messages = await _invoke(system_prompt + "\n\n" + _DOCS_TERMINAL_REMINDER)
         except Exception as exc:
             log.exception("[documents] retry invoke failed")
