@@ -26,6 +26,7 @@ from app.agents._artifact import (
 from app.agents._doc_templates import VALID_CONTRACT_SUBTYPES
 from app.agents._doc_review import InvalidDocumentError, dispatch_review
 from app.agents._legal import _retrieve_legal_context
+from app.agents._docx_builder import build_docx
 from deepagents import create_deep_agent
 from app.agents._agent_context import inject_agent_context
 from app.agents._documents_tools import (
@@ -306,6 +307,101 @@ async def _execute_write(account_id: str, result_data: dict) -> str:
     )
 
 
+_ADMIN_DOCX_BUCKET = "documents-uploads"
+_ADMIN_DOCX_FILENAMES = {
+    "business_registration":   "사업자등록_신청서.docx",
+    "mail_order_registration": "통신판매업_신고서.docx",
+    "purchase_safety_exempt":  "구매안전서비스_비적용대상_확인서.docx",
+}
+_ADMIN_DOCX_LABELS = {
+    "business_registration":   "사업자등록 신청서",
+    "mail_order_registration": "통신판매업 신고서",
+    "purchase_safety_exempt":  "구매안전서비스 비적용대상 확인서",
+}
+
+
+async def _execute_write_admin_docx(account_id: str, result_data: dict) -> str:
+    """write_admin_docx terminal tool 결과 처리 — DOCX 빌드 → Storage 업로드 → artifact 저장."""
+    import uuid as _uuid_mod
+    doc_type = result_data.get("doc_type", "business_registration")
+    fields_raw = result_data.get("fields_json", "{}")
+    try:
+        fields: dict[str, str] = json.loads(fields_raw)
+    except Exception:
+        return "필드 파싱에 실패했습니다. fields_json이 올바른 JSON인지 확인하세요."
+
+    try:
+        docx_bytes = await asyncio.to_thread(build_docx, fields, doc_type)
+    except Exception as exc:
+        log.exception("[documents] admin docx build failed doc_type=%s", doc_type)
+        return f"DOCX 파일 생성 중 오류가 발생했습니다: {exc}"
+
+    filename = _ADMIN_DOCX_FILENAMES.get(doc_type, "신청서.docx")
+    file_id = _uuid_mod.uuid4().hex
+    storage_key = f"{account_id}/admin_application/{file_id}/{filename}"
+
+    sb = get_supabase()
+    try:
+        sb.storage.from_(_ADMIN_DOCX_BUCKET).upload(
+            path=storage_key,
+            file=docx_bytes,
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "upsert": "false",
+            },
+        )
+        res = sb.storage.from_(_ADMIN_DOCX_BUCKET).create_signed_url(storage_key, expires_in=604800)
+        download_url = (res or {}).get("signedURL") or (res or {}).get("signed_url")
+    except Exception as exc:
+        log.exception("[documents] admin docx storage upload failed doc_type=%s", doc_type)
+        return f"파일 업로드 중 오류가 발생했습니다: {exc}"
+
+    label = _ADMIN_DOCX_LABELS.get(doc_type, "행정 신청서")
+    biz_name = fields.get("business_name", "")
+    title = f"{label} — {biz_name}" if biz_name else label
+
+    # artifact 저장 — docx_url은 URL 파서 충돌을 피해 별도 metadata UPDATE로 처리
+    artifact_block = (
+        "[ARTIFACT]\n"
+        f"type: admin_application\ntitle: {title}\nsub_domain: Operations\n"
+        "[/ARTIFACT]\n\n"
+        f"# {title}\n\n"
+        + (f"📄 **[{filename} 다운로드]({download_url})**" if download_url else "")
+    )
+    artifact_id = await save_artifact_from_reply(
+        account_id=account_id,
+        domain="documents",
+        reply=artifact_block,
+        default_title=title,
+        valid_types=VALID_TYPES,
+        type_to_subhub=_TYPE_TO_SUBHUB,
+    )
+
+    # docx_url을 metadata에 직접 PATCH
+    if artifact_id and download_url:
+        try:
+            existing = (
+                sb.table("artifacts")
+                .select("metadata")
+                .eq("id", artifact_id)
+                .single()
+                .execute()
+            )
+            meta = (existing.data or {}).get("metadata") or {}
+            meta["docx_url"] = download_url
+            meta["storage_path"] = storage_key
+            sb.table("artifacts").update({"metadata": meta}).eq("id", artifact_id).execute()
+        except Exception:
+            log.warning("[documents] admin docx metadata update failed for artifact=%s", artifact_id)
+
+    reply = f"행정 신청서 **{title}**을 작성하고 저장했습니다.\n\n"
+    if download_url:
+        reply += f"📄 **[{filename} 다운로드]({download_url})**\n\n"
+    if artifact_id:
+        reply += f"캔버스에서 확인하실 수 있어요. (artifact id: `{artifact_id}`)"
+    return reply
+
+
 async def _execute_analyze(account_id: str, result_data: dict) -> str:
     """analyze_document terminal tool 결과로 실제 공정성 분석을 실행."""
     user_role        = result_data.get("user_role", "미지정")
@@ -411,6 +507,8 @@ async def _run_documents_agent(
         return await _execute_write(account_id, result_data)
     if action == "analyze":
         return await _execute_analyze(account_id, result_data)
+    if action == "write_admin_docx":
+        return await _execute_write_admin_docx(account_id, result_data)
     return "알 수 없는 action입니다."
 
 
@@ -827,19 +925,50 @@ async def run_admin_application(
         f"특이사항: {extra_note}" if extra_note else "",
     ]))
 
+    _FIELD_GUIDE = {
+        "business_registration": (
+            "필수: business_name(상호명), representative_name(대표자 성명), "
+            "location(사업장 주소), industry_type(업태), industry_item(종목), "
+            "opening_date(개업일 YYYY-MM-DD)\n"
+            "선택: phone_business, phone_mobile, email, employees_count, "
+            "industry_code, 신청일(기본값=오늘)"
+        ),
+        "mail_order_registration": (
+            "필수: business_name, representative_name, location, phone_mobile, "
+            "email, internet_domain\n"
+            "선택: phone_business, host_server_location, business_reg_no, 신청일"
+        ),
+        "purchase_safety_exempt": (
+            "필수: representative_name, business_name\n"
+            "선택: 신청일(기본값=오늘)"
+        ),
+    }
+    field_guide_lines = "\n".join(
+        f"[{k}]\n{v}" for k, v in _FIELD_GUIDE.items()
+    )
+
     system = f"""{SYSTEM_PROMPT}
 
-[이번 요청 — 행정 신청서 작성]
+[이번 요청 — 행정 신청서 DOCX 작성]
 {_CATEGORY_GUIDANCE['operations']}
 
 지원 행정서류 종류:
 {type_labels}
 {admin_ctx}
 
+[필드 가이드 — doc_type 별 수집 필드]
+{field_guide_lines}
+
 [수행 순서]
-1. get_sub_hubs() 호출
-2. 완성된 행정 신청서 작성
-3. write_document(doc_type="admin_application", title="<행정서류명>", content="<전체 내용>") 호출
+1. doc_type이 불확실하면 히스토리/메시지에서 파악 (예: "사업자등록" → business_registration)
+2. 누락된 필수 필드를 사용자에게 질문해 수집
+3. 필드가 모두 확보되면:
+   write_admin_docx(
+       doc_type="<doc_type>",
+       fields_json='{{"business_name":"...","representative_name":"...",...}}'
+   ) 호출
+   — fields_json은 반드시 유효한 JSON 문자열이어야 함 (쌍따옴표 사용)
+   — 수집하지 못한 선택 필드는 포함하지 마세요
 """
     return await _run_documents_agent(account_id, message, history, rag_context, long_term_context, system)
 

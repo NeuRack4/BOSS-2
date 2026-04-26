@@ -1,7 +1,7 @@
 """Documents DeepAgent 도구 모음.
 
 Non-terminal: get_uploaded_doc, get_recent_analysis, get_sub_hubs
-Terminal: write_document, analyze_document
+Terminal: write_document, analyze_document, write_admin_docx
 Result store: init_docs_result_store / get_docs_result_store
 """
 from __future__ import annotations
@@ -147,6 +147,34 @@ def analyze_document(
     return "공정성 분석이 시작됩니다. 추가 도구 호출 없이 종료하세요."
 
 
+@tool
+def write_admin_docx(
+    doc_type: str,
+    fields_json: str,
+) -> str:
+    """[TERMINAL] 행정 신청서를 DOCX 파일로 생성하고 다운로드 URL을 반환합니다.
+    이 도구를 호출하면 대화가 종료됩니다 — 이후 추가 도구를 호출하지 마세요.
+
+    doc_type: business_registration | mail_order_registration | purchase_safety_exempt
+    fields_json: 수집한 필드 값을 JSON 문자열로 인코딩.
+        business_registration 필수 필드:
+          business_name(상호명), representative_name(대표자 성명),
+          location(사업장 주소), industry_type(업태), industry_item(종목),
+          opening_date(개업일 YYYY-MM-DD)
+        mail_order_registration 필수 필드:
+          business_name, representative_name, location, phone_mobile, email,
+          internet_domain
+        purchase_safety_exempt 필수 필드:
+          representative_name, business_name
+    """
+    store = _docs_result.get(None)
+    if store is not None:
+        store["action"] = "write_admin_docx"
+        store["doc_type"] = doc_type
+        store["fields_json"] = fields_json
+    return "행정 신청서 DOCX를 생성합니다. 추가 도구 호출 없이 종료하세요."
+
+
 # 편의 export
 DOCUMENTS_TOOLS = [
     get_uploaded_doc,
@@ -154,6 +182,7 @@ DOCUMENTS_TOOLS = [
     get_sub_hubs,
     write_document,
     analyze_document,
+    write_admin_docx,
 ]
 
-DOCUMENTS_TERMINAL_TOOL_NAMES = {"write_document", "analyze_document"}
+DOCUMENTS_TERMINAL_TOOL_NAMES = {"write_document", "analyze_document", "write_admin_docx"}
