@@ -12,12 +12,15 @@ Recall:
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app.core.embedder import embed_text
 from app.core.llm import chat_completion
 from app.core.supabase import get_supabase
+
+log = logging.getLogger("boss2.memory")
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -121,8 +124,10 @@ async def save_memory(
             final_content = content[:max_chars]
 
     try:
-        embedding = embed_text(final_content)
+        emb_list = embed_text(final_content)
+        emb_str = "[" + ",".join(f"{v:.10f}" for v in emb_list) + "]"
     except Exception:
+        log.exception("[memory] embed_text failed — skipping save (account=%s domain=%s)", account_id, domain)
         return
 
     sb = get_supabase()
@@ -133,22 +138,24 @@ async def save_memory(
                 "p_domain":      domain,
                 "p_digest_date": digest_date,
                 "p_content":     final_content,
-                "p_embedding":   embedding,
+                "p_embedding":   emb_str,
                 "p_importance":  importance,
             }).execute()
+            log.debug("[memory] upsert_memory_long ok account=%s domain=%s date=%s", account_id, domain, digest_date)
         except Exception:
-            pass
+            log.exception("[memory] upsert_memory_long failed account=%s domain=%s date=%s", account_id, domain, digest_date)
         return
 
     try:
         sb.table("memory_long").insert({
             "account_id": account_id,
             "content":    final_content,
-            "embedding":  embedding,
+            "embedding":  emb_str,
             "importance": importance,
         }).execute()
+        log.debug("[memory] insert ok account=%s", account_id)
     except Exception:
-        pass
+        log.exception("[memory] insert failed account=%s", account_id)
 
 
 async def log_artifact_to_memory(
@@ -199,7 +206,7 @@ async def log_artifact_to_memory(
             digest_date=digest_date,
         )
     except Exception:
-        pass
+        log.exception("[memory] log_artifact_to_memory save failed account=%s domain=%s", account_id, domain)
 
 
 async def recall(account_id: str, query: str, limit: int = 5) -> list[dict]:
@@ -209,14 +216,16 @@ async def recall(account_id: str, query: str, limit: int = 5) -> list[dict]:
         [{id, content, importance, similarity, rrf_score, domain, digest_date, created_at}, ...]
     """
     try:
-        embedding = embed_text(query)
+        emb_list = embed_text(query)
+        emb_str = "[" + ",".join(f"{v:.10f}" for v in emb_list) + "]"
     except Exception:
+        log.exception("[memory] recall embed_text failed account=%s", account_id)
         return []
     sb = get_supabase()
     try:
         result = sb.rpc("memory_search", {
             "p_account_id": account_id,
-            "p_embedding":  embedding,
+            "p_embedding":  emb_str,
             "p_query_text": query or "",
             "p_limit":      limit,
         }).execute()
