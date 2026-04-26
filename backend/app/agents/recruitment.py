@@ -1215,6 +1215,15 @@ async def run_posting_set(
     미확정 식별 정보(매장명·위치·연락처 등) 는 **환각 금지**. 부족하면
     LLM 이 `[CHOICES]` 로 되물어 오케스트레이터 단까지 돌려보내게 한다.
     """
+    _MIN_WAGE = 10320
+    _MIN_WAGE_KW = ("최저시급", "최저임금", "최저 시급", "최저 임금")
+
+    # 플래너가 "최저시급" 문자열로 전달했거나, 메시지에 최저시급 언급 + wage 미확정
+    if isinstance(wage_hourly, str) and any(kw in wage_hourly for kw in _MIN_WAGE_KW):
+        wage_hourly = _MIN_WAGE
+    elif wage_hourly is None and any(kw in message for kw in _MIN_WAGE_KW):
+        wage_hourly = _MIN_WAGE
+
     lines: list[str] = [f"[직종] {position}"]
     if business_name:
         lines.append(f"[매장명] {business_name}")
