@@ -725,6 +725,37 @@ async def _dispatch_via_planner(
         }
         mode = "dispatch"
 
+    # pending_save 가 있는데 planner 가 올바른 capability 로 dispatch 하지 않았으면 강제 override
+    # (SalesInputTable/CostInputTable Save 버튼 경로 — Planner 의 ask/chitchat/오라우팅 방지)
+    from app.agents._sales_context import get_pending_save as _get_pending_save
+    _pending_save = _get_pending_save() or {}
+    _save_kind = _pending_save.get("kind")
+    _save_items = _pending_save.get("items")
+    if _save_items:
+        _target_cap = "sales_save_revenue" if _save_kind == "revenue" else (
+            "sales_save_costs" if _save_kind == "cost" else None
+        )
+        if _target_cap and _target_cap in dispatch:
+            _dispatched_caps = (
+                {s["capability"] for s in (result.get("steps") or [])}
+                if mode == "dispatch" else set()
+            )
+            if _target_cap not in _dispatched_caps:
+                log.info(
+                    "[planner] account=%s pending_save_override kind=%s mode=%s → force %s",
+                    account_id, _save_kind, mode, _target_cap,
+                )
+                result = {
+                    "mode": "dispatch",
+                    "opening": result.get("opening") or "",
+                    "brief": result.get("brief") or "",
+                    "steps": [{"capability": _target_cap, "args": {}, "depends_on": None}],
+                    "question": "",
+                    "choices": [],
+                    "profile_updates": result.get("profile_updates") or {},
+                }
+                mode = "dispatch"
+
     opening = (result.get("opening") or "").strip()
     brief = (result.get("brief") or "").strip()
 
