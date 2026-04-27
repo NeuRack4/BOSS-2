@@ -70,7 +70,7 @@ async def parse_receipt_from_bytes(
 
     try:
         resp = await _openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[{
                 "role": "user",
                 "content": [
@@ -113,7 +113,7 @@ async def parse_menu_from_bytes(
 
     try:
         resp = await _openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[{
                 "role": "user",
                 "content": [

@@ -49,6 +49,9 @@ from app.agents._sales_tools import (
     init_sales_result_store,
     get_sales_result_store,
     get_sales_extra,
+    write_price_strategy as _tool_write_price_strategy,
+    write_customer_script as _tool_write_customer_script,
+    ask_user as _tool_ask_user,
 )
 from deepagents import create_deep_agent
 from app.core.config import settings
@@ -582,17 +585,39 @@ async def run_price_strategy(
         lines.append(f"[경쟁/시장 기준] {benchmark}")
     if goal:
         lines.append(f"[목표] {goal}")
+    info_str = "\n".join(lines)
     system += (
         "\n\n[가격 전략 작성 요청 — 정보 확정]\n"
-        "전략을 작성하고 write_price_strategy를 호출하세요.\n"
-        + "\n".join(lines)
+        "아래 마크다운 구조로 전략 문서를 작성한 뒤 write_price_strategy를 호출하세요.\n"
+        "## 현재 가격 분석\n## 시장 포지셔닝\n## 추천 가격대 및 근거\n## 실행 방안\n\n"
+        + info_str
     )
     synthetic = (
-        "가격 전략(price_strategy)을 작성해주세요. write_price_strategy로 저장하세요.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+        f"다음 정보로 가격 전략 문서를 마크다운 형식으로 작성하세요:\n{info_str}\n\n"
+        "문서 구성:\n"
+        "## 현재 가격 분석\n"
+        "## 시장 포지셔닝\n"
+        "## 추천 가격대 및 근거 (구체적 수치 포함)\n"
+        "## 실행 방안 (즉시 적용 가능한 3가지)\n\n"
+        "작성 후 write_price_strategy 도구로 저장하세요.\n"
+        f"원본 요청: {message}"
     )
-    return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
+    title = f"{target} 가격 전략"
+    await _run_sales_agent(
+        account_id, synthetic, history, rag_context, long_term_context, system,
+        tools=[_tool_write_price_strategy, _tool_ask_user],
+        fallback_result_data={
+            "action": "write_price_strategy",
+            "title": title,
+            "content": "",
+            "target": target,
+            "current_price": current_price or "",
+            "benchmark": benchmark or "",
+            "goal": goal or "",
+            "sub_domain": "Pricing",
+        },
+    )
+    return f"**{title}**을 Pricing에 저장했습니다. 칸반에서 상세 내용을 확인하세요."
 
 
 @_traceable(name="sales.run_customer_script", run_type="chain")
@@ -1572,7 +1597,10 @@ def describe(account_id: str) -> list[dict]:
                         f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
                         "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
                         "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
-                        "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
+                        "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중. "
+                        "⚠️ 이 capability 단독으로만 dispatch 할 것 — sales_revenue_entry·sales_cost_entry 등 "
+                        "다른 capability 와 함께 dispatch 하지 말 것. 사용자가 테이블에서 확인 후 저장해야 하므로 "
+                        "이 단계에서 저장까지 진행하면 안 된다."
                     ),
                     "handler": run_parse_receipt,
                     "parameters": {"type": "object", "properties": {}},
@@ -1690,7 +1718,7 @@ def _make_sales_model():
         )
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(
-        model=settings.planner_openai_model,
+        model="gpt-4o-mini",
         temperature=0.3,
         api_key=settings.openai_api_key,
     )
@@ -1704,16 +1732,19 @@ async def _run_sales_agent(
     rag_context: str,
     long_term_context: str,
     system_prompt: str,
+    tools: list | None = None,
+    fallback_result_data: dict | None = None,
 ) -> str:
     """Sales DeepAgent를 실행하고 결과를 반환합니다."""
     inject_agent_context(account_id, message, history, rag_context, long_term_context)
     init_sales_result_store()
 
     model = _make_sales_model()
+    active_tools = tools if tools is not None else SALES_TOOLS
     messages_in = [*history[-6:], {"role": "user", "content": message}]
 
     async def _invoke(sys: str) -> list:
-        agent = create_deep_agent(model=model, tools=SALES_TOOLS, system_prompt=sys)
+        agent = create_deep_agent(model=model, tools=active_tools, system_prompt=sys)
         result = await agent.ainvoke({"messages": messages_in})
         return result.get("messages", [])
 
@@ -1737,16 +1768,59 @@ async def _run_sales_agent(
 
     if not result_data:
         from langchain_core.messages import AIMessage
+        ai_text = ""
         for msg in reversed(out_messages):
             if isinstance(msg, AIMessage) and msg.content:
                 content = msg.content
                 if isinstance(content, list):
                     texts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
                     if texts:
-                        return " ".join(texts).strip()
+                        ai_text = " ".join(texts).strip()
+                        break
                 elif isinstance(content, str) and content.strip():
-                    return content.strip()
-        return "처리 결과를 반환하지 못했습니다."
+                    ai_text = content.strip()
+                    break
+
+        # fallback_result_data가 있으면 artifact 강제 저장
+        if fallback_result_data is not None:
+            # ai_text 품질 부족 시 tool 지시문 제거 후 직접 재생성
+            if len(ai_text) < 200:
+                log.info("[sales] account=%s ai_text 품질 부족(%d자) — chat_completion 재생성", account_id, len(ai_text))
+                # synthetic message에서 tool 지시문 제거한 순수 작성 요청
+                clean_prompt = message.split("write_price_strategy")[0].split("작성 후")[0].strip()
+                try:
+                    regen = await chat_completion(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "소상공인 전문 컨설턴트. 마크다운 형식으로 상세하고 구체적인 문서를 작성하세요. "
+                                    "도구 호출 지시문이나 '저장하세요' 같은 문구는 절대 포함하지 마세요."
+                                ),
+                            },
+                            {"role": "user", "content": clean_prompt},
+                        ],
+                        temperature=0.4,
+                        max_tokens=1000,
+                    )
+                    ai_text = (regen.choices[0].message.content or "").strip() or ai_text
+                except Exception:
+                    log.exception("[sales] fallback content regen failed account=%s", account_id)
+
+            # 응답에 남은 tool 지시문 제거
+            import re as _re
+            ai_text = _re.sub(
+                r"\n*위 문서를.*?저장하세요\.?\s*$",
+                "",
+                ai_text,
+                flags=_re.DOTALL | _re.IGNORECASE,
+            ).strip()
+
+            log.info("[sales] account=%s fallback_result_data 사용 — artifact 강제 저장", account_id)
+            fallback_result_data = {**fallback_result_data, "content": ai_text}
+            result_data = fallback_result_data
+        else:
+            return ai_text or "처리 결과를 반환하지 못했습니다."
 
     action = result_data.get("action")
     if action == "write_price_strategy":

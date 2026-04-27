@@ -197,7 +197,19 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
               onCardClick={handleCardClick}
             />
           )}
-          {board.sub_hubs.map((h) =>
+          {(domain === "sales"
+            ? (() => {
+                const SALES_HUB_ORDER = ["Revenue", "Costs", "Pricing", "Reports"];
+                return [...board.sub_hubs]
+                  .filter((h) => SALES_HUB_ORDER.includes(h.title))
+                  .sort(
+                    (a, b) =>
+                      SALES_HUB_ORDER.indexOf(a.title) -
+                      SALES_HUB_ORDER.indexOf(b.title),
+                  );
+              })()
+            : board.sub_hubs
+          ).map((h) =>
             domain === "recruitment" && h.title === "Managing" ? (
               <div
                 key={h.id}

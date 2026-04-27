@@ -194,7 +194,7 @@ async def _llm_four_sections(data_summary: str, period_label: str) -> dict:
 
     try:
         resp = await _openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user",   "content": user},

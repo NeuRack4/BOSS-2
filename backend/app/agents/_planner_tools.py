@@ -218,6 +218,9 @@ def dispatch(
         "depends_on": <이전 step capability 이름 또는 null> }
     brief: domain agent에 전달할 내부 지시 (사용자에게 노출 안 됨).
     opening: 사용자에게 먼저 보여줄 한두 줄 안내 (선택).
+             반드시 현재/미래형으로 작성 — 실행 결과를 예측하거나 과거형("됐습니다", "저장되었습니다", "성공적으로") 사용 금지.
+             올바른 예: "메뉴를 등록하겠습니다." / "매출을 분석하겠습니다."
+             잘못된 예: "메뉴가 성공적으로 등록되었습니다." / "저장되었습니다."
     profile_updates: 이번 턴에서 확인된 프로필 정보.
     """
     store = _planner_result.get(None)

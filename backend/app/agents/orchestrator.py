@@ -756,6 +756,39 @@ async def _dispatch_via_planner(
                 }
                 mode = "dispatch"
 
+    # receipt_payload 가 있는데 planner 가 올바른 capability 로 dispatch 하지 않았으면 강제 override
+    # (영수증 이미지 OCR / CSV / Excel 업로드 경로 — Planner 의 ask/chitchat/오라우팅 방지)
+    from app.agents._sales_context import get_pending_receipt as _get_pending_receipt
+    _pending_receipt = _get_pending_receipt() or {}
+    if _pending_receipt.get("storage_path"):
+        _mime = _pending_receipt.get("mime_type") or ""
+        _fname = (_pending_receipt.get("original_name") or "").lower()
+        _is_csv = (
+            "csv" in _mime or "excel" in _mime or "spreadsheet" in _mime
+            or _fname.endswith(".csv") or _fname.endswith(".xlsx") or _fname.endswith(".xls")
+        )
+        _receipt_cap = "sales_parse_csv" if _is_csv else "sales_parse_receipt"
+        if _receipt_cap in dispatch:
+            _dispatched_caps = (
+                {s["capability"] for s in (result.get("steps") or [])}
+                if mode == "dispatch" else set()
+            )
+            if _receipt_cap not in _dispatched_caps:
+                log.info(
+                    "[planner] account=%s receipt_override mime=%s mode=%s → force %s",
+                    account_id, _mime, mode, _receipt_cap,
+                )
+                result = {
+                    "mode": "dispatch",
+                    "opening": result.get("opening") or "",
+                    "brief": result.get("brief") or "",
+                    "steps": [{"capability": _receipt_cap, "args": {}, "depends_on": None}],
+                    "question": "",
+                    "choices": [],
+                    "profile_updates": result.get("profile_updates") or {},
+                }
+                mode = "dispatch"
+
     opening = (result.get("opening") or "").strip()
     brief = (result.get("brief") or "").strip()
 
@@ -821,6 +854,16 @@ async def _dispatch_via_planner(
         # dispatch 인데 step 이 없다 → 의미 없음. 폴백.
         log.info("[planner] account=%s dispatch without steps → fallback", account_id)
         return None
+
+    # sales_parse_receipt / sales_parse_csv 는 단독 실행 강제
+    # — 사용자가 테이블 확인 후 저장해야 하므로 다른 capability 와 함께 실행 금지
+    _SOLO_CAPS = {"sales_parse_receipt", "sales_parse_csv", "sales_menu_ocr"}
+    if any(s["capability"] in _SOLO_CAPS for s in steps) and len(steps) > 1:
+        steps = [s for s in steps if s["capability"] in _SOLO_CAPS]
+        log.info(
+            "[planner] account=%s solo_cap_override → steps reduced to %s",
+            account_id, [s["capability"] for s in steps],
+        )
 
     # capability 유효성 확인
     for s in steps:
