@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] — 2026-04-27
+
+### Added — Sales UI
+
+- **PriceStrategyView 컴포넌트** (`frontend/components/sales/PriceStrategyView.tsx`) — 가격 전략 artifact 모달 전용 렌더러. 현재 가격 분석·시장 포지셔닝·추천 가격대·실행 방안 4섹션을 컬러 라벨 배지 + 번호 원형 + 여백 스타일로 가독성 개선.
+- **NodeDetailModal price_strategy 전용 렌더링 연결** — `artifact.type === "price_strategy"` 조건 추가, `PriceStrategyView` 적용.
+
+### Changed — Sales Kanban
+
+- **Sales 칸반 서브허브 순서 고정** (`KanbanBoard.tsx`) — Revenue → Costs → Pricing → Reports 순서로 정렬. Customers 서브허브 숨김 처리.
+
+### Fixed — Sales Agent (DeepAgent 호환)
+
+- **`_run_sales_agent` tool 범위 최적화** — capability별 필요한 tool만 전달하는 `tools` 파라미터 추가. `run_price_strategy` 는 `write_price_strategy` + `ask_user` 2개만 사용해 gpt-4o-mini tool 선택 정확도 향상.
+- **`_run_sales_agent` fallback 품질 개선** — terminal tool 미호출 시 `fallback_result_data` 기반 artifact 강제 저장. AI 텍스트 200자 미만이면 `chat_completion` 재생성 후 저장. 응답에 포함된 tool 지시문 자동 제거.
+- **`run_price_strategy` 응답 개선** — 저장 후 챗봇에는 짧은 확인 메시지만 반환, 상세 내용은 칸반 카드에서 확인하도록 분리.
+- **`_insights.py` 모델 변경** — 4섹션 분석 LLM `gpt-4o` → `gpt-4o-mini`로 변경해 Rate limit 429 방지.
+- **`_ocr.py` 모델 변경** — 영수증·메뉴판 Vision 모델 `gpt-4o` → `gpt-4o-mini`로 변경.
+
+### Fixed — Orchestrator (공용)
+
+- **receipt_payload 강제 override 추가** (`orchestrator.py`) — 영수증/CSV/Excel 업로드 시 Planner가 ask/chitchat으로 오라우팅해도 `sales_parse_receipt` 또는 `sales_parse_csv`로 강제 dispatch.
+- **solo_cap override 추가** (`orchestrator.py`) — `sales_parse_receipt`, `sales_parse_csv`, `sales_menu_ocr`는 항상 단독 실행 강제. Planner가 다른 capability와 함께 dispatch해도 upload 관련 capability만 남기고 나머지 제거.
+- **Planner opening 원칙 추가** (`_planner_tools.py`) — `dispatch` tool의 `opening` 파라미터 설명에 미래형 작성 원칙 추가. 과거형("됐습니다", "저장되었습니다") 사용 금지 명시.
+
+---
+
 ## [3.1.0] — 2026-04-27
 
 ### Changed — Memory (refactor)

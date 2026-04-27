@@ -38,6 +38,7 @@ import {
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
 import MenuListPanel from "@/components/sales/MenuListPanel";
+import { PriceStrategyView } from "@/components/sales/PriceStrategyView";
 import {
   SalesInsightCard,
   type SalesInsightPayload,
@@ -1702,6 +1703,8 @@ export const NodeDetailModal = () => {
                             artifact.metadata.menu_chart as MenuAnalysisPayload
                           }
                         />
+                      ) : artifact.type === "price_strategy" ? (
+                        <PriceStrategyView content={artifact.content ?? ""} />
                       ) : artifact.type === "interview_questions" ? (
                         <InterviewQuestionsPanel
                           content={artifact.content ?? ""}
