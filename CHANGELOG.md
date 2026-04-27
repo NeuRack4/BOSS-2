@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] — 2026-04-27
+
+### Changed — Memory (refactor)
+
+- **장기기억 저장 구조 전면 개편 (v2.0)** — 도메인×날짜 단일 blob append 방식에서 artifact별 개별 markdown row 방식으로 전환. 신규 artifact 생성 시 전체 재임베딩 없이 단순 insert 1회로 저장.
+- **저장 포맷 구조화** — `## [domain] artifact_type — YYYY-MM-DD HH:MM` 헤더 + 제목 + gpt-4o-mini 요약 2~3문장의 markdown 형식으로 RAG recall 품질 개선.
+- **자동 컨텍스트 압축** — 도메인별 비압축 row 20개 초과 시 오래된 기록을 gpt-4o-mini로 자동 압축·병합하여 1개 row로 대체. 압축 row는 7일 TTL 미적용으로 장기 recall 보장.
+- **DB 마이그레이션 `038_memory_long_v2`** — `artifact_type`, `event_time`, `is_compressed` 컬럼 추가. digest 기반 unique index·`upsert_memory_long` RPC 제거. FTS 자동 업데이트 트리거 추가. `memory_search` RPC 압축 row TTL 예외 처리.
+- **에이전트 코드 무수정** — `log_artifact_to_memory()` 시그니처 동일 유지, recruitment·marketing·sales·documents 에이전트 파일 변경 없음.
+
+---
+
 ## [3.0.0] — 2026-04-26
 
 ### Changed — UI / Chat (refactor)
