@@ -111,7 +111,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
           padding: "14px 18px",
           borderBottom: "1px solid #e6e1d8",
           fontSize: 14,
-          fontWeight: 500,
+          fontWeight: 700,
         }}
       >
         All Accounts ({users.length})
@@ -137,7 +137,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                   textAlign: "left",
                   fontSize: 11,
                   color: "#9a9287",
-                  fontWeight: 500,
+                  fontWeight: 700,
                   textTransform: "uppercase" as const,
                   letterSpacing: "0.07em",
                   fontFamily: "monospace",
@@ -169,7 +169,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                   {expandedId === u.id ? "▼" : "▶"}
                 </td>
                 <td style={{ padding: "12px 18px" }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
                     {u.display_name || "—"}
                   </div>
                   <div
@@ -276,7 +276,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                             }}
                           >
                             <span
-                              style={{ fontSize: 13, fontWeight: 500, flex: 1 }}
+                              style={{ fontSize: 13, fontWeight: 700, flex: 1 }}
                             >
                               {s.title}
                             </span>
@@ -382,7 +382,7 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
             <div
               style={{
                 fontSize: 30,
-                fontWeight: 500,
+                fontWeight: 700,
                 letterSpacing: "-0.03em",
               }}
             >
@@ -416,7 +416,7 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
                       textAlign: "left",
                       fontSize: 11,
                       color: "#9a9287",
-                      fontWeight: 500,
+                      fontWeight: 700,
                       textTransform: "uppercase" as const,
                       letterSpacing: "0.07em",
                       fontFamily: "monospace",
@@ -526,7 +526,7 @@ const StatsTab = ({ stats }: { stats: StatsData }) => {
             {label}
           </div>
           <div
-            style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.03em" }}
+            style={{ fontSize: 36, fontWeight: 700, letterSpacing: "-0.03em" }}
           >
             {value ?? "—"}
           </div>
@@ -614,7 +614,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                       textAlign: "left",
                       fontSize: 11,
                       color: "#9a9287",
-                      fontWeight: 500,
+                      fontWeight: 700,
                       textTransform: "uppercase" as const,
                       letterSpacing: "0.07em",
                       fontFamily: "monospace",
@@ -684,7 +684,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                         fontSize: 13,
                         fontFamily: "monospace",
                         color: row.total_cost > 10 ? "#dc2626" : "#2e2719",
-                        fontWeight: 500,
+                        fontWeight: 700,
                       }}
                     >
                       ${row.total_cost.toFixed(3)}
@@ -780,7 +780,8 @@ export default function AdminPage() {
       style={{
         background: "#f2e9d5",
         minHeight: "100vh",
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: "var(--font-roboto), system-ui, sans-serif",
+        fontWeight: 500,
       }}
     >
       <header
@@ -877,7 +878,7 @@ export default function AdminPage() {
               <div
                 style={{
                   fontSize: 30,
-                  fontWeight: 500,
+                  fontWeight: 700,
                   letterSpacing: "-0.03em",
                 }}
               >
@@ -902,7 +903,7 @@ export default function AdminPage() {
               style={{
                 padding: "10px 20px",
                 fontSize: 14,
-                fontWeight: 500,
+                fontWeight: 700,
                 color: activeTab === key ? "#2e2719" : "#9a9287",
                 background: "none",
                 border: "none",
