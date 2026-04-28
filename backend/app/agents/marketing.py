@@ -297,7 +297,7 @@ AGENT_SYSTEM_PROMPT = (
 
 [도구 선택 가이드]
 - SNS 피드 게시물 (캡션 + 해시태그) → write_sns_post
-- 네이버 블로그 포스트 → write_blog_post
+- 네이버 블로그 포스트 → write_blog_post (시스템에 [첨부 이미지 URL] 이 있으면 image_urls_json 파라미터에 반드시 JSON 배열로 포함)
 - 고객 리뷰 답글 → write_review_reply
 - 광고 카피·배너 문구 → write_ad_copy
 - 이벤트·프로모션 기획안 → write_event_plan
@@ -1623,6 +1623,35 @@ def describe(account_id: str) -> list[dict]:
     ]
 
 
+# ── 폼 pre-routing 패턴 ──────────────────────────────────────────────────
+_BLOG_FORM_TRIGGER_RE = _re.compile(
+    r"블로그\s*(포스트|글|게시글|포스팅|작성|써줘|써\s*줘|작성해줘|만들어줘|만들어\s*줘|부탁|요청)",
+    _re.IGNORECASE,
+)
+_BLOG_TOPIC_PRESENT_RE = _re.compile(
+    r"(주제\s*[:：]|바로\s*완성|아래\s*정보로|키워드\s*[:：])",
+    _re.IGNORECASE,
+)
+
+
+def _needs_blog_post_form(message: str) -> bool:
+    """주제 없이 블로그 포스트를 요청하는 메시지인지 판별."""
+    return bool(_BLOG_FORM_TRIGGER_RE.search(message)) and not bool(
+        _BLOG_TOPIC_PRESENT_RE.search(message)
+    )
+
+
+_REPORT_TRIGGER_RE = _re.compile(
+    r"(성과\s*(리포트|보고|분석|보여|알려)|리포트\s*(보여|줘|알려|생성)|인스타(그램)?\s*(분석|성과|통계|지표|조회수|좋아요)|유튜브\s*(분석|성과|통계|지표|조회수)|마케팅\s*(어땠|성과|리포트)|이번\s*달?\s*마케팅|채널\s*(성과|분석))",
+    _re.IGNORECASE,
+)
+
+
+def _needs_marketing_report(message: str) -> bool:
+    """성과 리포트 요청 메시지인지 판별."""
+    return bool(_REPORT_TRIGGER_RE.search(message))
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 메인 run (DeepAgent 기반)
 # ──────────────────────────────────────────────────────────────────────────
@@ -1636,6 +1665,26 @@ async def run(
     image_urls: list[str] | None = None,
     allow_naver_upload: bool = False,
 ) -> str:
+    # 블로그 포스트 요청인데 주제 없음 → 폼 즉시 반환
+    if _needs_blog_post_form(message):
+        return await run_blog_post_form(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
+    # 성과 리포트 요청 → 질문 없이 바로 조회
+    if _needs_marketing_report(message):
+        return await run_marketing_report(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
     system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
 
     hubs = list_sub_hub_titles(account_id, "marketing")
@@ -1656,12 +1705,26 @@ async def run(
     if knowledge_ctx:
         system += f"\n\n{knowledge_ctx}"
 
-    if image_urls:
-        system += f"\n\n[첨부 이미지 URL]\n" + "\n".join(image_urls)
+    # 메시지 본문에서 이미지 URL 파싱 (폼 제출 시 텍스트로 포함된 경우 fallback)
+    effective_image_urls: list[str] = list(image_urls or [])
+    if not effective_image_urls:
+        _url_hits = _re.findall(
+            r'https?://\S+\.(?:jpg|jpeg|png|webp|gif)(?:\?\S*)?',
+            message, _re.IGNORECASE,
+        )
+        if not _url_hits:
+            # supabase storage URL 등 확장자 없는 경우도 커버
+            m = _re.search(r'첨부 이미지 URL[^:]*:\s*(.+)', message)
+            if m:
+                _url_hits = [u.strip() for u in m.group(1).split(',') if u.strip().startswith('http')]
+        effective_image_urls = _url_hits
+
+    if effective_image_urls:
+        system += f"\n\n[첨부 이미지 URL]\n" + "\n".join(effective_image_urls)
 
     return await _run_marketing_agent(
         account_id, message, history, rag_context, long_term_context, system,
-        extra_ctx={"image_urls": image_urls, "allow_naver_upload": allow_naver_upload},
+        extra_ctx={"image_urls": effective_image_urls or None, "allow_naver_upload": allow_naver_upload},
     )
 
 
@@ -1759,8 +1822,29 @@ async def _run_marketing_agent(
         result = await agent.ainvoke({"messages": messages_in})
         return result.get("messages", [])
 
+    async def _invoke_with_retry(sys: str, max_retries: int = 3) -> list:
+        import asyncio, re as _re2
+        for attempt in range(max_retries + 1):
+            try:
+                return await _invoke(sys)
+            except Exception as exc:
+                exc_str = str(exc)
+                is_rate_limit = "429" in exc_str or "rate_limit" in exc_str.lower() or "rate limit" in exc_str.lower()
+                if not is_rate_limit or attempt >= max_retries:
+                    raise
+                # 에러 메시지에서 대기 시간 파싱 (예: "try again in 44ms", "try again in 2s")
+                wait = 5.0 * (2 ** attempt)  # 기본 지수 백오프: 5s, 10s, 20s
+                m = _re2.search(r'try again in (\d+(?:\.\d+)?)(ms|s)', exc_str, _re2.IGNORECASE)
+                if m:
+                    val, unit = float(m.group(1)), m.group(2).lower()
+                    parsed = val / 1000 if unit == "ms" else val
+                    wait = max(parsed + 0.5, wait)
+                log.warning("[marketing] rate limit hit (attempt %d/%d), waiting %.1fs", attempt + 1, max_retries, wait)
+                await asyncio.sleep(wait)
+        raise RuntimeError("재시도 횟수 초과")
+
     try:
-        out_messages = await _invoke(system_prompt)
+        out_messages = await _invoke_with_retry(system_prompt)
     except Exception as exc:
         log.exception("[marketing] deepagent invoke failed")
         return f"마케팅 처리 중 오류가 발생했습니다: {exc}"
@@ -1771,7 +1855,7 @@ async def _run_marketing_agent(
         log.info("[marketing] account=%s no terminal tool — retry", account_id)
         try:
             init_marketing_result_store(extra=extra_ctx)
-            out_messages = await _invoke(system_prompt + "\n\n" + _MARKETING_TERMINAL_REMINDER)
+            out_messages = await _invoke_with_retry(system_prompt + "\n\n" + _MARKETING_TERMINAL_REMINDER)
         except Exception as exc:
             log.exception("[marketing] retry invoke failed")
             return f"마케팅 처리 중 오류가 발생했습니다: {exc}"
@@ -1921,11 +2005,20 @@ async def _execute_write_blog_post(account_id: str, result_data: dict) -> str:
     title = result_data.get("title") or "블로그 포스트"
     content = result_data.get("content") or ""
     tags_json = result_data.get("tags_json") or "[]"
+    image_urls_json = result_data.get("image_urls_json") or "[]"
     sub_domain = result_data.get("sub_domain") or "Blog"
 
     extra = get_marketing_extra()
-    image_urls: list[str] | None = extra.get("image_urls")
     auto_upload: bool = bool(extra.get("allow_naver_upload") or extra.get("auto_upload"))
+
+    # image_urls 우선순위: 도구 파라미터 → extra_ctx → None
+    try:
+        tool_image_urls: list[str] = _json.loads(image_urls_json)
+        if not isinstance(tool_image_urls, list):
+            tool_image_urls = []
+    except Exception:
+        tool_image_urls = []
+    image_urls: list[str] = tool_image_urls or extra.get("image_urls") or []
 
     try:
         tags = _json.loads(tags_json)

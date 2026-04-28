@@ -90,6 +90,7 @@ class NaverBlogUploadRequest(BaseModel):
     title: str
     content: str                         # 마크다운 본문
     tags: list[str] = []
+    image_urls: list[str] = []
     account_id: str
 
 
@@ -112,6 +113,7 @@ async def upload_naver_blog(req: NaverBlogUploadRequest):
             title=req.title,
             content=req.content,
             tags=req.tags,
+            image_urls=req.image_urls or None,
         )
         return NaverBlogUploadResponse(success=True, post_url=url)
     except ImportError:

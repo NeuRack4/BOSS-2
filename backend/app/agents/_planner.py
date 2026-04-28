@@ -104,13 +104,14 @@ _PLANNER_SYSTEM = """\
 - choices는 3~4개 + 마지막은 "기타 (직접 입력)" 권장
 - 업종이 없고 업종-의존 작업이면 업종을 최우선으로 물어볼 것
 
-**[폼 우선 규칙 — ask_user 금지 케이스]**
-아래 요청은 ask_user 금지 — 해당 form capability를 즉시 dispatch:
+**[폼 우선 규칙 — ask_user 절대 금지 케이스]**
+아래 요청은 ask_user 모드/도구 호출 절대 금지 — 반드시 해당 form capability를 dispatch:
+- "블로그 포스트 작성해줘", "블로그 써줘", "네이버 블로그 작성" 등 블로그 관련 요청 → 주제 유무 불문하고 mkt_blog_post_form 즉시 dispatch (메시지에 "주제:" 또는 "바로 완성해줘"가 명시된 경우만 mkt_blog_post dispatch)
 - SNS/인스타/피드 게시물 주제 불명확 → mkt_sns_post_form dispatch
-- 블로그 포스트 주제 불명확 → mkt_blog_post_form dispatch
 - 리뷰 답글 원문 없음 → mkt_review_reply_form dispatch
 - 이벤트 세부 없음 → mkt_event_form dispatch
 - 유튜브 쇼츠 → 항상 mkt_shorts_video dispatch
+- "성과 리포트", "인스타 분석", "유튜브 분석", "성과 보고", "마케팅 어땠어", "리포트 보여줘" 등 성과 조회 요청 → 추가 질문 없이 mkt_marketing_report 즉시 dispatch (period만 선택 파라미터)
 
 **[profile_updates — 반드시 이행]**
 사용자가 이번 턴에 프로필 정보를 말했으면, 다음 도구(ask_user 또는 dispatch) 호출 시 반드시 profile_updates에 포함하세요.

@@ -69,6 +69,7 @@ def write_blog_post(
     title: str,
     content: str,
     tags_json: str = "[]",
+    image_urls_json: str = "[]",
     sub_domain: str = "Blog",
 ) -> str:
     """[TERMINAL] 네이버 블로그 포스트를 저장합니다.
@@ -77,6 +78,7 @@ def write_blog_post(
     title: 블로그 포스트 제목 (이모지 포함 가능, 25자 이내)
     content: 완성된 블로그 본문 마크다운 (# 제목→소제목들→마무리 구조, 태그줄 포함)
     tags_json: 태그 목록 JSON 문자열 (예: '["맛집", "카페", "서울카페"]', # 기호 제외)
+    image_urls_json: 첨부 이미지 URL 목록 JSON 문자열 (예: '["https://...", "https://..."]'). 시스템에 이미지 URL이 제공된 경우 반드시 포함.
     sub_domain: 서브허브 이름. 기본 Blog
     """
     store = _marketing_result.get(None)
@@ -85,6 +87,7 @@ def write_blog_post(
         store["title"] = title
         store["content"] = content
         store["tags_json"] = tags_json
+        store["image_urls_json"] = image_urls_json
         store["sub_domain"] = sub_domain
     return "블로그 포스트가 저장됩니다. 추가 도구 호출 없이 종료하세요."
 

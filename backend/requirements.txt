@@ -7,7 +7,7 @@ pydantic-settings==2.6.1
 supabase>=2.11.0
 
 # OpenAI
-openai==1.57.2
+openai>=2.26.0
 
 # Anthropic (optional — planner 만 claude 로 스위치 가능)
 anthropic>=0.40.0
@@ -43,3 +43,6 @@ pillow-heif>=0.18.0
 
 # DOCX generation
 python-docx>=1.1.2
+
+# Playwright (네이버 블로그 자동 업로드)
+playwright>=1.40.0

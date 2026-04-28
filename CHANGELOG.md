@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] — 2026-04-28
+
+### Added — Marketing: 네이버 블로그 자동 업로드
+
+- **NaverBlogPostCard 게시 버튼 활성화** (`frontend/components/chat/NaverBlogPostCard.tsx`) — AI 미리보기 카드에 "네이버 블로그에 게시하기" 버튼 연결. `POST /api/marketing/blog/upload` 호출, 업로드 중 스피너·완료 링크·에러 메시지 표시.
+- **쿠키 오류 시 IntegrationsModal 바로가기** — 업로드 오류 메시지에 "쿠키"가 포함되면 "플랫폼 연결 설정 열기 →" 버튼 노출, `boss:open-integrations-modal` CustomEvent로 네이버 탭 직접 열기.
+- **IntegrationsModal `initialTab` 지원** (`frontend/components/layout/IntegrationsModal.tsx`) — `initialTab` prop 추가. `boss:open-integrations-modal` 이벤트의 `detail.tab` 값으로 특정 탭 자동 선택.
+- **Header 이벤트 구독 추가** (`frontend/components/layout/Header.tsx`) — `boss:open-integrations-modal` 이벤트 수신 후 `integrationsInitialTab` 상태로 모달에 전달.
+- **이미지 지원 (미리보기 + 실제 업로드)** — `write_blog_post` 도구에 `image_urls_json` 파라미터 추가(`_marketing_tools.py`). 메시지 내 이미지 URL 파싱 fallback 추가(`marketing.py`). `NaverBlogUploadRequest`에 `image_urls` 필드 추가(`routers/marketing.py`). 프론트 카드에서 `payload.image_urls` 업로드 요청에 포함.
+- **Playwright 네이버 자동 업로드** (`backend/app/services/naver_blog_runner.py`) — Smart Editor(SE One) Playwright 자동화. `playwright>=1.40.0` 의존성 추가(`requirements.txt`).
+- **ctypes 클립보드 직접 쓰기** — PowerShell 서브프로세스 대신 `ctypes.windll.user32/kernel32` 로 클립보드 직접 작성. 포커스 탈취 없이 전체 본문 정상 입력. PowerShell은 fallback으로만 유지.
+
+### Added — Marketing: 즉시 응답 pre-routing
+
+- **블로그 포스트 즉시 폼 표시** (`marketing.py`) — "블로그 포스트 작성해줘" 류 메시지 감지 시 질문 없이 `run_blog_post_form()` 바로 실행. `_BLOG_FORM_TRIGGER_RE` / `_BLOG_TOPIC_PRESENT_RE` 정규식으로 주제 포함 여부 판별.
+- **성과 리포트 즉시 실행** (`marketing.py`) — "인스타그램/유튜브 성과 리포트" 류 메시지 감지 시 질문 없이 `run_marketing_report()` 바로 실행.
+- **Planner 규칙 강화** (`_planner.py`) — "폼 우선 규칙"에 `mkt_blog_post_form`, `mkt_marketing_report` ask_user 금지 케이스 명시. 두 capability는 항상 즉시 dispatch.
+
+### Added — Marketing: 칸반 탭 정리
+
+- **마케팅 칸반 4개 탭으로 재편** (`KanbanBoard.tsx`) — 인스타그램 / 네이버 Blog / 유튜브 Shorts / 성과 분析 순 고정. Campaigns·Events·Reviews 컬럼 숨김(기존 아티팩트 보존). 각 컬럼에 한국어 표시명 적용(`MARKETING_DISPLAY_NAMES`).
+- **DB 마이그레이션 `039_marketing_subhubs_v2`** — 모든 계정에 "YouTube Shorts", "성과 분析" 서브허브 추가. `ensure_standard_sub_hubs` 함수를 새 표준 4개 서브허브로 갱신.
+
+### Fixed — Marketing Agent
+
+- **OpenAI 429 rate limit 지수 백오프** (`marketing.py`) — `_invoke_with_retry()` 추가. 429 오류 시 최대 3회 재시도, 대기 시간은 5s→10s→20s 또는 오류 메시지의 `try again in Xs` 파싱값 사용.
+- **네이버 블로그 본문 순서 뒤섞임 수정** (`naver_blog_runner.py`) — 세그먼트 루프 내 `focus_body_area()` + `Control+End` 제거. 자연 커서 흐름 유지로 내용 순서 정상화.
+
+---
+
 ## [3.2.0] — 2026-04-27
 
 ### Added — Sales UI
