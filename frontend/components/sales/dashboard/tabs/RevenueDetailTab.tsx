@@ -3,7 +3,7 @@
 
 import { useState } from "react"
 import { MessageCircle } from "lucide-react"
-import type { CategoryItem, PeriodActivation } from "../types"
+import type { CategoryItem, DailyData, PeriodActivation } from "../types"
 
 const fmt = (n: number) =>
   n >= 10_000 ? `${(n / 10_000).toFixed(1)}만` : n.toLocaleString()
@@ -35,13 +35,25 @@ function CategoryBar({ item, maxPct }: { item: CategoryItem; maxPct: number }) {
 
 type Props = {
   categories: CategoryItem[]
+  weeklyData: DailyData[]
   periodActivation: PeriodActivation
   onChatMessage?: (msg: string) => void
 }
 
-export function RevenueDetailTab({ categories, periodActivation, onChatMessage }: Props) {
+export function RevenueDetailTab({ categories, weeklyData, periodActivation, onChatMessage }: Props) {
   const [period, setPeriod] = useState<"today" | "week" | "month">("today")
   const maxPct = Math.max(...categories.map(c => c.pct), 1)
+
+  // 기간별 매출 합계 계산 (weeklyData 기반)
+  const todayStr = new Date().toISOString().split("T")[0]
+  const todayTotal = weeklyData.find(d => d.date === todayStr)?.amount ?? 0
+  const weekTotal = weeklyData.reduce((sum, d) => sum + d.amount, 0)
+  const estimatedCount = weeklyData.filter(d => d.isEstimated).length
+
+  const periodSummary: Record<"today" | "week", { total: number; label: string }> = {
+    today: { total: todayTotal, label: "오늘 총 매출" },
+    week: { total: weekTotal, label: "이번 주 총 매출" },
+  }
 
   const periods = [
     { key: "today" as const, label: "오늘", active: periodActivation.today, tooltip: "" },
@@ -77,10 +89,25 @@ export function RevenueDetailTab({ categories, periodActivation, onChatMessage }
         ))}
       </div>
 
-      {/* 카테고리별 매출 비중 */}
+      {/* 기간별 매출 합계 카드 (오늘/이번주) */}
+      {period !== "month" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-slate-500">{periodSummary[period].label}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800">{fmt(periodSummary[period].total)}원</p>
+          {period === "week" && estimatedCount > 0 && (
+            <p className="mt-1 text-[10px] text-slate-400">
+              🔵 {estimatedCount}일은 추정치 포함 — 매일 기록할수록 정확해져요
+            </p>
+          )}
+          <p className="mt-2 text-[10px] text-slate-300">카테고리별 분석은 이번달 기준으로 아래 표시됩니다</p>
+        </div>
+      )}
+
+      {/* 카테고리별 매출 비중 (항상 이번달 기준) */}
       {categories.length > 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-4 text-xs font-semibold text-slate-600">카테고리별 매출 비중</p>
+          <p className="mb-1 text-xs font-semibold text-slate-600">카테고리별 매출 비중</p>
+          <p className="mb-3 text-[10px] text-slate-400">이번달 기준</p>
           <div className="space-y-3">
             {categories.map(item => (
               <CategoryBar key={item.category} item={item} maxPct={maxPct} />

@@ -123,6 +123,7 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
           {activeTab === "revenue" && (
             <RevenueDetailTab
               categories={state.categories}
+              weeklyData={state.weeklyData}
               periodActivation={periodActivation}
               onChatMessage={onChatMessage}
             />

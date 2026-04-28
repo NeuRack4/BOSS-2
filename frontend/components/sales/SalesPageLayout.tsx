@@ -17,9 +17,15 @@ export const SalesPageLayout = () => {
 
   const handleChatMessage = (msg: string) => {
     const chatInput = document.querySelector<HTMLTextAreaElement>("textarea")
-    if (chatInput) {
-      chatInput.value = msg
-      chatInput.dispatchEvent(new Event("input", { bubbles: true }))
+    if (!chatInput) return
+    // React 컨트롤드 컴포넌트는 네이티브 setter + change 이벤트로 값 주입
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )?.set
+    if (nativeSetter) {
+      nativeSetter.call(chatInput, msg)
+      chatInput.dispatchEvent(new Event("change", { bubbles: true }))
       chatInput.focus()
     }
   }
