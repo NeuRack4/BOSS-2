@@ -118,7 +118,7 @@ async def get_stats(account_id: str = Query(...)):
     )
     total_agent_runs = agent_runs_res.count or 0
 
-    arts_res = sb.table("artifacts").select("metadata").execute()
+    arts_res = sb.table("artifacts").select("metadata").eq("kind", "artifact").execute()
     active_schedules = sum(
         1 for a in (arts_res.data or [])
         if (a.get("metadata") or {}).get("schedule_enabled")

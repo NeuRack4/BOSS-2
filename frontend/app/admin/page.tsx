@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/components/chat/ChatContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -88,9 +88,8 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
         </thead>
         <tbody>
           {users.map((u) => (
-            <>
+            <React.Fragment key={u.id}>
               <tr
-                key={u.id}
                 onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
                 style={{ borderBottom: "1px solid #f0ece4", cursor: "pointer", background: expandedId === u.id ? "#f5f1ea" : undefined }}
               >
@@ -142,7 +141,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                   </td>
                 </tr>
               )}
-            </>
+            </React.Fragment>
           ))}
         </tbody>
       </table>
@@ -208,7 +207,7 @@ type StatsData = {
   active_schedules: number;
 } | null;
 
-const StatsTab = ({ stats }: { accountId: string; stats: StatsData }) => {
+const StatsTab = ({ stats }: { stats: StatsData }) => {
   if (!stats) return <div style={{ padding: 24, color: "#9a9287", fontSize: 13 }}>불러오는 중…</div>;
   const items = [
     { label: "총 유저 수", value: stats.total_users },

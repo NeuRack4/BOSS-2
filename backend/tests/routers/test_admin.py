@@ -117,7 +117,7 @@ def test_stats_returns_counts(monkeypatch):
                 {"metadata": {"schedule_enabled": True}},
                 {"metadata": {"schedule_enabled": False}},
             ]
-            m.select.return_value.execute.return_value = arts_result
+            m.select.return_value.eq.return_value.execute.return_value = arts_result
         return m
 
     mock_sb.table.side_effect = table_side_effect
@@ -129,6 +129,7 @@ def test_stats_returns_counts(monkeypatch):
     data = resp.json()
     assert "total_users" in data
     assert "dau_today" in data
+    assert "total_agent_runs" in data
     assert "active_schedules" in data
 
 
