@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] — 2026-04-28
+
+### Added — Marketing: 마케팅 상세 페이지 (`/marketing`)
+
+- **마케팅 전용 상세 페이지** (`frontend/app/marketing/page.tsx`) — 기존 도메인 페이지를 `MarketingPageLayout`으로 교체. 마케팅 대시보드를 전체 페이지로 확장.
+- **`MarketingDashboard` 컴포넌트** (`frontend/components/marketing/MarketingDashboard.tsx`) — 4개 탭(개요·인스타·유튜브·할 일) 전환 UI. 탭별 고유 색상 적용(개요=slate, 인스타=pink, 유튜브=red, 할 일=orange). 접힌 상태 미니바(팔로워·도달수·구독자 순증 요약) 지원.
+- **`OverviewTab`** — Instagram(pink)·YouTube(red) 플랫폼 칩 색상 분리. KPI 카드 그리드(팔로워·도달·인상·참여 / 조회·시청·구독·좋아요). "AI 성과 분석 보기" 버튼 → 인라인 분석 패널 전환.
+- **`AnalysisPanel`** — LLM 분석 텍스트(violet 카드) + YouTube 일별 조회수·시청시간 표 + Instagram 일별 도달수 표. 전일 대비 ↑↓ 증감·백분율 표시.
+- **`InstagramTab`** — 계정 KPI + 상위 게시물 목록.
+- **`YoutubeTab`** — 채널 KPI + 상위 동영상 목록. YouTube 미연결 시 OAuth 연결 안내.
+- **`ActionsTab`** — lazy 로딩 액션 아이템 목록(이미 구현된 `MarketingReportCard`와 동일 포맷).
+- **`useMarketingData` 훅** (`frontend/components/marketing/hooks/useMarketingData.ts`) — dashboard·actions·analysis 3개 엔드포인트 lazy fetch 상태 관리.
+- **공유 타입** (`frontend/components/marketing/types.ts`) — `DailyYoutubeData`, `DailyInstagramData`, `MarketingAnalysis`, `MarketingDashboardState` 등 인터페이스 정의.
+
+### Added — Marketing Backend: 대시보드 API 엔드포인트
+
+- **`GET /api/marketing/dashboard`** — Instagram + YouTube 데이터를 병렬(`asyncio.gather`) 조회해 LLM 없이 즉시 반환.
+- **`GET /api/marketing/dashboard/actions`** — lazy 호출 시 GPT-4o로 액션 아이템 JSON 생성 후 반환.
+- **`GET /api/marketing/dashboard/analysis`** — YouTube 일별(`dimensions=day`) + Instagram 일별 도달 데이터를 병렬 조회 후 GPT-4o 분석 텍스트 생성 반환.
+- **`get_daily_analytics()`** (`backend/app/services/youtube_analytics.py`) — YouTube Analytics API `dimensions=day` 파라미터로 일별 조회수·시청시간 배열 반환.
+- **`get_daily_reach()`** (`backend/app/services/instagram_insights.py`) — 기존 `period=day` API 응답에서 일별 도달수 배열 추출.
+
+---
+
 ## [3.5.0] — 2026-04-28
 
 ### Added — Marketing: 성과 리포트 프로액티브 할 일 탭

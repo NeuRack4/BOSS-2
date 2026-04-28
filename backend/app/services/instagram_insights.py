@@ -175,6 +175,45 @@ async def get_media_insights(
     return results
 
 
+async def get_daily_reach(
+    access_token: str,
+    ig_user_id: str,
+    days: int = 30,
+) -> list[dict]:
+    """일별 도달수 데이터 (values[] 배열에서 추출)."""
+    until = datetime.now(timezone.utc)
+    since = until - timedelta(days=days)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"{_GRAPH_BASE}/{ig_user_id}/insights",
+            params={
+                "metric": "reach",
+                "period": "day",
+                "since": int(since.timestamp()),
+                "until": int(until.timestamp()),
+                "access_token": access_token,
+            },
+        )
+        data = r.json()
+
+    if "error" in data or "data" not in data:
+        return []
+
+    for metric in data["data"]:
+        if metric.get("name") == "reach":
+            values = metric.get("values", [])
+            return [
+                {
+                    "date": v.get("end_time", "")[:10],
+                    "reach": v.get("value", 0),
+                }
+                for v in values
+                if v.get("end_time")
+            ]
+    return []
+
+
 async def collect_report_data(days: int = 30, account_id: str = "") -> dict:
     """전체 인스타그램 리포트 데이터 수집."""
     # DB 우선, fallback → env

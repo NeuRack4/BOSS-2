@@ -177,6 +177,47 @@ async def get_top_videos(
     return results
 
 
+async def get_daily_analytics(account_id: str, days: int = 30) -> list[dict]:
+    """일별 조회수·시청시간 데이터 (dimensions=day)."""
+    from app.services.youtube import get_valid_token
+
+    end_date = date.today().isoformat()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    try:
+        access_token = await get_valid_token(account_id)
+    except RuntimeError:
+        return []
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            _YT_ANALYTICS_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={
+                "ids": "channel==MINE",
+                "startDate": start_date,
+                "endDate": end_date,
+                "metrics": "views,estimatedMinutesWatched",
+                "dimensions": "day",
+                "sort": "day",
+            },
+        )
+        data = r.json()
+
+    if "error" in data:
+        log.warning("[youtube_analytics] daily error: %s", data["error"].get("message", ""))
+        return []
+
+    results: list[dict] = []
+    for row in data.get("rows") or []:
+        results.append({
+            "date": str(row[0]),
+            "views": int(row[1] or 0),
+            "watch_minutes": int(row[2] or 0),
+        })
+    return results
+
+
 async def collect_report_data(account_id: str, days: int = 30) -> dict:
     """전체 유튜브 리포트 데이터 수집."""
     channel = await get_channel_analytics(account_id, days=days)

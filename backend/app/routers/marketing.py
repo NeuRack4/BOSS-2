@@ -633,6 +633,268 @@ async def get_youtube_report(
     return {"data": data, "error": data.get("channel", {}).get("error")}
 
 
+# ── 마케팅 대시보드 ───────────────────────────────────────────────────────────
+
+@router.get("/dashboard")
+async def get_marketing_dashboard(
+    account_id: str = Query(...),
+    days: int = Query(default=30, ge=7, le=90),
+):
+    """Instagram + YouTube 데이터 병렬 수집 (LLM 없이 즉시 응답)."""
+    import asyncio
+    from app.services.instagram_insights import collect_report_data as ig_collect
+    from app.services.youtube_analytics import collect_report_data as yt_collect
+
+    ig_result, yt_result = await asyncio.gather(
+        ig_collect(days=days, account_id=account_id),
+        yt_collect(account_id=account_id, days=days),
+        return_exceptions=True,
+    )
+    if isinstance(ig_result, Exception):
+        ig_result = {"error": str(ig_result)}
+    if isinstance(yt_result, Exception):
+        yt_result = {"error": str(yt_result)}
+
+    return {
+        "data": {"instagram": ig_result, "youtube": yt_result, "period_days": days},
+        "error": None,
+    }
+
+
+@router.get("/dashboard/analysis")
+async def get_marketing_analysis(
+    account_id: str = Query(...),
+    days: int = Query(default=30, ge=7, le=90),
+):
+    """일별 데이터 + LLM 분석 텍스트 반환 (개요 탭 인페이지 표시용)."""
+    import asyncio, json as _json
+    from app.services.instagram_insights import collect_report_data as ig_collect, get_daily_reach
+    from app.services.youtube_analytics import collect_report_data as yt_collect, get_daily_analytics
+    from app.core.llm import chat_completion
+
+    # 기존 집계 데이터 + 일별 데이터 병렬 수집
+    ig_result, yt_result, yt_daily = await asyncio.gather(
+        ig_collect(days=days, account_id=account_id),
+        yt_collect(account_id=account_id, days=days),
+        get_daily_analytics(account_id=account_id, days=days),
+        return_exceptions=True,
+    )
+    if isinstance(ig_result, Exception):
+        ig_result = {"error": str(ig_result)}
+    if isinstance(yt_result, Exception):
+        yt_result = {"error": str(yt_result)}
+    if isinstance(yt_daily, Exception):
+        yt_daily = []
+
+    ig_ok = "error" not in ig_result
+    yt_ok = "error" not in yt_result.get("channel", {})
+
+    # Instagram 일별 도달수
+    ig_daily: list[dict] = []
+    if ig_ok:
+        creds_res = None
+        access_token = ""
+        ig_user_id = ""
+        try:
+            from app.core.supabase import get_supabase
+            sb = get_supabase()
+            creds_res = (
+                sb.table("platform_credentials")
+                .select("credentials")
+                .eq("account_id", account_id)
+                .eq("platform", "instagram")
+                .execute()
+            )
+            if creds_res.data:
+                c = creds_res.data[0]["credentials"]
+                access_token = c.get("meta_access_token", "")
+                ig_user_id = c.get("instagram_user_id", "")
+        except Exception:
+            pass
+        if not access_token or not ig_user_id:
+            from app.core.config import settings
+            access_token = access_token or settings.meta_access_token or ""
+            ig_user_id = ig_user_id or settings.instagram_user_id or ""
+        if access_token and ig_user_id:
+            try:
+                ig_daily = await get_daily_reach(access_token, ig_user_id, days=days)
+            except Exception:
+                ig_daily = []
+
+    # LLM 분석용 데이터 요약
+    summary_lines = [f"[분석 기간] 최근 {days}일"]
+
+    if ig_ok:
+        acc = ig_result.get("account", {})
+        summary_lines.append(
+            f"[Instagram 집계]\n- 팔로워: {acc.get('followers_count', 0):,}명\n"
+            f"- 기간 도달수: {acc.get('reach', 0):,}회\n"
+            f"- 기간 인상수: {acc.get('impressions', 0):,}회\n"
+            f"- 평균 engagement: {ig_result.get('avg_engagement', 0):.1f}"
+        )
+        if ig_daily:
+            daily_str = ", ".join(f"{d['date']}:{d['reach']}" for d in ig_daily[-7:])
+            summary_lines.append(f"[Instagram 최근 7일 도달수] {daily_str}")
+
+    if yt_ok:
+        ch = yt_result.get("channel", {})
+        summary_lines.append(
+            f"[YouTube 집계]\n- 조회수: {ch.get('views', 0):,}회\n"
+            f"- 시청시간: {ch.get('watch_minutes', 0):,}분\n"
+            f"- 구독자 순증: {ch.get('net_subscribers', 0):+d}명"
+        )
+        if yt_daily:
+            daily_str = ", ".join(f"{d['date']}:{d['views']}회/{d['watch_minutes']}분" for d in yt_daily[-7:])
+            summary_lines.append(f"[YouTube 최근 7일 일별] {daily_str}")
+
+    data_summary = "\n\n".join(summary_lines)
+
+    analysis_prompt = (
+        f"소상공인의 마케팅 성과 데이터를 분석해서 핵심 인사이트를 전달해주세요.\n\n"
+        f"{data_summary}\n\n"
+        "다음 순서로 작성해주세요:\n"
+        "1. **전체 트렌드 요약** — 기간 전체 흐름을 2~3문장으로\n"
+        "2. **주목할 날짜·구간** — 급증하거나 저조한 날이 있다면 언급 (데이터 기반)\n"
+        "3. **플랫폼별 인사이트** — Instagram/YouTube 각각 1~2가지\n"
+        "4. **다음 주 제안** — 데이터에서 도출한 실행 팁 2가지\n\n"
+        "소상공인이 이해하기 쉬운 언어로, 마크다운 형식으로 작성하세요. "
+        "데이터가 없는 플랫폼은 해당 섹션 생략."
+    )
+
+    try:
+        resp = await chat_completion(
+            messages=[{"role": "user", "content": analysis_prompt}],
+            model="gpt-4o",
+            temperature=0.4,
+        )
+        analysis_text = resp.choices[0].message.content or ""
+    except Exception:
+        log.exception("get_marketing_analysis LLM call failed")
+        analysis_text = "분석 중 오류가 발생했습니다."
+
+    return {
+        "data": {
+            "text": analysis_text,
+            "youtube_daily": yt_daily if not isinstance(yt_daily, Exception) else [],
+            "instagram_daily": ig_daily,
+            "period_days": days,
+        },
+        "error": None,
+    }
+
+
+@router.get("/dashboard/actions")
+async def get_marketing_dashboard_actions(
+    account_id: str = Query(...),
+    days: int = Query(default=30, ge=7, le=90),
+):
+    """마케팅 할 일 아이템 LLM 생성 (lazy — 탭 클릭 시 호출)."""
+    import asyncio, json as _json, re as _re
+    from datetime import date
+    from app.services.instagram_insights import collect_report_data as ig_collect
+    from app.services.youtube_analytics import collect_report_data as yt_collect
+    from app.core.llm import chat_completion
+    from app.agents.marketing import _get_upcoming_holidays
+
+    ig_result, yt_result = await asyncio.gather(
+        ig_collect(days=days, account_id=account_id),
+        yt_collect(account_id=account_id, days=days),
+        return_exceptions=True,
+    )
+    if isinstance(ig_result, Exception):
+        ig_result = {"error": str(ig_result)}
+    if isinstance(yt_result, Exception):
+        yt_result = {"error": str(yt_result)}
+
+    ig_ok = "error" not in ig_result
+    yt_ok = "error" not in yt_result.get("channel", {})
+
+    summary_parts = [f"[분석 기간] 최근 {days}일"]
+    if ig_ok:
+        acc = ig_result.get("account", {})
+        top = ig_result.get("top_posts", [])
+        summary_parts.append(
+            f"[Instagram]\n- 팔로워: {acc.get('followers_count', 0):,}명\n"
+            f"- 기간 도달수: {acc.get('reach', 0):,}회\n"
+            f"- 평균 engagement: {ig_result.get('avg_engagement', 0):.1f}\n"
+            f"- 최고 게시물 TOP3: {[p.get('caption', '') for p in top]}"
+        )
+    else:
+        summary_parts.append(f"[Instagram] 데이터 없음")
+
+    if yt_ok:
+        ch = yt_result.get("channel", {})
+        summary_parts.append(
+            f"[YouTube]\n- 조회수: {ch.get('views', 0):,}회\n"
+            f"- 시청시간: {ch.get('watch_minutes', 0):,}분\n"
+            f"- 구독자 순증: {ch.get('net_subscribers', 0):+d}명"
+        )
+    else:
+        summary_parts.append(f"[YouTube] 데이터 없음")
+
+    data_summary = "\n\n".join(summary_parts)
+
+    _today = date.today()
+    today_str = _today.strftime("%Y년 %m월 %d일")
+    upcoming_holidays = _get_upcoming_holidays(_today, days_ahead=60)
+    if upcoming_holidays:
+        holiday_lines = "\n".join(
+            f"  - {h['name']} ({h['date']}, {h['days_left']}일 후)"
+            for h in upcoming_holidays
+        )
+        holiday_section = f"\n[다가오는 기념일 (60일 이내)]\n{holiday_lines}\n"
+    else:
+        holiday_section = ""
+
+    available_categories = ["content", "general"]
+    if ig_ok:
+        available_categories.insert(0, "instagram")
+    if yt_ok:
+        available_categories.insert(0, "youtube")
+    available_str = ", ".join(f'"{c}"' for c in available_categories)
+
+    prompt = (
+        f"오늘은 {today_str}입니다. 소상공인의 마케팅 성과 데이터를 바탕으로 "
+        f"지금 당장 실행 가능한 구체적인 마케팅 할 일 3~5개를 기획해주세요.\n\n"
+        f"{data_summary}{holiday_section}\n"
+        "각 할 일은 실제로 실행에 옮길 수 있는 구체적인 아이디어여야 합니다. "
+        "플랫폼 데이터가 없더라도 콘텐츠 전략·이벤트 기획 등 일반 마케팅 액션을 반드시 3개 이상 생성하세요.\n"
+        "다가오는 기념일이 있다면 해당 날짜에 맞춘 이벤트를 우선 제안하세요.\n\n"
+        "아래 JSON 배열 형식으로만 응답하세요 (다른 텍스트 없이):\n"
+        '[{"priority":"high","category":"instagram","title":"액션 제목 (20자 이내)",'
+        '"target":"타겟층","period":"실행 기간",'
+        '"idea":"구체적인 이벤트·콘텐츠 아이디어 (2~3문장)",'
+        '"steps":["단계1","단계2","단계3"],'
+        '"expected":"기대 효과","why":"이 액션이 필요한 이유"}]\n\n'
+        f'priority: "high"(이번 주), "medium"(이번 달), "low"(여유 있을 때)\n'
+        f'category 허용값: {available_str}\n'
+        'steps는 2~4개. JSON 외 텍스트 절대 포함하지 마세요.'
+    )
+
+    try:
+        resp = await chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model="gpt-4o",
+            temperature=0.3,
+        )
+        raw = (resp.choices[0].message.content or "[]").strip()
+        code_block = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+        if code_block:
+            raw = code_block.group(1).strip()
+        else:
+            arr_match = _re.search(r"\[[\s\S]*\]", raw)
+            if arr_match:
+                raw = arr_match.group(0)
+        actions = _json.loads(raw)
+        if not isinstance(actions, list):
+            actions = []
+    except Exception:
+        log.exception("get_marketing_dashboard_actions failed")
+        actions = []
+
+    return {"data": actions, "error": None}
+
+
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────
 
 @router.get("/subsidies")

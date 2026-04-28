@@ -1,5 +1,5 @@
-import { DomainPage } from "@/components/bento/DomainPage";
+import { MarketingPageLayout } from "@/components/marketing/MarketingPageLayout";
 
 export default function MarketingPage() {
-  return <DomainPage domain="marketing" />;
+  return <MarketingPageLayout />;
 }
