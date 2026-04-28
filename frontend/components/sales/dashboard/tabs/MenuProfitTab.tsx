@@ -126,6 +126,38 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
   )
 }
 
+// ── 4사분면 안내 (접기/펼치기) ────────────────────────────────────────────────
+function QuadrantGuide() {
+  const [open, setOpen] = useState(false)
+  const items = [
+    { badge: "효자 메뉴",   color: "text-green-600",  desc: "가격 낮음 + 마진 높음 — 많이 팔수록 이익" },
+    { badge: "프리미엄",    color: "text-purple-600", desc: "가격 높음 + 마진 높음 — 핵심 수익원" },
+    { badge: "볼륨 메뉴",   color: "text-blue-600",   desc: "가격 낮음 + 마진 낮음 — 고객 유입용" },
+    { badge: "재검토 필요", color: "text-red-500",    desc: "가격 높음 + 마진 낮음 — 원가 절감 또는 가격 조정 필요" },
+  ]
+  return (
+    <div className="mt-2 border-t border-slate-100 pt-2">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between text-[10px] text-slate-400 hover:text-slate-500"
+      >
+        <span>4사분면 분류 기준이란?</span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {items.map(item => (
+            <div key={item.badge} className="flex gap-2 text-[10px] text-slate-400">
+              <span className={`w-20 shrink-0 font-semibold ${item.color}`}>{item.badge}</span>
+              <span>{item.desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── 4사분면 평가 ───────────────────────────────────────────────────────────────
 function QuadrantBadge({ menu, avgPrice, avgMargin }: {
   menu: MenuItem; avgPrice: number; avgMargin: number
@@ -299,27 +331,34 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           <p className="text-[10px] text-slate-500 mb-3">
             평균 판매가 {fmt(Math.round(avgPrice))}원 / 평균 마진 {avgMargin.toFixed(0)}% 기준
           </p>
+
           {/* 컬럼 레이블 */}
           <div className="flex items-center gap-2 px-2 pb-1">
             <div className="flex-1" />
-            <p className="shrink-0 text-[10px] text-slate-400">가격 | 마진율</p>
+            <div className="flex gap-0">
+              <span className="w-16 text-right text-[10px] text-slate-400">판매가</span>
+              <span className="w-10 text-right text-[10px] text-slate-400">마진</span>
+            </div>
           </div>
 
           {menusWithMargin.map(menu => (
             <div key={menu.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
               <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
               <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
-              <span className="w-20 shrink-0 text-right text-[10px] text-slate-500">{fmt(menu.price)}원</span>
-              <span className="w-14 shrink-0 text-right text-xs font-bold">
-                <span className={MARGIN_COLOR(menu.margin_rate ?? 0).text}>
+              <div className="flex shrink-0 gap-0">
+                <span className="w-16 text-right text-[10px] text-slate-500">{fmt(menu.price)}원</span>
+                <span className={`w-10 text-right text-xs font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
                   {menu.margin_rate?.toFixed(0)}%
                 </span>
-              </span>
+              </div>
             </div>
           ))}
           {menusWithMargin.length === 0 && (
             <p className="py-4 text-center text-xs text-slate-400">원가를 입력하면 분석이 가능해요</p>
           )}
+
+          {/* 4사분면 설명 — 접기/펼치기 */}
+          <QuadrantGuide />
         </div>
       )}
 
