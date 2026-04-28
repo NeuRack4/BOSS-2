@@ -32,7 +32,7 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
 
   return (
     <div ref={containerRef} className="w-full">
-      <svg width={width} height={chartH + 34}>
+      <svg width={width} height={chartH + 44}>
         {data.map((d, i) => {
           const barH = Math.max((d.amount / maxAmount) * chartH, d.amount > 0 ? 3 : 0)
           const x = 16 + i * barW + barW * 0.15
@@ -57,9 +57,10 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
               {d.amount > 0 && (
                 <text
                   x={x + (barW * 0.7) / 2}
-                  y={Math.max(y - 3, 8)}
+                  y={Math.max(y - 5, 12)}
                   textAnchor="middle"
-                  fontSize={8}
+                  fontSize={11}
+                  fontWeight="500"
                   fill={d.isEstimated ? "#94a3b8" : "#15803d"}
                 >
                   {amountLabel}
@@ -67,10 +68,11 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
               )}
               {/* 요일 레이블 — 막대 아래 */}
               <text
-                x={x + (barW * 0.7) / 2} y={chartH + 16}
+                x={x + (barW * 0.7) / 2} y={chartH + 20}
                 textAnchor="middle"
-                fontSize={10}
-                fill="#94a3b8"
+                fontSize={12}
+                fontWeight="500"
+                fill="#64748b"
               >
                 {label}
               </text>
