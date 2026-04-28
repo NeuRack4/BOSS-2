@@ -1,6 +1,7 @@
 // frontend/components/sales/dashboard/tabs/CostTab.tsx
 "use client"
 
+import { useState } from "react"
 import { MessageCircle } from "lucide-react"
 import type { OverviewData } from "../types"
 
@@ -54,6 +55,13 @@ type Props = {
 }
 
 export function CostTab({ overview, onChatMessage }: Props) {
+  const [copied, setCopied] = useState(false)
+  const handleCTA = (msg: string) => {
+    onChatMessage?.(msg)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   if (!overview) {
     return (
       <div className="p-8 text-center">
@@ -73,11 +81,15 @@ export function CostTab({ overview, onChatMessage }: Props) {
       <ProfitRateBar salesTotal={overview.sales.total} costsTotal={overview.costs.total} />
 
       <button
-        onClick={() => onChatMessage?.("비용을 줄일 수 있는 방법을 알려줘")}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 py-3 text-sm font-medium text-green-700 transition hover:bg-green-100"
+        onClick={() => handleCTA("비용을 줄일 수 있는 방법을 알려줘")}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition ${
+          copied
+            ? "border-green-400 bg-green-500 text-white"
+            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+        }`}
       >
         <MessageCircle className="h-4 w-4" />
-        비용 절감 방법 물어보기
+        {copied ? "✓ 복사됨 — 대시보드 채팅창에 붙여넣기하세요" : "비용 절감 방법 물어보기"}
       </button>
     </div>
   )

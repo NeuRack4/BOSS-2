@@ -138,8 +138,12 @@ type Props = {
 }
 
 export function OverviewTab({ state, onChatMessage }: Props) {
+  const [copied, setCopied] = useState(false)
+
   const handleChat = (msg: string) => {
-    if (onChatMessage) onChatMessage(msg)
+    onChatMessage?.(msg)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   // Stage 0: 온보딩
@@ -215,10 +219,14 @@ export function OverviewTab({ state, onChatMessage }: Props) {
       {/* 하단: 챗 CTA */}
       <button
         onClick={() => handleChat("오늘 매출 수치에 대해 분석해줘")}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 py-3 text-sm font-medium text-green-700 transition hover:bg-green-100"
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition ${
+          copied
+            ? "border-green-400 bg-green-500 text-white"
+            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+        }`}
       >
         <MessageCircle className="h-4 w-4" />
-        이 수치에 대해 Sales AI에게 물어보기
+        {copied ? "✓ 클립보드에 복사됐어요 — 대시보드 채팅창에 붙여넣기하세요" : "이 수치에 대해 Sales AI에게 물어보기"}
       </button>
     </div>
   )

@@ -16,20 +16,16 @@ export const SalesPageLayout = () => {
   const { userId } = useChat()
 
   const handleChatMessage = (msg: string) => {
-    // InlineChat textarea를 placeholder로 정확히 타겟팅
-    const chatInput = document.querySelector<HTMLTextAreaElement>(
-      'textarea[placeholder="Type a message…"]',
-    )
-    if (!chatInput) return
-    const nativeSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype,
-      "value",
-    )?.set
-    if (nativeSetter) {
-      nativeSetter.call(chatInput, msg)
-      chatInput.dispatchEvent(new Event("input", { bubbles: true }))
-      chatInput.focus()
-    }
+    // /sales 페이지엔 InlineChat이 없으므로 클립보드 복사 방식 사용
+    navigator.clipboard.writeText(msg).catch(() => {
+      // clipboard API 미지원 환경 fallback
+      const ta = document.createElement("textarea")
+      ta.value = msg
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand("copy")
+      document.body.removeChild(ta)
+    })
   }
 
   return (

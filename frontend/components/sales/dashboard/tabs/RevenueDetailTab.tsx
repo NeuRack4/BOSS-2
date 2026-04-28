@@ -100,6 +100,12 @@ type Props = {
 
 export function RevenueDetailTab({ categories, weeklyData, periodActivation, onChatMessage }: Props) {
   const [period, setPeriod] = useState<"today" | "week" | "month">("today")
+  const [copied, setCopied] = useState(false)
+  const handleCTA = (msg: string) => {
+    onChatMessage?.(msg)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const todayStr = new Date().toISOString().split("T")[0]
   const todayEntry = weeklyData.find(d => d.date === todayStr)
@@ -146,18 +152,30 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
       {/* 오늘 뷰 */}
       {period === "today" && (
         <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">오늘 총 매출</p>
-          <p className="mt-1 text-2xl font-bold text-slate-800">{fmt(todayTotal)}원</p>
-          {weekAvg > 0 && (
-            <p className={`mt-1 text-xs font-medium ${todayTotal >= weekAvg ? "text-blue-600" : "text-orange-500"}`}>
-              이번주 일평균 {fmt(weekAvg)}원 대비{" "}
-              {todayTotal >= weekAvg
-                ? `+${fmt(todayTotal - weekAvg)}원`
-                : `-${fmt(weekAvg - todayTotal)}원`}
-            </p>
-          )}
-          {todayTotal === 0 && (
-            <p className="mt-2 text-xs text-slate-400">오늘 매출을 챗봇으로 기록해보세요</p>
+          {todayTotal > 0 ? (
+            <>
+              <p className="text-xs font-medium text-slate-500">오늘 총 매출</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800">{fmt(todayTotal)}원</p>
+              {weekAvg > 0 && (
+                <p className={`mt-1 text-xs font-medium ${todayTotal >= weekAvg ? "text-blue-600" : "text-orange-500"}`}>
+                  이번주 일평균 {fmt(weekAvg)}원 대비{" "}
+                  {todayTotal >= weekAvg
+                    ? `+${fmt(todayTotal - weekAvg)}원 🔼`
+                    : `-${fmt(weekAvg - todayTotal)}원 🔽`}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-2xl">☀️</p>
+              <p className="mt-2 text-sm font-medium text-slate-600">오늘 아직 매출 기록이 없어요</p>
+              <p className="mt-1 text-xs text-slate-400">대시보드 채팅창에서 오늘 매출을 입력해보세요</p>
+              {weekAvg > 0 && (
+                <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-600">
+                  이번주 일평균 {fmt(weekAvg)}원 — 오늘도 기록하면 추이를 볼 수 있어요
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -165,17 +183,32 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
       {/* 이번주 뷰 */}
       {period === "week" && (
         <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex justify-between">
-            <div>
-              <p className="text-xs font-medium text-slate-500">이번 주 총 매출</p>
-              <p className="mt-0.5 text-2xl font-bold text-slate-800">{fmt(weekTotal)}원</p>
+          {weekTotal > 0 ? (
+            <>
+              <div className="mb-3 flex justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">이번 주 총 매출</p>
+                  <p className="mt-0.5 text-2xl font-bold text-slate-800">{fmt(weekTotal)}원</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-medium text-slate-500">일평균</p>
+                  <p className="mt-0.5 text-lg font-semibold text-blue-600">{fmt(weekAvg)}원</p>
+                </div>
+              </div>
+              <WeekMiniChart data={weeklyData} />
+              {weeklyData.filter(d => !d.isEstimated).length < 7 && (
+                <p className="mt-2 text-[10px] text-slate-400">
+                  실제 기록 {weeklyData.filter(d => !d.isEstimated).length}일 / 회색 막대는 평균 추정치
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-2xl">📊</p>
+              <p className="mt-2 text-sm font-medium text-slate-600">이번주 매출 기록이 없어요</p>
+              <p className="mt-1 text-xs text-slate-400">매일 매출을 기록하면 주간 추이를 분석할 수 있어요</p>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-medium text-slate-500">일평균</p>
-              <p className="mt-0.5 text-lg font-semibold text-blue-600">{fmt(weekAvg)}원</p>
-            </div>
-          </div>
-          <WeekMiniChart data={weeklyData} />
+          )}
         </div>
       )}
 
@@ -202,11 +235,15 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
 
       {/* 챗 CTA */}
       <button
-        onClick={() => onChatMessage?.("매출 데이터를 자세히 분석해줘")}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+        onClick={() => handleCTA("매출 데이터를 자세히 분석해줘")}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition ${
+          copied
+            ? "border-blue-400 bg-blue-500 text-white"
+            : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+        }`}
       >
         <MessageCircle className="h-4 w-4" />
-        이 데이터 분석 요청하기
+        {copied ? "✓ 복사됨 — 대시보드 채팅창에 붙여넣기하세요" : "이 데이터 분석 요청하기"}
       </button>
     </div>
   )

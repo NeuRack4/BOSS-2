@@ -1,6 +1,7 @@
 // frontend/components/sales/dashboard/tabs/MenuProfitTab.tsx
 "use client"
 
+import { useState } from "react"
 import { MessageCircle } from "lucide-react"
 import type { CategoryItem } from "../types"
 
@@ -13,6 +14,12 @@ type Props = {
 }
 
 export function MenuProfitTab({ categories, onChatMessage }: Props) {
+  const [copied, setCopied] = useState(false)
+  const handleCTA = (msg: string) => {
+    onChatMessage?.(msg)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
   if (categories.length === 0) {
     return (
       <div className="space-y-4 p-4">
@@ -58,11 +65,15 @@ export function MenuProfitTab({ categories, onChatMessage }: Props) {
       </div>
 
       <button
-        onClick={() => onChatMessage?.("수익성 개선 전략을 알려줘")}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 py-3 text-sm font-medium text-green-700 transition hover:bg-green-100"
+        onClick={() => handleCTA("수익성 개선 전략을 알려줘")}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition ${
+          copied
+            ? "border-green-400 bg-green-500 text-white"
+            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+        }`}
       >
         <MessageCircle className="h-4 w-4" />
-        수익성 개선 전략 물어보기
+        {copied ? "✓ 복사됨 — 대시보드 채팅창에 붙여넣기하세요" : "수익성 개선 전략 물어보기"}
       </button>
     </div>
   )
