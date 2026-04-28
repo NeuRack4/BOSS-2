@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -235,7 +235,7 @@ export default function MenuListPanel({ accountId }: MenuListPanelProps) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchMenus = useCallback(() => {
     if (!accountId) return;
     fetch(`${API}/api/menus?account_id=${accountId}&active_only=true`)
       .then((r) => r.json())
@@ -246,6 +246,16 @@ export default function MenuListPanel({ accountId }: MenuListPanelProps) {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [accountId]);
+
+  // 초기 로딩
+  useEffect(() => { fetchMenus(); }, [fetchMenus]);
+
+  // 챗봇으로 메뉴 추가/변경 시 자동 재fetch
+  useEffect(() => {
+    const handler = () => fetchMenus();
+    window.addEventListener("menu-data-updated", handler);
+    return () => window.removeEventListener("menu-data-updated", handler);
+  }, [fetchMenus]);
 
   // 원가 저장 후 로컬 상태 즉시 반영 (API 재호출 없이)
   const handleCostSaved = (id: string, costPrice: number) => {

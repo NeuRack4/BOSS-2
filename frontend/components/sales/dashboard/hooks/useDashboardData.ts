@@ -136,6 +136,8 @@ export function useDashboardData(accountId: string) {
         loading: false,
         error: false,
       })
+      // 모달의 MenuListPanel에도 변경 신호 전달
+      window.dispatchEvent(new CustomEvent("menu-data-updated"))
     } catch {
       setState(prev => ({ ...prev, loading: false, error: true }))
     }
