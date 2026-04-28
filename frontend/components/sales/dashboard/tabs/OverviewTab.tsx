@@ -32,13 +32,17 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
 
   return (
     <div ref={containerRef} className="w-full">
-      <svg width={width} height={chartH + 24}>
+      <svg width={width} height={chartH + 34}>
         {data.map((d, i) => {
           const barH = Math.max((d.amount / maxAmount) * chartH, d.amount > 0 ? 3 : 0)
           const x = 16 + i * barW + barW * 0.15
           const y = chartH - barH
           const dayIdx = new Date(d.date).getDay()
           const label = dayLabels[(dayIdx + 6) % 7]
+
+          const amountLabel = d.amount >= 10_000
+            ? `${(d.amount / 10_000).toFixed(1)}만`
+            : d.amount > 0 ? `${d.amount.toLocaleString()}` : ""
 
           return (
             <g key={d.date}>
@@ -49,6 +53,19 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
                 fill={d.isEstimated ? "#94a3b8" : "#22c55e"}
                 opacity={d.isEstimated ? 0.45 : 1}
               />
+              {/* 금액 레이블 — 막대 위 */}
+              {d.amount > 0 && (
+                <text
+                  x={x + (barW * 0.7) / 2}
+                  y={Math.max(y - 3, 8)}
+                  textAnchor="middle"
+                  fontSize={8}
+                  fill={d.isEstimated ? "#94a3b8" : "#15803d"}
+                >
+                  {amountLabel}
+                </text>
+              )}
+              {/* 요일 레이블 — 막대 아래 */}
               <text
                 x={x + (barW * 0.7) / 2} y={chartH + 16}
                 textAnchor="middle"
@@ -71,11 +88,25 @@ function WeeklyBarChart({ data }: { data: { date: string; amount: number; isEsti
 }
 
 // ── 목표 달성률 링 ─────────────────────────────────────────────────────────────
-function GoalRing({ percent }: { percent: number }) {
+function GoalRing({ percent, hasGoal }: { percent: number; hasGoal: boolean }) {
   const r = 38
   const circumference = 2 * Math.PI * r
   const safePercent = Math.min(Math.max(percent, 0), 100)
   const dashoffset = circumference - (safePercent / 100) * circumference
+
+  if (!hasGoal) {
+    return (
+      <svg width={96} height={96} viewBox="0 0 96 96">
+        <circle
+          cx={48} cy={48} r={r}
+          fill="none" stroke="#e2e8f0" strokeWidth={8}
+          strokeDasharray="6 4"
+        />
+        <text x={48} y={44} textAnchor="middle" fontSize={11} fill="#94a3b8">목표</text>
+        <text x={48} y={60} textAnchor="middle" fontSize={10} fill="#94a3b8">미설정</text>
+      </svg>
+    )
+  }
 
   return (
     <svg width={96} height={96} viewBox="0 0 96 96">
@@ -124,7 +155,7 @@ function OnboardingChecklist({ onChatClick }: { onChatClick: (msg: string) => vo
         </div>
       ))}
       <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-        <GoalRing percent={0} />
+        <GoalRing percent={0} hasGoal={false} />
         <span>이번달 목표: 미설정</span>
       </div>
     </div>
@@ -193,7 +224,7 @@ export function OverviewTab({ state, onChatMessage }: Props) {
 
         {/* 목표 달성률 카드 */}
         <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <GoalRing percent={goalPercent} />
+          <GoalRing percent={goalPercent} hasGoal={!!state.goal?.monthly_goal} />
           {state.goal?.remaining != null && state.goal.remaining > 0 && (
             <p className="mt-2 text-center text-xs text-slate-500">
               목표까지 {fmt(state.goal.remaining)}원

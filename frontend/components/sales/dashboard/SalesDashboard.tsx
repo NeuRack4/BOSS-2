@@ -37,7 +37,10 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
   // ── 접힌 상태: 미니 바 ─────────────────────────────────────────────────────
   if (collapsed) {
     return (
-      <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+      <div
+        className="mb-4 flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm transition hover:border-green-300 hover:shadow-md"
+        onClick={() => setCollapsed(false)}
+      >
         <div className="flex items-center gap-5 text-sm">
           <BarChart2 className="h-4 w-4 text-green-500" />
           <span className="font-semibold text-slate-700">
@@ -97,10 +100,15 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
         </div>
       </div>
 
-      {/* 로딩 */}
+      {/* 로딩 — 스켈레톤 */}
       {state.loading && (
-        <div className="flex h-40 items-center justify-center">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-green-400 border-t-transparent" />
+        <div className="space-y-3 p-4 animate-pulse">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-24 rounded-xl bg-slate-100" />
+            <div className="h-24 rounded-xl bg-slate-100" />
+          </div>
+          <div className="h-28 rounded-xl bg-slate-100" />
+          <div className="h-10 rounded-xl bg-slate-100" />
         </div>
       )}
 
