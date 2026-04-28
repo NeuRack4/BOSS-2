@@ -78,11 +78,11 @@ export function useDashboardData(accountId: string) {
 
     try {
       const [ovRes, dvRes, glRes, catRes, insRes] = await Promise.all([
-        fetch(`${API}/api/stats/overview?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() }),
-        fetch(`${API}/api/stats/daily?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() }),
-        fetch(`${API}/api/stats/goal?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() }),
-        fetch(`${API}/api/stats/category-breakdown?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() }),
-        fetch(`${API}/api/stats/benchmark-insight?account_id=${accountId}&compare_months_ago=1`).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() }),
+        fetch(`${API}/api/stats/overview?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        fetch(`${API}/api/stats/daily?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        fetch(`${API}/api/stats/goal?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        fetch(`${API}/api/stats/category-breakdown?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        fetch(`${API}/api/stats/benchmark-insight?account_id=${accountId}&compare_months_ago=1`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
       ])
 
       const series: DayPoint[] = dvRes.data?.series ?? []
@@ -91,8 +91,17 @@ export function useDashboardData(accountId: string) {
       const stage = getStage(entryCount)
 
       const todayStr = new Date().toISOString().split("T")[0]
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const yesterdayStr = yesterday.toISOString().split("T")[0]
+
       const todayPoint = series.find(s => s.date === todayStr)
+      const yesterdayPoint = series.find(s => s.date === yesterdayStr)
       const todayRevenue = todayPoint?.sales ?? 0
+      const todayChangeRate =
+        todayPoint?.sales != null && yesterdayPoint?.sales != null && yesterdayPoint.sales > 0
+          ? parseFloat((((todayPoint.sales - yesterdayPoint.sales) / yesterdayPoint.sales) * 100).toFixed(1))
+          : null
 
       const businessStartDate = realEntries.length > 0
         ? [...realEntries].sort((a, b) => a.date.localeCompare(b.date))[0].date
@@ -115,7 +124,7 @@ export function useDashboardData(accountId: string) {
         entryCount,
         businessStartDate,
         todayRevenue,
-        todayChangeRate: ovRes.data?.sales?.change_rate ?? null,
+        todayChangeRate,
         weeklyData,
         goal: glRes.data ?? null,
         overview: ovRes.data ?? null,
