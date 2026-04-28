@@ -37,11 +37,18 @@ type CostRow = {
   run_count: number;
 };
 
+type StatsData = {
+  total_users: number;
+  dau_today: number;
+  total_agent_runs: number;
+  active_schedules: number;
+} | null;
+
 const TABS: { key: Tab; label: string }[] = [
-  { key: "users", label: "유저 목록" },
-  { key: "payments", label: "구독 / 결제" },
-  { key: "stats", label: "시스템 통계" },
-  { key: "costs", label: "계정별 코스트" },
+  { key: "users", label: "Users" },
+  { key: "payments", label: "Subscriptions" },
+  { key: "stats", label: "System Stats" },
+  { key: "costs", label: "LLM Costs" },
 ];
 
 const planBadge = (plan: string) => {
@@ -55,9 +62,9 @@ const planBadge = (plan: string) => {
     <span
       style={{
         ...s,
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: 600,
-        padding: "2px 8px",
+        padding: "2px 9px",
         borderRadius: 999,
         display: "inline-block",
       }}
@@ -85,8 +92,8 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
 
   if (loading)
     return (
-      <div style={{ padding: 24, color: "#9a9287", fontSize: 13 }}>
-        불러오는 중…
+      <div style={{ padding: 24, color: "#9a9287", fontSize: 14 }}>
+        Loading…
       </div>
     );
 
@@ -95,7 +102,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
       style={{
         background: "#fff",
         border: "1px solid #e6e1d8",
-        borderRadius: 10,
+        borderRadius: 5,
         overflow: "hidden",
       }}
     >
@@ -103,11 +110,11 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
         style={{
           padding: "14px 18px",
           borderBottom: "1px solid #e6e1d8",
-          fontSize: 13,
+          fontSize: 14,
           fontWeight: 500,
         }}
       >
-        전체 계정 ({users.length})
+        All Accounts ({users.length})
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
@@ -116,19 +123,19 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
           >
             {[
               "",
-              "계정",
-              "사업체명",
-              "플랜",
-              "활성 스케줄",
-              "마지막 접속",
-              "상태",
+              "Account",
+              "Business",
+              "Plan",
+              "Active Schedules",
+              "Last Seen",
+              "Status",
             ].map((h) => (
               <th
                 key={h}
                 style={{
-                  padding: "10px 18px",
+                  padding: "11px 18px",
                   textAlign: "left",
-                  fontSize: 10,
+                  fontSize: 11,
                   color: "#9a9287",
                   fontWeight: 500,
                   textTransform: "uppercase" as const,
@@ -154,20 +161,20 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
               >
                 <td
                   style={{
-                    padding: "11px 18px",
-                    fontSize: 11,
+                    padding: "12px 18px",
+                    fontSize: 12,
                     color: "#9a9287",
                   }}
                 >
                   {expandedId === u.id ? "▼" : "▶"}
                 </td>
-                <td style={{ padding: "11px 18px" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 500 }}>
+                <td style={{ padding: "12px 18px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>
                     {u.display_name || "—"}
                   </div>
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 12,
                       color: "#9a9287",
                       fontFamily: "monospace",
                     }}
@@ -175,24 +182,24 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                     {u.email}
                   </div>
                 </td>
-                <td style={{ padding: "11px 18px", fontSize: 12.5 }}>
+                <td style={{ padding: "12px 18px", fontSize: 13 }}>
                   {u.business_name || "—"}
                 </td>
-                <td style={{ padding: "11px 18px" }}>{planBadge(u.plan)}</td>
-                <td style={{ padding: "11px 18px" }}>
+                <td style={{ padding: "12px 18px" }}>{planBadge(u.plan)}</td>
+                <td style={{ padding: "12px 18px" }}>
                   {u.active_schedule_count > 0 ? (
                     <span
                       style={{
                         background: "#eff6ff",
                         border: "1px solid #bfdbfe",
                         color: "#1d4ed8",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 600,
-                        padding: "3px 9px",
+                        padding: "3px 10px",
                         borderRadius: 999,
                       }}
                     >
-                      {u.active_schedule_count}개 활성
+                      {u.active_schedule_count} active
                     </span>
                   ) : (
                     <span
@@ -200,28 +207,28 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                         background: "#f5f1ea",
                         border: "1px solid #e6e1d8",
                         color: "#9a9287",
-                        fontSize: 11,
-                        padding: "3px 9px",
+                        fontSize: 12,
+                        padding: "3px 10px",
                         borderRadius: 999,
                       }}
                     >
-                      없음
+                      None
                     </span>
                   )}
                 </td>
                 <td
                   style={{
-                    padding: "11px 18px",
-                    fontSize: 11,
+                    padding: "12px 18px",
+                    fontSize: 12,
                     color: "#9a9287",
                     fontFamily: "monospace",
                   }}
                 >
                   {u.last_seen_at
-                    ? new Date(u.last_seen_at).toLocaleDateString("ko-KR")
+                    ? new Date(u.last_seen_at).toLocaleDateString("en-US")
                     : "—"}
                 </td>
-                <td style={{ padding: "11px 18px", fontSize: 12 }}>
+                <td style={{ padding: "12px 18px", fontSize: 13 }}>
                   <span
                     style={{
                       width: 7,
@@ -232,12 +239,11 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                       marginRight: 6,
                     }}
                   />
-                  {u.last_seen_at ? "활성" : "비활성"}
+                  {u.last_seen_at ? "Active" : "Inactive"}
                 </td>
               </tr>
               {expandedId === u.id && (
                 <tr
-                  key={`${u.id}-detail`}
                   style={{
                     background: "#f0ece4",
                     borderBottom: "1px solid #e6e1d8",
@@ -245,8 +251,8 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                 >
                   <td colSpan={7} style={{ padding: "14px 24px 14px 52px" }}>
                     {u.schedules.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#9a9287" }}>
-                        등록된 스케줄이 없습니다.
+                      <div style={{ fontSize: 13, color: "#9a9287" }}>
+                        No schedules registered.
                       </div>
                     ) : (
                       <div
@@ -265,23 +271,19 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                               gap: 12,
                               background: "#fff",
                               border: "1px solid #e6e1d8",
-                              borderRadius: 8,
+                              borderRadius: 5,
                               padding: "9px 14px",
                             }}
                           >
                             <span
-                              style={{
-                                fontSize: 12.5,
-                                fontWeight: 500,
-                                flex: 1,
-                              }}
+                              style={{ fontSize: 13, fontWeight: 500, flex: 1 }}
                             >
                               {s.title}
                             </span>
                             <span
                               style={{
                                 fontFamily: "monospace",
-                                fontSize: 10.5,
+                                fontSize: 11,
                                 color: "#9a9287",
                               }}
                             >
@@ -291,22 +293,22 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
                               style={{
                                 background: "#dcfce7",
                                 color: "#15803d",
-                                fontSize: 10,
+                                fontSize: 11,
                                 padding: "2px 8px",
                                 borderRadius: 999,
                               }}
                             >
-                              실행 중
+                              Running
                             </span>
                             <span
                               style={{
                                 fontFamily: "monospace",
-                                fontSize: 10.5,
+                                fontSize: 11,
                                 color: "#9a9287",
                               }}
                             >
                               {s.next_run
-                                ? `다음: ${new Date(s.next_run).toLocaleString("ko-KR")}`
+                                ? `Next: ${new Date(s.next_run).toLocaleString("en-US")}`
                                 : "—"}
                             </span>
                           </div>
@@ -340,8 +342,8 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
 
   if (!data)
     return (
-      <div style={{ padding: 24, color: "#9a9287", fontSize: 13 }}>
-        불러오는 중…
+      <div style={{ padding: 24, color: "#9a9287", fontSize: 14 }}>
+        Loading…
       </div>
     );
 
@@ -360,14 +362,14 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
             style={{
               background: "#fff",
               border: "1px solid #e6e1d8",
-              borderRadius: 10,
+              borderRadius: 5,
               padding: "16px 20px",
               minWidth: 120,
             }}
           >
             <div
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 color: "#9a9287",
                 textTransform: "uppercase" as const,
                 letterSpacing: "0.08em",
@@ -379,7 +381,7 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
             </div>
             <div
               style={{
-                fontSize: 26,
+                fontSize: 30,
                 fontWeight: 500,
                 letterSpacing: "-0.03em",
               }}
@@ -393,7 +395,7 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
         style={{
           background: "#fff",
           border: "1px solid #e6e1d8",
-          borderRadius: 10,
+          borderRadius: 5,
           overflow: "hidden",
         }}
       >
@@ -405,23 +407,25 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
                 borderBottom: "1px solid #e6e1d8",
               }}
             >
-              {["계정 ID", "플랜", "상태", "다음 결제일", "시작일"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    padding: "10px 18px",
-                    textAlign: "left",
-                    fontSize: 10,
-                    color: "#9a9287",
-                    fontWeight: 500,
-                    textTransform: "uppercase" as const,
-                    letterSpacing: "0.07em",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
+              {["Account ID", "Plan", "Status", "Next Billing", "Started"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: "11px 18px",
+                      textAlign: "left",
+                      fontSize: 11,
+                      color: "#9a9287",
+                      fontWeight: 500,
+                      textTransform: "uppercase" as const,
+                      letterSpacing: "0.07em",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
@@ -429,24 +433,24 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
               <tr key={i} style={{ borderBottom: "1px solid #f0ece4" }}>
                 <td
                   style={{
-                    padding: "11px 18px",
-                    fontSize: 11,
+                    padding: "12px 18px",
+                    fontSize: 12,
                     color: "#9a9287",
                     fontFamily: "monospace",
                   }}
                 >
                   {String(row.account_id ?? "").slice(0, 8)}…
                 </td>
-                <td style={{ padding: "11px 18px", fontSize: 12.5 }}>
+                <td style={{ padding: "12px 18px", fontSize: 13 }}>
                   {String(row.plan ?? "")}
                 </td>
-                <td style={{ padding: "11px 18px", fontSize: 12.5 }}>
+                <td style={{ padding: "12px 18px", fontSize: 13 }}>
                   {String(row.status ?? "")}
                 </td>
                 <td
                   style={{
-                    padding: "11px 18px",
-                    fontSize: 11,
+                    padding: "12px 18px",
+                    fontSize: 12,
                     color: "#9a9287",
                     fontFamily: "monospace",
                   }}
@@ -455,15 +459,15 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
                 </td>
                 <td
                   style={{
-                    padding: "11px 18px",
-                    fontSize: 11,
+                    padding: "12px 18px",
+                    fontSize: 12,
                     color: "#9a9287",
                     fontFamily: "monospace",
                   }}
                 >
                   {row.started_at
                     ? new Date(String(row.started_at)).toLocaleDateString(
-                        "ko-KR",
+                        "en-US",
                       )
                     : "—"}
                 </td>
@@ -476,26 +480,21 @@ const PaymentsTab = ({ accountId }: { accountId: string }) => {
   );
 };
 
-type StatsData = {
-  total_users: number;
-  dau_today: number;
-  total_agent_runs: number;
-  active_schedules: number;
-} | null;
-
 const StatsTab = ({ stats }: { stats: StatsData }) => {
   if (!stats)
     return (
-      <div style={{ padding: 24, color: "#9a9287", fontSize: 13 }}>
-        불러오는 중…
+      <div style={{ padding: 24, color: "#9a9287", fontSize: 14 }}>
+        Loading…
       </div>
     );
+
   const items = [
-    { label: "총 유저 수", value: stats.total_users },
-    { label: "오늘 DAU", value: stats.dau_today },
-    { label: "전체 에이전트 실행 횟수", value: stats.total_agent_runs },
-    { label: "전체 활성 스케줄", value: stats.active_schedules },
+    { label: "Total Users", value: stats.total_users },
+    { label: "DAU Today", value: stats.dau_today },
+    { label: "Agent Runs (All Time)", value: stats.total_agent_runs },
+    { label: "Active Schedules", value: stats.active_schedules },
   ];
+
   return (
     <div
       style={{
@@ -510,13 +509,13 @@ const StatsTab = ({ stats }: { stats: StatsData }) => {
           style={{
             background: "#fff",
             border: "1px solid #e6e1d8",
-            borderRadius: 10,
+            borderRadius: 5,
             padding: "20px 24px",
           }}
         >
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: "#9a9287",
               textTransform: "uppercase" as const,
               letterSpacing: "0.08em",
@@ -527,7 +526,7 @@ const StatsTab = ({ stats }: { stats: StatsData }) => {
             {label}
           </div>
           <div
-            style={{ fontSize: 32, fontWeight: 500, letterSpacing: "-0.03em" }}
+            style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.03em" }}
           >
             {value ?? "—"}
           </div>
@@ -564,17 +563,17 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
             key={d}
             onClick={() => setDays(d)}
             style={{
-              padding: "6px 14px",
-              fontSize: 12,
+              padding: "6px 16px",
+              fontSize: 13,
               fontWeight: days === d ? 600 : 400,
-              background: days === d ? "#1a1816" : "#fff",
+              background: days === d ? "#2e2719" : "#fff",
               color: days === d ? "#fffdf9" : "#6a6460",
               border: "1px solid #e6e1d8",
-              borderRadius: 6,
+              borderRadius: 5,
               cursor: "pointer",
             }}
           >
-            {d}일
+            {d}d
           </button>
         ))}
       </div>
@@ -582,13 +581,13 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
         style={{
           background: "#fff",
           border: "1px solid #e6e1d8",
-          borderRadius: 10,
+          borderRadius: 5,
           overflow: "hidden",
         }}
       >
         {loading ? (
-          <div style={{ padding: 24, color: "#9a9287", fontSize: 13 }}>
-            불러오는 중…
+          <div style={{ padding: 24, color: "#9a9287", fontSize: 14 }}>
+            Loading…
           </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -600,20 +599,20 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                 }}
               >
                 {[
-                  "계정 ID",
-                  "실행 수",
-                  "총 토큰",
-                  "입력 토큰",
-                  "출력 토큰",
-                  "예상 비용",
-                  "비중",
+                  "Account ID",
+                  "Runs",
+                  "Total Tokens",
+                  "Input",
+                  "Output",
+                  "Est. Cost",
+                  "Share",
                 ].map((h) => (
                   <th
                     key={h}
                     style={{
-                      padding: "10px 18px",
+                      padding: "11px 18px",
                       textAlign: "left",
-                      fontSize: 10,
+                      fontSize: 11,
                       color: "#9a9287",
                       fontWeight: 500,
                       textTransform: "uppercase" as const,
@@ -633,8 +632,8 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                   <tr key={i} style={{ borderBottom: "1px solid #f0ece4" }}>
                     <td
                       style={{
-                        padding: "11px 18px",
-                        fontSize: 11,
+                        padding: "12px 18px",
+                        fontSize: 12,
                         color: "#9a9287",
                         fontFamily: "monospace",
                       }}
@@ -643,8 +642,8 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                     </td>
                     <td
                       style={{
-                        padding: "11px 18px",
-                        fontSize: 12,
+                        padding: "12px 18px",
+                        fontSize: 13,
                         fontFamily: "monospace",
                       }}
                     >
@@ -652,8 +651,8 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                     </td>
                     <td
                       style={{
-                        padding: "11px 18px",
-                        fontSize: 12,
+                        padding: "12px 18px",
+                        fontSize: 13,
                         fontFamily: "monospace",
                       }}
                     >
@@ -661,7 +660,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                     </td>
                     <td
                       style={{
-                        padding: "11px 18px",
+                        padding: "12px 18px",
                         fontSize: 12,
                         color: "#9a9287",
                         fontFamily: "monospace",
@@ -671,7 +670,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                     </td>
                     <td
                       style={{
-                        padding: "11px 18px",
+                        padding: "12px 18px",
                         fontSize: 12,
                         color: "#9a9287",
                         fontFamily: "monospace",
@@ -681,16 +680,16 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                     </td>
                     <td
                       style={{
-                        padding: "11px 18px",
-                        fontSize: 12,
+                        padding: "12px 18px",
+                        fontSize: 13,
                         fontFamily: "monospace",
-                        color: row.total_cost > 10 ? "#dc2626" : "#1a1816",
+                        color: row.total_cost > 10 ? "#dc2626" : "#2e2719",
                         fontWeight: 500,
                       }}
                     >
                       ${row.total_cost.toFixed(3)}
                     </td>
-                    <td style={{ padding: "11px 18px" }}>
+                    <td style={{ padding: "12px 18px" }}>
                       <div
                         style={{
                           display: "flex",
@@ -718,7 +717,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
                         </div>
                         <span
                           style={{
-                            fontSize: 10.5,
+                            fontSize: 11,
                             color: "#9a9287",
                             fontFamily: "monospace",
                           }}
@@ -743,13 +742,10 @@ export default function AdminPage() {
   const { userId } = useChat();
   const { isAdmin, loading } = useIsAdmin(userId);
   const [activeTab, setActiveTab] = useState<Tab>("users");
-
   const [stats, setStats] = useState<StatsData>(null);
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      router.replace("/dashboard");
-    }
+    if (!loading && !isAdmin) router.replace("/dashboard");
   }, [loading, isAdmin, router]);
 
   useEffect(() => {
@@ -772,7 +768,7 @@ export default function AdminPage() {
           background: "#f2e9d5",
         }}
       >
-        <span style={{ fontSize: 13, color: "#9a9287" }}>불러오는 중…</span>
+        <span style={{ fontSize: 14, color: "#9a9287" }}>Loading…</span>
       </div>
     );
   }
@@ -794,7 +790,6 @@ export default function AdminPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          borderBottom: "1px solid #ddd0b4",
           background: "transparent",
           color: "#2e2719",
         }}
@@ -802,7 +797,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 700,
               letterSpacing: "-0.02em",
               color: "#2e2719",
@@ -829,17 +824,18 @@ export default function AdminPage() {
           onClick={() => router.push("/dashboard")}
           style={{
             color: "#8c7e66",
-            fontSize: 12,
+            fontSize: 13,
             background: "none",
             border: "none",
             cursor: "pointer",
           }}
         >
-          ← 대시보드로 돌아가기
+          ← Back to Dashboard
         </button>
       </header>
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+        {/* Stat Cards */}
         <div
           style={{
             display: "grid",
@@ -849,23 +845,26 @@ export default function AdminPage() {
           }}
         >
           {[
-            { label: "총 유저", value: stats?.total_users ?? "—" },
-            { label: "오늘 DAU", value: stats?.dau_today ?? "—" },
-            { label: "에이전트 실행", value: stats?.total_agent_runs ?? "—" },
-            { label: "활성 스케줄", value: stats?.active_schedules ?? "—" },
+            { label: "Total Users", value: stats?.total_users ?? "—" },
+            { label: "DAU Today", value: stats?.dau_today ?? "—" },
+            { label: "Agent Runs", value: stats?.total_agent_runs ?? "—" },
+            {
+              label: "Active Schedules",
+              value: stats?.active_schedules ?? "—",
+            },
           ].map(({ label, value }) => (
             <div
               key={label}
               style={{
                 background: "#fff",
                 border: "1px solid #e6e1d8",
-                borderRadius: 10,
+                borderRadius: 5,
                 padding: "16px 18px",
               }}
             >
               <div
                 style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   color: "#9a9287",
                   textTransform: "uppercase" as const,
                   letterSpacing: "0.08em",
@@ -877,7 +876,7 @@ export default function AdminPage() {
               </div>
               <div
                 style={{
-                  fontSize: 26,
+                  fontSize: 30,
                   fontWeight: 500,
                   letterSpacing: "-0.03em",
                 }}
@@ -888,6 +887,7 @@ export default function AdminPage() {
           ))}
         </div>
 
+        {/* Tabs */}
         <div
           style={{
             display: "flex",
@@ -900,15 +900,15 @@ export default function AdminPage() {
               key={key}
               onClick={() => setActiveTab(key)}
               style={{
-                padding: "10px 18px",
-                fontSize: 13,
+                padding: "10px 20px",
+                fontSize: 14,
                 fontWeight: 500,
-                color: activeTab === key ? "#1a1816" : "#9a9287",
+                color: activeTab === key ? "#2e2719" : "#9a9287",
                 background: "none",
                 border: "none",
                 borderBottom:
                   activeTab === key
-                    ? "2px solid #1a1816"
+                    ? "2px solid #2e2719"
                     : "2px solid transparent",
                 marginBottom: -1,
                 cursor: "pointer",
