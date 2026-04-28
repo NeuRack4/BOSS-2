@@ -224,9 +224,12 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
               {/* 배지 — 메뉴명 바로 옆 */}
               <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
               <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
-              <span className="shrink-0 text-[10px] text-slate-400">
-                {fmt(menu.price)}원 · {menu.margin_rate?.toFixed(0)}%
-              </span>
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] text-slate-500">{fmt(menu.price)}원</p>
+                <p className={`text-[10px] font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
+                  {menu.margin_rate?.toFixed(0)}%
+                </p>
+              </div>
             </div>
           ))}
           {menusWithMargin.length === 0 && (
