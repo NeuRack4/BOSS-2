@@ -1084,7 +1084,9 @@ export const NodeDetailModal = () => {
     supabase.auth.getUser().then(({ data }) => {
       setAccountId(data.user?.id ?? null);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => {
       setAccountId(session?.user?.id ?? null);
     });
     return () => subscription.unsubscribe();

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] — 2026-04-28
+
+### Added — Admin: 어드민 페이지 (`/admin`)
+
+- **`profiles.is_admin` 컬럼** (`supabase/migrations/040_admin_flag.sql`) — `profiles` 테이블에 `is_admin boolean default false` 추가. DB에서 직접 `UPDATE`로 권한 부여.
+- **`/api/admin/*` 라우터** (`backend/app/routers/admin.py`) — `require_admin` FastAPI 의존성으로 is_admin 검증. service_role key로 전 계정 데이터 조회.
+  - `GET /api/admin/users` — 전체 가입자 목록 + 계정별 활성 스케줄 수.
+  - `GET /api/admin/stats` — 플랫폼 전체 artifact 수·도메인별 breakdown·매출/비용 합계.
+  - `GET /api/admin/costs` — Langsmith API 연동 계정별 LLM 토큰 사용량·비용 집계.
+  - `GET /api/admin/payments` — 전체 구독 플랜·결제 내역 조회.
+- **`useIsAdmin` 훅** (`frontend/hooks/useIsAdmin.ts`) — Supabase에서 `is_admin` 필드를 조회해 boolean 반환.
+- **`AdminFab` 컴포넌트** (`frontend/components/layout/AdminFab.tsx`) — `isAdmin=true` 계정 로그인 시 우하단 FAB 버튼 렌더링, `/admin` 페이지로 이동.
+- **`providers.tsx` 마운트** — `AdminFab`을 앱 전역에 한 번 마운트.
+- **어드민 메인 페이지** (`frontend/app/admin/page.tsx`) — 헤더 + stat 카드(총 유저·활성 구독·이번 달 결제·LLM 비용) + 탭 4개(Users / Payments / Stats / LLM Costs).
+
+### Fixed — Admin: 버그 수정 및 스타일 개선
+
+- **`list_users` 응답 타입 수정** — 헤더 스타일 사용자 페이지 통일.
+- **React Fragment key 오류 수정** — StatsTab `key` prop 누락 해결.
+- **stats kind filter 수정** — 도메인별 artifact 집계 필터 로직 수정.
+- **StatsTab unused prop 제거** — TypeScript 경고 해결.
+- **Langsmith `start_time` datetime 객체 전달** — 문자열 대신 `datetime` 타입으로 수정해 SDK 호환성 확보.
+
+### Style — Admin: 디자인 시스템
+
+- **Roboto 폰트 적용** — Google Fonts CDN으로 Roboto 300/400/500/700 로드, 어드민 전체 적용.
+- **영문 UI 텍스트** — 레이블·헤더·버튼 전체 영문 통일.
+- **테두리 제거·대형 폰트·border-radius 5px** — 어드민 전용 디자인 토큰 적용.
+
+---
+
 ## [3.6.0] — 2026-04-28
 
 ### Added — Marketing: 마케팅 상세 페이지 (`/marketing`)

@@ -1,14 +1,14 @@
 // frontend/components/marketing/tabs/OverviewTab.tsx
-"use client"
+"use client";
 
-import { Loader2, Sparkles } from "lucide-react"
-import { useState } from "react"
+import { Loader2, Sparkles } from "lucide-react";
+import { useState } from "react";
 import type {
   DailyInstagramData,
   DailyYoutubeData,
   MarketingAnalysis,
   MarketingData,
-} from "../types"
+} from "../types";
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 
@@ -16,20 +16,20 @@ const fmt = (n: number) =>
   n >= 10_000_000
     ? `${(n / 10_000_000).toFixed(1)}천만`
     : n >= 10_000
-    ? `${(n / 10_000).toFixed(1)}만`
-    : n.toLocaleString()
+      ? `${(n / 10_000).toFixed(1)}만`
+      : n.toLocaleString();
 
 function fmtDate(iso: string) {
-  if (!iso) return ""
-  const d = new Date(iso)
-  const days = ["일", "월", "화", "수", "목", "금", "토"]
-  return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`
+  if (!iso) return "";
+  const d = new Date(iso);
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
 }
 
 function delta(curr: number, prev: number | undefined) {
-  if (prev === undefined || prev === 0) return null
-  const diff = curr - prev
-  return { diff, pct: Math.round((diff / prev) * 100) }
+  if (prev === undefined || prev === 0) return null;
+  const diff = curr - prev;
+  return { diff, pct: Math.round((diff / prev) * 100) };
 }
 
 // ── 플랫폼 칩 ─────────────────────────────────────────────────────────────────
@@ -45,18 +45,18 @@ const PLATFORM_STYLE = {
     dot: "bg-red-500",
     hoverBtn: "hover:border-red-300 hover:text-red-500",
   },
-} as const
+} as const;
 
 function PlatformChip({
   connected,
   label,
   onConnect,
 }: {
-  connected: boolean
-  label: "Instagram" | "YouTube"
-  onConnect?: () => void
+  connected: boolean;
+  label: "Instagram" | "YouTube";
+  onConnect?: () => void;
 }) {
-  const style = PLATFORM_STYLE[label]
+  const style = PLATFORM_STYLE[label];
   if (connected) {
     return (
       <span
@@ -65,7 +65,7 @@ function PlatformChip({
         <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
         {label} 연결됨
       </span>
-    )
+    );
   }
   return (
     <button
@@ -75,7 +75,7 @@ function PlatformChip({
       <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
       {label} 미연결
     </button>
-  )
+  );
 }
 
 // ── KPI 카드 ──────────────────────────────────────────────────────────────────
@@ -86,26 +86,28 @@ function StatCard({
   sub,
   accent = false,
 }: {
-  label: string
-  value: string
-  sub?: string
-  accent?: boolean
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-white p-4">
       <span className="text-xs text-slate-400">{label}</span>
-      <span className={`text-xl font-bold ${accent ? "text-rose-500" : "text-slate-800"}`}>
+      <span
+        className={`text-xl font-bold ${accent ? "text-rose-500" : "text-slate-800"}`}
+      >
         {value}
       </span>
       {sub && <span className="text-xs text-slate-400">{sub}</span>}
     </div>
-  )
+  );
 }
 
 // ── YouTube 일별 표 ───────────────────────────────────────────────────────────
 
 function YoutubeTable({ rows }: { rows: DailyYoutubeData[] }) {
-  if (rows.length === 0) return null
+  if (rows.length === 0) return null;
   return (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -123,13 +125,15 @@ function YoutubeTable({ rows }: { rows: DailyYoutubeData[] }) {
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const d = delta(row.views, rows[i - 1]?.views)
+              const d = delta(row.views, rows[i - 1]?.views);
               return (
                 <tr
                   key={row.date}
                   className="border-b border-slate-50 last:border-0 hover:bg-slate-50"
                 >
-                  <td className="px-3 py-2 text-slate-600">{fmtDate(row.date)}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {fmtDate(row.date)}
+                  </td>
                   <td className="px-3 py-2 text-right font-medium text-slate-800">
                     {fmt(row.views)}
                   </td>
@@ -150,19 +154,19 @@ function YoutubeTable({ rows }: { rows: DailyYoutubeData[] }) {
                     {fmt(row.watch_minutes)}
                   </td>
                 </tr>
-              )
+              );
             })}
           </tbody>
         </table>
       </div>
     </div>
-  )
+  );
 }
 
 // ── Instagram 일별 표 ─────────────────────────────────────────────────────────
 
 function InstagramTable({ rows }: { rows: DailyInstagramData[] }) {
-  if (rows.length === 0) return null
+  if (rows.length === 0) return null;
   return (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -179,13 +183,15 @@ function InstagramTable({ rows }: { rows: DailyInstagramData[] }) {
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const d = delta(row.reach, rows[i - 1]?.reach)
+              const d = delta(row.reach, rows[i - 1]?.reach);
               return (
                 <tr
                   key={row.date}
                   className="border-b border-slate-50 last:border-0 hover:bg-slate-50"
                 >
-                  <td className="px-3 py-2 text-slate-600">{fmtDate(row.date)}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {fmtDate(row.date)}
+                  </td>
                   <td className="px-3 py-2 text-right font-medium text-slate-800">
                     {fmt(row.reach)}
                   </td>
@@ -203,13 +209,13 @@ function InstagramTable({ rows }: { rows: DailyInstagramData[] }) {
                     )}
                   </td>
                 </tr>
-              )
+              );
             })}
           </tbody>
         </table>
       </div>
     </div>
-  )
+  );
 }
 
 // ── 분석 패널 ─────────────────────────────────────────────────────────────────
@@ -218,8 +224,8 @@ function AnalysisPanel({
   analysis,
   loading,
 }: {
-  analysis: MarketingAnalysis | null
-  loading: boolean
+  analysis: MarketingAnalysis | null;
+  loading: boolean;
 }) {
   if (loading) {
     return (
@@ -234,10 +240,10 @@ function AnalysisPanel({
           <div className="h-3 w-5/6 rounded bg-slate-200" />
         </div>
       </div>
-    )
+    );
   }
 
-  if (!analysis) return null
+  if (!analysis) return null;
 
   return (
     <div className="space-y-5">
@@ -251,32 +257,45 @@ function AnalysisPanel({
           {analysis.text.split("\n").map((line, i) => {
             if (line.startsWith("## ") || line.startsWith("### ")) {
               return (
-                <p key={i} className="mt-3 mb-1 text-sm font-semibold text-slate-700">
+                <p
+                  key={i}
+                  className="mt-3 mb-1 text-sm font-semibold text-slate-700"
+                >
                   {line.replace(/^#+\s/, "")}
                 </p>
-              )
+              );
             }
             if (line.startsWith("**") && line.endsWith("**")) {
               return (
                 <p key={i} className="text-sm font-semibold text-slate-700">
                   {line.slice(2, -2)}
                 </p>
-              )
+              );
             }
             if (line.startsWith("- ")) {
               return (
                 <p key={i} className="flex gap-1.5 text-sm text-slate-700">
                   <span className="shrink-0 text-slate-400">•</span>
-                  <span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: line
+                        .slice(2)
+                        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                    }}
+                  />
                 </p>
-              )
+              );
             }
-            if (line.trim() === "") return <div key={i} className="h-1" />
+            if (line.trim() === "") return <div key={i} className="h-1" />;
             return (
-              <p key={i} className="text-sm leading-relaxed text-slate-700"
-                dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }}
+              <p
+                key={i}
+                className="text-sm leading-relaxed text-slate-700"
+                dangerouslySetInnerHTML={{
+                  __html: line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                }}
               />
-            )
+            );
           })}
         </div>
       </div>
@@ -285,19 +304,19 @@ function AnalysisPanel({
       <YoutubeTable rows={analysis.youtube_daily} />
       <InstagramTable rows={analysis.instagram_daily} />
     </div>
-  )
+  );
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 type Props = {
-  data: MarketingData
-  onConnectYoutube?: () => void
-  analysis: MarketingAnalysis | null
-  analysisLoading: boolean
-  analysisLoaded: boolean
-  onRequestAnalysis: () => void
-}
+  data: MarketingData;
+  onConnectYoutube?: () => void;
+  analysis: MarketingAnalysis | null;
+  analysisLoading: boolean;
+  analysisLoaded: boolean;
+  onRequestAnalysis: () => void;
+};
 
 export function OverviewTab({
   data,
@@ -307,17 +326,21 @@ export function OverviewTab({
   analysisLoaded,
   onRequestAnalysis,
 }: Props) {
-  const ig = data.instagram
-  const yt = data.youtube
-  const igOk = ig && !ig.error
-  const ytOk = yt && yt.channel && !yt.channel.error
+  const ig = data.instagram;
+  const yt = data.youtube;
+  const igOk = ig && !ig.error;
+  const ytOk = yt && yt.channel && !yt.channel.error;
 
   return (
     <div className="space-y-5 p-4">
       {/* 플랫폼 연결 상태 */}
       <div className="flex flex-wrap gap-2">
         <PlatformChip connected={!!igOk} label="Instagram" />
-        <PlatformChip connected={!!ytOk} label="YouTube" onConnect={onConnectYoutube} />
+        <PlatformChip
+          connected={!!ytOk}
+          label="YouTube"
+          onConnect={onConnectYoutube}
+        />
       </div>
 
       {/* Instagram KPI */}
@@ -327,10 +350,26 @@ export function OverviewTab({
             Instagram · 최근 {data.period_days}일
           </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="팔로워" value={fmt(ig.account.followers_count)} accent />
-            <StatCard label="도달수" value={fmt(ig.account.reach)} sub="기간 합산" />
-            <StatCard label="인상수" value={fmt(ig.account.impressions)} sub="기간 합산" />
-            <StatCard label="avg engagement" value={(ig.avg_engagement ?? 0).toFixed(1)} sub={`${ig.total_posts_analyzed ?? 0}개 게시물`} />
+            <StatCard
+              label="팔로워"
+              value={fmt(ig.account.followers_count)}
+              accent
+            />
+            <StatCard
+              label="도달수"
+              value={fmt(ig.account.reach)}
+              sub="기간 합산"
+            />
+            <StatCard
+              label="인상수"
+              value={fmt(ig.account.impressions)}
+              sub="기간 합산"
+            />
+            <StatCard
+              label="avg engagement"
+              value={(ig.avg_engagement ?? 0).toFixed(1)}
+              sub={`${ig.total_posts_analyzed ?? 0}개 게시물`}
+            />
           </div>
         </div>
       )}
@@ -342,14 +381,27 @@ export function OverviewTab({
             YouTube · 최근 {data.period_days}일
           </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="조회수" value={fmt(yt.channel.views)} sub="기간 합산" accent />
-            <StatCard label="시청시간" value={`${fmt(yt.channel.watch_minutes)}분`} sub="기간 합산" />
+            <StatCard
+              label="조회수"
+              value={fmt(yt.channel.views)}
+              sub="기간 합산"
+              accent
+            />
+            <StatCard
+              label="시청시간"
+              value={`${fmt(yt.channel.watch_minutes)}분`}
+              sub="기간 합산"
+            />
             <StatCard
               label="구독자 순증"
               value={`${yt.channel.net_subscribers >= 0 ? "+" : ""}${fmt(yt.channel.net_subscribers)}`}
               sub={`+${fmt(yt.channel.subscribers_gained)} / -${fmt(yt.channel.subscribers_lost)}`}
             />
-            <StatCard label="좋아요" value={fmt(yt.channel.likes)} sub={`댓글 ${fmt(yt.channel.comments)}`} />
+            <StatCard
+              label="좋아요"
+              value={fmt(yt.channel.likes)}
+              sub={`댓글 ${fmt(yt.channel.comments)}`}
+            />
           </div>
         </div>
       )}
@@ -374,5 +426,5 @@ export function OverviewTab({
 
       <AnalysisPanel analysis={analysis} loading={analysisLoading} />
     </div>
-  )
+  );
 }

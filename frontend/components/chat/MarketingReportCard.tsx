@@ -133,10 +133,28 @@ function StatCell({
 
 // ── 액션 아이템 탭 ────────────────────────────────────────────────────────
 
-const PRIORITY_META: Record<string, { label: string; border: string; dot: string; text: string }> = {
-  high:   { label: "이번 주", border: "border-l-orange-400",  dot: "bg-orange-400",  text: "text-orange-500" },
-  medium: { label: "이번 달", border: "border-l-neutral-400", dot: "bg-neutral-400", text: "text-neutral-500" },
-  low:    { label: "여유 있을 때", border: "border-l-neutral-300", dot: "bg-neutral-300", text: "text-neutral-400" },
+const PRIORITY_META: Record<
+  string,
+  { label: string; border: string; dot: string; text: string }
+> = {
+  high: {
+    label: "이번 주",
+    border: "border-l-orange-400",
+    dot: "bg-orange-400",
+    text: "text-orange-500",
+  },
+  medium: {
+    label: "이번 달",
+    border: "border-l-neutral-400",
+    dot: "bg-neutral-400",
+    text: "text-neutral-500",
+  },
+  low: {
+    label: "여유 있을 때",
+    border: "border-l-neutral-300",
+    dot: "bg-neutral-300",
+    text: "text-neutral-400",
+  },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -168,7 +186,9 @@ function ActionCard({ item, index }: { item: ActionItem; index: number }) {
   const meta = PRIORITY_META[priority] ?? PRIORITY_META.medium;
 
   return (
-    <div className={`rounded-[6px] border border-neutral-200 border-l-[3px] ${meta.border} bg-white overflow-hidden`}>
+    <div
+      className={`rounded-[6px] border border-neutral-200 border-l-[3px] ${meta.border} bg-white overflow-hidden`}
+    >
       {/* 헤더 */}
       <button
         onClick={() => setOpen((v) => !v)}
@@ -192,7 +212,9 @@ function ActionCard({ item, index }: { item: ActionItem; index: number }) {
             {item.period && (
               <>
                 <span className="text-neutral-300 text-[10px]">·</span>
-                <span className="text-[11px] text-neutral-400">{item.period}</span>
+                <span className="text-[11px] text-neutral-400">
+                  {item.period}
+                </span>
               </>
             )}
           </div>
@@ -319,9 +341,9 @@ export function MarketingReportCard({
   payload: MarketingReportPayload;
 }) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  const [tab, setTab] = useState<"overview" | "instagram" | "youtube" | "actions">(
-    "actions",
-  );
+  const [tab, setTab] = useState<
+    "overview" | "instagram" | "youtube" | "actions"
+  >("actions");
   const [ytConnecting, setYtConnecting] = useState(false);
   const [ytData, setYtData] = useState<YoutubeData>(payload.youtube);
 
@@ -391,25 +413,27 @@ export function MarketingReportCard({
           </span>
         </div>
         <div className="flex gap-1">
-          {(["actions", "overview", "instagram", "youtube"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-[11px] px-2.5 py-1 rounded-[4px] transition-colors ${
-                tab === t
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-500 hover:bg-neutral-100"
-              }`}
-            >
-              {t === "actions"
-                ? "할 일"
-                : t === "overview"
-                  ? "분석"
-                  : t === "instagram"
-                    ? "인스타"
-                    : "유튜브"}
-            </button>
-          ))}
+          {(["actions", "overview", "instagram", "youtube"] as const).map(
+            (t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`text-[11px] px-2.5 py-1 rounded-[4px] transition-colors ${
+                  tab === t
+                    ? "bg-neutral-800 text-white"
+                    : "text-neutral-500 hover:bg-neutral-100"
+                }`}
+              >
+                {t === "actions"
+                  ? "할 일"
+                  : t === "overview"
+                    ? "분석"
+                    : t === "instagram"
+                      ? "인스타"
+                      : "유튜브"}
+              </button>
+            ),
+          )}
         </div>
       </div>
 

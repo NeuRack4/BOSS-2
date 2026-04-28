@@ -39,7 +39,9 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
-  const [integrationsInitialTab, setIntegrationsInitialTab] = useState<"youtube" | "instagram" | "naver" | undefined>(undefined);
+  const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
+    "youtube" | "instagram" | "naver" | undefined
+  >(undefined);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const layoutCtx = useLayout();
 
@@ -65,7 +67,11 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     const onOpenDmCampaign = () => setDmCampaignOpen(true);
     const onOpenSubsidy = () => setSubsidyOpen(true);
     const onOpenIntegrations = (e: Event) => {
-      const tab = (e as CustomEvent).detail?.tab as "youtube" | "instagram" | "naver" | undefined;
+      const tab = (e as CustomEvent).detail?.tab as
+        | "youtube"
+        | "instagram"
+        | "naver"
+        | undefined;
       setIntegrationsInitialTab(tab);
       setIntegrationsOpen(true);
     };
@@ -95,7 +101,10 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         onOpenDmCampaign,
       );
       window.removeEventListener("boss:open-subsidy-modal", onOpenSubsidy);
-      window.removeEventListener("boss:open-integrations-modal", onOpenIntegrations);
+      window.removeEventListener(
+        "boss:open-integrations-modal",
+        onOpenIntegrations,
+      );
     };
   }, []);
 

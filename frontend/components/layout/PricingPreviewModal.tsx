@@ -67,7 +67,8 @@ export const PricingPreviewModal = ({ open, onClose }: Props) => {
   return (
     <Modal open={open} onClose={onClose} title="요금제" widthClass="w-[720px]">
       <p className="mb-5 text-[13px] text-[#6b7280]">
-        모든 플랜은 회원가입 후 바로 사용할 수 있습니다. 신용카드 없이 Free 플랜으로 시작해보세요.
+        모든 플랜은 회원가입 후 바로 사용할 수 있습니다. 신용카드 없이 Free
+        플랜으로 시작해보세요.
       </p>
 
       <div className="grid grid-cols-3 gap-4">
@@ -85,31 +86,65 @@ export const PricingPreviewModal = ({ open, onClose }: Props) => {
             )}
 
             <div>
-              <p className="text-[13px] font-semibold text-[#374151]">{plan.name}</p>
+              <p className="text-[13px] font-semibold text-[#374151]">
+                {plan.name}
+              </p>
               <div className="mt-1 flex items-baseline gap-1">
-                <span className="text-[22px] font-bold text-[#111827]">{plan.price}</span>
+                <span className="text-[22px] font-bold text-[#111827]">
+                  {plan.price}
+                </span>
                 {plan.priceNote && (
-                  <span className="text-[12px] text-[#9ca3af]">{plan.priceNote}</span>
+                  <span className="text-[12px] text-[#9ca3af]">
+                    {plan.priceNote}
+                  </span>
                 )}
               </div>
-              <p className="mt-1 text-[12px] text-[#6b7280]">{plan.description}</p>
+              <p className="mt-1 text-[12px] text-[#6b7280]">
+                {plan.description}
+              </p>
             </div>
 
             <div className="border-t border-[#f3f4f6]" />
 
             <ul className="flex flex-col gap-2 flex-1">
               {plan.features.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[12px] text-[#374151]">
-                  <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                <li
+                  key={f}
+                  className="flex items-start gap-2 text-[12px] text-[#374151]"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 shrink-0 mt-0.5 text-green-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   {f}
                 </li>
               ))}
               {plan.limits.map((l) => (
-                <li key={l} className="flex items-start gap-2 text-[12px] text-[#9ca3af]">
-                  <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <li
+                  key={l}
+                  className="flex items-start gap-2 text-[12px] text-[#9ca3af]"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                   {l}
                 </li>
@@ -132,7 +167,8 @@ export const PricingPreviewModal = ({ open, onClose }: Props) => {
       </div>
 
       <p className="mt-4 text-center text-[11px] text-[#9ca3af]">
-        Pro · Enterprise 플랜은 회원가입 후 대시보드에서 구독할 수 있습니다. · 문의: contact@boss2.kr
+        Pro · Enterprise 플랜은 회원가입 후 대시보드에서 구독할 수 있습니다. ·
+        문의: contact@boss2.kr
       </p>
     </Modal>
   );

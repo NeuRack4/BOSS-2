@@ -1122,7 +1122,9 @@ export function RevenueStatsPanel({ accountId }: { accountId: string }) {
   );
 
   const fetchBenchmarkDataRef = useRef(fetchBenchmarkData);
-  useEffect(() => { fetchBenchmarkDataRef.current = fetchBenchmarkData; }, [fetchBenchmarkData]);
+  useEffect(() => {
+    fetchBenchmarkDataRef.current = fetchBenchmarkData;
+  }, [fetchBenchmarkData]);
 
   useEffect(() => {
     if (!accountId) return;

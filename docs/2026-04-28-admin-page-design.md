@@ -1,4 +1,5 @@
 # Admin Page Design Spec
+
 Date: 2026-04-28
 
 ## Overview
@@ -29,12 +30,12 @@ RLS 정책 추가 불필요 — 백엔드는 service_role key로 RLS 우회, 프
 
 공통 의존성 `require_admin(account_id)` — JWT에서 uid 추출 → `profiles.is_admin` 확인 → false면 HTTP 403.
 
-| 엔드포인트 | 반환 |
-|---|---|
-| `GET /api/admin/users` | 전체 계정 목록: email, display_name, business_name, plan, last_seen, created_at, 활성 스케줄 수 + 스케줄 목록 |
-| `GET /api/admin/stats` | DAU (activity_logs), 총 메시지 수, 에이전트 실행 횟수, 전체 활성 스케줄 수 |
-| `GET /api/admin/costs` | Langsmith API 호출 → `orchestrator.run` runs 집계, account_id별 total_tokens / prompt_tokens / completion_tokens / total_cost |
-| `GET /api/admin/payments` | profiles의 plan 필드 기반 구독 현황 (plan 컬럼 미존재 시 "unknown" 반환, 향후 확장) |
+| 엔드포인트                | 반환                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/admin/users`    | 전체 계정 목록: email, display_name, business_name, plan, last_seen, created_at, 활성 스케줄 수 + 스케줄 목록                 |
+| `GET /api/admin/stats`    | DAU (activity_logs), 총 메시지 수, 에이전트 실행 횟수, 전체 활성 스케줄 수                                                    |
+| `GET /api/admin/costs`    | Langsmith API 호출 → `orchestrator.run` runs 집계, account_id별 total_tokens / prompt_tokens / completion_tokens / total_cost |
+| `GET /api/admin/payments` | profiles의 plan 필드 기반 구독 현황 (plan 컬럼 미존재 시 "unknown" 반환, 향후 확장)                                           |
 
 **Langsmith 코스트 집계 방법**: `orchestrator.run` 인풋에 `account_id`가 이미 포함되어 있음(확인 완료). `langsmith.Client().list_runs(project_name="boss", filter='eq(name, "orchestrator.run")')` 로 runs를 가져와 `inputs.account_id`로 그룹핑 후 토큰/비용 합산.
 

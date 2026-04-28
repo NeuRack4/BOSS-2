@@ -12,22 +12,23 @@
 
 ## File Map
 
-| 파일 | 역할 |
-|---|---|
-| `supabase/migrations/040_admin_flag.sql` | profiles.is_admin 컬럼 추가 |
-| `backend/app/routers/admin.py` | `/api/admin/*` 4개 엔드포인트 + require_admin 가드 |
-| `backend/app/main.py` | admin 라우터 마운트 |
-| `backend/tests/routers/test_admin.py` | admin 라우터 단위 테스트 |
-| `frontend/hooks/useIsAdmin.ts` | Supabase로 is_admin 조회 훅 |
-| `frontend/components/layout/AdminFab.tsx` | 우하단 FAB (isAdmin=true 시 렌더) |
-| `frontend/app/providers.tsx` | AdminFab 마운트 추가 |
-| `frontend/app/admin/page.tsx` | Admin 메인 페이지 (탭 4개) |
+| 파일                                      | 역할                                               |
+| ----------------------------------------- | -------------------------------------------------- |
+| `supabase/migrations/040_admin_flag.sql`  | profiles.is_admin 컬럼 추가                        |
+| `backend/app/routers/admin.py`            | `/api/admin/*` 4개 엔드포인트 + require_admin 가드 |
+| `backend/app/main.py`                     | admin 라우터 마운트                                |
+| `backend/tests/routers/test_admin.py`     | admin 라우터 단위 테스트                           |
+| `frontend/hooks/useIsAdmin.ts`            | Supabase로 is_admin 조회 훅                        |
+| `frontend/components/layout/AdminFab.tsx` | 우하단 FAB (isAdmin=true 시 렌더)                  |
+| `frontend/app/providers.tsx`              | AdminFab 마운트 추가                               |
+| `frontend/app/admin/page.tsx`             | Admin 메인 페이지 (탭 4개)                         |
 
 ---
 
 ## Task 1: feature-admin 브랜치 생성
 
 **Files:**
+
 - (git only)
 
 - [ ] **Step 1: 브랜치 생성 및 전환**
@@ -45,6 +46,7 @@ Expected: `Switched to a new branch 'feature-admin'`
 ## Task 2: DB 마이그레이션 — profiles.is_admin 추가
 
 **Files:**
+
 - Create: `supabase/migrations/040_admin_flag.sql`
 
 - [ ] **Step 1: 마이그레이션 파일 작성**
@@ -89,6 +91,7 @@ git commit -m "db: profiles에 is_admin 컬럼 추가"
 ## Task 3: Backend — admin 라우터 스켈레톤 + require_admin 가드 + 테스트
 
 **Files:**
+
 - Create: `backend/app/routers/admin.py`
 - Create: `backend/tests/routers/__init__.py`
 - Create: `backend/tests/routers/test_admin.py`
@@ -205,6 +208,7 @@ git commit -m "feat(admin): 라우터 스켈레톤 + require_admin 가드"
 ## Task 4: Backend — GET /api/admin/users
 
 **Files:**
+
 - Modify: `backend/app/routers/admin.py`
 - Modify: `backend/tests/routers/test_admin.py`
 
@@ -365,6 +369,7 @@ git commit -m "feat(admin): GET /api/admin/users 구현"
 ## Task 5: Backend — GET /api/admin/stats
 
 **Files:**
+
 - Modify: `backend/app/routers/admin.py`
 - Modify: `backend/tests/routers/test_admin.py`
 
@@ -481,6 +486,7 @@ git commit -m "feat(admin): GET /api/admin/stats 구현"
 ## Task 6: Backend — GET /api/admin/costs (Langsmith)
 
 **Files:**
+
 - Modify: `backend/app/routers/admin.py`
 - Modify: `backend/tests/routers/test_admin.py`
 
@@ -519,6 +525,7 @@ def test_costs_returns_per_account(monkeypatch):
 - [ ] **Step 2: 구현 — admin.py 상단 import에 추가 후 엔드포인트 작성**
 
 `admin.py` 상단 import 블록에 추가:
+
 ```python
 import langsmith
 ```
@@ -587,6 +594,7 @@ git commit -m "feat(admin): GET /api/admin/costs Langsmith 기반 구현"
 ## Task 7: Backend — GET /api/admin/payments + 라우터 마운트
 
 **Files:**
+
 - Modify: `backend/app/routers/admin.py`
 - Modify: `backend/app/main.py`
 - Modify: `backend/tests/routers/test_admin.py`
@@ -652,11 +660,13 @@ async def get_payments(account_id: str = Query(...)):
 - [ ] **Step 3: main.py에 admin 라우터 마운트**
 
 `backend/app/main.py`의 import 블록 끝에 추가:
+
 ```python
 from app.routers import admin
 ```
 
 `app.include_router(docx.router)` 줄 바로 아래에 추가:
+
 ```python
 app.include_router(admin.router)
 ```
@@ -689,6 +699,7 @@ git commit -m "feat(admin): GET /api/admin/payments + 라우터 마운트"
 ## Task 8: Frontend — useIsAdmin hook
 
 **Files:**
+
 - Create: `frontend/hooks/useIsAdmin.ts`
 
 - [ ] **Step 1: hooks 디렉토리 확인 및 파일 생성**
@@ -746,6 +757,7 @@ git commit -m "feat(admin): useIsAdmin hook 추가"
 ## Task 9: Frontend — AdminFab 컴포넌트
 
 **Files:**
+
 - Create: `frontend/components/layout/AdminFab.tsx`
 
 - [ ] **Step 1: 컴포넌트 생성**
@@ -805,6 +817,7 @@ export const AdminFab = () => {
 - [ ] **Step 2: Providers에 AdminFab 마운트**
 
 `frontend/app/providers.tsx` 현재 내용:
+
 ```typescript
 "use client";
 
@@ -819,6 +832,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => (
 ```
 
 수정 후:
+
 ```typescript
 "use client";
 
@@ -858,6 +872,7 @@ git commit -m "feat(admin): AdminFab 컴포넌트 + Providers 마운트"
 ## Task 10: Frontend — Admin 페이지 (탭 스켈레톤 + stat 카드)
 
 **Files:**
+
 - Create: `frontend/app/admin/page.tsx`
 
 - [ ] **Step 1: admin 디렉토리 생성 및 페이지 파일 작성**
@@ -1033,6 +1048,7 @@ git commit -m "feat(admin): admin 페이지 스켈레톤 (헤더 + stat 카드 +
 ## Task 11: Frontend — UsersTab 구현 (스케줄 인라인 펼치기)
 
 **Files:**
+
 - Modify: `frontend/app/admin/page.tsx`
 
 - [ ] **Step 1: UsersTab을 실제 구현으로 교체**
@@ -1171,6 +1187,7 @@ const UsersTab = ({ accountId }: { accountId: string }) => {
 - [ ] **Step 2: 브라우저에서 유저 목록 탭 확인**
 
 `http://localhost:3000/admin` → 유저 목록 탭:
+
 - 행 클릭 시 스케줄 상세 펼치기/접기 동작 확인
 - 활성 스케줄 뱃지 표시 확인
 
@@ -1186,6 +1203,7 @@ git commit -m "feat(admin): UsersTab 구현 (스케줄 인라인 펼치기)"
 ## Task 12: Frontend — PaymentsTab + StatsTab + CostsTab 구현
 
 **Files:**
+
 - Modify: `frontend/app/admin/page.tsx`
 
 - [ ] **Step 1: PaymentsTab 플레이스홀더 교체**
@@ -1367,6 +1385,7 @@ const CostsTab = ({ accountId }: { accountId: string }) => {
 - [ ] **Step 4: 전체 탭 브라우저 확인**
 
 `http://localhost:3000/admin` 에서:
+
 - 유저 목록 탭: 행 클릭 → 스케줄 펼치기 동작
 - 구독/결제 탭: 플랜별 카운트 카드 + 테이블
 - 시스템 통계 탭: 4개 지표 카드
@@ -1384,6 +1403,7 @@ git commit -m "feat(admin): PaymentsTab + StatsTab + CostsTab 구현"
 ## Task 13: 최종 확인 및 PR
 
 **Files:**
+
 - (git only)
 
 - [ ] **Step 1: 전체 백엔드 테스트 통과 확인**

@@ -38,7 +38,7 @@ const SECTION_CONFIG = [
 function parseSection(content: string, heading: string): string {
   const regex = new RegExp(
     `##\\s+${heading}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
-    "i"
+    "i",
   );
   const match = content.match(regex);
   return match ? match[1].trim() : "";
@@ -108,7 +108,7 @@ function renderLines(text: string) {
             </strong>
           ) : (
             p
-          )
+          ),
         )}
       </p>
     );
@@ -143,9 +143,7 @@ export function PriceStrategyView({ content }: Props) {
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide ${sec.color}`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${sec.dot}`}
-              />
+              <span className={`h-1.5 w-1.5 rounded-full ${sec.dot}`} />
               {sec.label}
             </span>
           </div>

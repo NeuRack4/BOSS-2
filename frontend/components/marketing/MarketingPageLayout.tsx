@@ -1,30 +1,30 @@
 // frontend/components/marketing/MarketingPageLayout.tsx
-"use client"
+"use client";
 
-import Link from "next/link"
-import { ArrowLeft, Megaphone } from "lucide-react"
-import { Header } from "@/components/layout/Header"
-import { BriefingLoader } from "@/components/chat/BriefingLoader"
-import { useChat } from "@/components/chat/ChatContext"
-import { KanbanBoard } from "@/components/bento/KanbanBoard"
-import { DOMAIN_META } from "@/components/bento/types"
-import { cn } from "@/lib/utils"
-import { MarketingDashboard } from "./MarketingDashboard"
+import Link from "next/link";
+import { ArrowLeft, Megaphone } from "lucide-react";
+import { Header } from "@/components/layout/Header";
+import { BriefingLoader } from "@/components/chat/BriefingLoader";
+import { useChat } from "@/components/chat/ChatContext";
+import { KanbanBoard } from "@/components/bento/KanbanBoard";
+import { DOMAIN_META } from "@/components/bento/types";
+import { cn } from "@/lib/utils";
+import { MarketingDashboard } from "./MarketingDashboard";
 
 export function MarketingPageLayout() {
-  const meta = DOMAIN_META["marketing"]
-  const { userId } = useChat()
+  const meta = DOMAIN_META["marketing"];
+  const { userId } = useChat();
 
   const handleChatMessage = (msg: string) => {
     navigator.clipboard.writeText(msg).catch(() => {
-      const ta = document.createElement("textarea")
-      ta.value = msg
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand("copy")
-      document.body.removeChild(ta)
-    })
-  }
+      const ta = document.createElement("textarea");
+      ta.value = msg;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    });
+  };
 
   return (
     <div className="bento-shell flex h-screen flex-col overflow-hidden">
@@ -84,5 +84,5 @@ export function MarketingPageLayout() {
       </main>
       <BriefingLoader />
     </div>
-  )
+  );
 }
