@@ -299,23 +299,28 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           <p className="text-[10px] text-slate-500 mb-3">
             평균 판매가 {fmt(Math.round(avgPrice))}원 / 평균 마진 {avgMargin.toFixed(0)}% 기준
           </p>
-          {/* 컬럼 레이블 */}
-          <div className="flex items-center gap-2 px-2 pb-1">
-            <div className="flex-1" />
-            <p className="shrink-0 text-[10px] text-slate-400">가격 | 마진율</p>
+          {/* 컬럼 헤더 */}
+          <div className="flex items-center gap-2 border-b border-slate-100 px-2 pb-2 mb-1">
+            <div className="w-20 shrink-0 text-[10px] font-semibold text-slate-400">분류</div>
+            <div className="flex-1 text-[10px] font-semibold text-slate-400">메뉴명</div>
+            <div className="w-16 shrink-0 text-right text-[10px] font-semibold text-slate-400">판매가</div>
+            <div className="w-10 shrink-0 text-right text-[10px] font-semibold text-slate-400">마진율</div>
           </div>
 
           {menusWithMargin.map(menu => (
             <div key={menu.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
-              <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
-              <span className="w-36 shrink-0 truncate text-xs font-medium text-slate-700">{menu.name}</span>
-              <p className="shrink-0 text-xs">
-                <span className="text-slate-500">{fmt(menu.price)}원</span>
-                <span className="mx-1 text-slate-300">|</span>
-                <span className={`font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
-                  {menu.margin_rate?.toFixed(0)}%
-                </span>
-              </p>
+              {/* 배지 — 고정 너비 */}
+              <div className="w-20 shrink-0">
+                <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
+              </div>
+              {/* 메뉴명 — 남은 공간 */}
+              <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
+              {/* 판매가 — 고정 너비 우측 정렬 */}
+              <span className="w-16 shrink-0 text-right text-[10px] text-slate-400">{fmt(menu.price)}원</span>
+              {/* 마진율 — 고정 너비 우측 정렬 */}
+              <span className={`w-10 shrink-0 text-right text-xs font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
+                {menu.margin_rate?.toFixed(0)}%
+              </span>
             </div>
           ))}
           {menusWithMargin.length === 0 && (
