@@ -332,11 +332,10 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
             평균 판매가 {fmt(Math.round(avgPrice))}원 / 평균 마진 {avgMargin.toFixed(0)}% 기준
           </p>
 
-          {/* 헤더 — 마진율 순위와 동일한 너비 기준 */}
+          {/* 헤더 */}
           <div className="flex items-center gap-2 border-b border-slate-100 px-2 pb-2">
             <div className="shrink-0 text-[10px] font-semibold text-slate-400">분류</div>
-            <div className="w-24 shrink-0 text-[10px] font-semibold text-slate-400">메뉴명</div>
-            <div className="flex-1" />
+            <div className="flex-1 text-[10px] font-semibold text-slate-400">메뉴명</div>
             <div className="w-20 shrink-0 text-right text-[10px] font-semibold text-slate-400">판매가</div>
             <div className="w-12 shrink-0 text-right text-[10px] font-semibold text-slate-400">마진율</div>
           </div>
@@ -344,8 +343,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           {menusWithMargin.map(menu => (
             <div key={menu.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50">
               <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
-              <span className="w-24 shrink-0 truncate text-xs font-medium text-slate-700">{menu.name}</span>
-              <div className="flex-1" />
+              <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
               <span className="w-20 shrink-0 text-right text-xs text-slate-500">{fmt(menu.price)}원</span>
               <span className={`w-12 shrink-0 text-right text-xs font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
                 {menu.margin_rate?.toFixed(0)}%
