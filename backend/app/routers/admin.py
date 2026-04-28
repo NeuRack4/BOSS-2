@@ -136,7 +136,7 @@ async def get_stats(account_id: str = Query(...)):
 async def get_costs(account_id: str = Query(...), days: int = Query(30, ge=1, le=90)):
     _require_admin(account_id)
 
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    since = datetime.now(timezone.utc) - timedelta(days=days)
     client = langsmith.Client()
 
     runs = client.list_runs(
