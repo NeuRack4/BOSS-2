@@ -15,6 +15,74 @@ const CATEGORY_COLORS: Record<string, string> = {
   기타: "#94a3b8",
 }
 
+// ── 이번달 예상 마감 카드 ──────────────────────────────────────────────────────
+function MonthProjectionCard({ categories }: { categories: CategoryItem[] }) {
+  const now = new Date()
+  const totalDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const elapsedDays = now.getDate()
+  const remainingDays = totalDays - elapsedDays
+  const currentTotal = categories.reduce((sum, c) => sum + c.amount, 0)
+
+  if (currentTotal === 0) return null
+
+  const dailyAvg = Math.round(currentTotal / elapsedDays)
+  const projected = Math.round(dailyAvg * totalDays)
+  const progressPct = Math.min(Math.round((elapsedDays / totalDays) * 100), 100)
+  const pacePct = Math.round((currentTotal / projected) * 100)
+
+  const paceLabel =
+    pacePct >= 110 ? "🚀 목표 초과 페이스" :
+    pacePct >= 95  ? "✅ 순조로운 페이스" :
+    pacePct >= 80  ? "⚠️ 다소 느린 페이스" : "🔴 주의 필요"
+
+  return (
+    <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 p-4 shadow-sm">
+      <p className="mb-3 text-xs font-bold text-indigo-700">📅 이번달 예상 마감 매출</p>
+
+      {/* 현재 vs 예상 */}
+      <div className="mb-3 flex items-end justify-between">
+        <div>
+          <p className="text-[10px] text-indigo-500">지금까지 ({elapsedDays}일 경과)</p>
+          <p className="text-xl font-bold text-indigo-900">{fmt(currentTotal)}원</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-500">현재 페이스 마감 예상</p>
+          <p className="text-2xl font-extrabold text-indigo-700">{fmt(projected)}원</p>
+        </div>
+      </div>
+
+      {/* 진행 바 */}
+      <div className="relative mb-1 h-3 w-full overflow-hidden rounded-full bg-indigo-100">
+        <div
+          className="h-full rounded-full bg-indigo-400 transition-all duration-700"
+          style={{ width: `${progressPct}%` }}
+        />
+        {/* 현재 위치 마커 */}
+        <div
+          className="absolute top-0 h-full w-0.5 bg-indigo-700"
+          style={{ left: `${progressPct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-indigo-400">
+        <span>1일</span>
+        <span className="font-medium text-indigo-600">{elapsedDays}일째 ↑ {remainingDays}일 남음</span>
+        <span>{totalDays}일</span>
+      </div>
+
+      {/* 일평균 + 페이스 */}
+      <div className="mt-3 flex items-center justify-between rounded-lg bg-white/70 px-3 py-2">
+        <div>
+          <p className="text-[10px] text-slate-500">일평균 매출</p>
+          <p className="text-sm font-bold text-slate-700">{fmt(dailyAvg)}원/일</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-medium text-indigo-600">{paceLabel}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 카테고리 바 ────────────────────────────────────────────────────────────────
 function CategoryBar({ item, maxPct }: { item: CategoryItem; maxPct: number }) {
   const color = CATEGORY_COLORS[item.category] ?? "#94a3b8"
@@ -276,9 +344,13 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
         </div>
       )}
 
-      {/* 이번달 뷰 — 카테고리 브레이크다운 */}
+      {/* 이번달 뷰 — 예상 마감 카드 + 카테고리 브레이크다운 */}
       {period === "month" && (
         <>
+          {/* 예상 월 마감 매출 카드 */}
+          <MonthProjectionCard categories={categories} />
+
+          {/* 카테고리별 비중 */}
           {categories.length > 0 ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="mb-3 text-xs font-semibold text-slate-600">이번달 카테고리별 매출 비중</p>
