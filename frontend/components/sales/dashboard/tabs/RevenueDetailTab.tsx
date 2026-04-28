@@ -234,7 +234,11 @@ type Props = {
 }
 
 export function RevenueDetailTab({ categories, weeklyData, periodActivation, onChatMessage }: Props) {
-  const [period, setPeriod] = useState<"today" | "week" | "month">("month")
+  // 이번달 데이터 없으면 이번주, 이번주도 비활성이면 오늘 표시
+  const defaultPeriod: "today" | "week" | "month" =
+    categories.length > 0 ? "month" :
+    periodActivation.week ? "week" : "today"
+  const [period, setPeriod] = useState<"today" | "week" | "month">(defaultPeriod)
   const [copied, setCopied] = useState(false)
   const handleCTA = (msg: string) => {
     onChatMessage?.(msg)
