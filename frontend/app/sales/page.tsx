@@ -1,5 +1,6 @@
-import { DomainPage } from "@/components/bento/DomainPage";
+// frontend/app/sales/page.tsx
+import { SalesPageLayout } from "@/components/sales/SalesPageLayout";
 
 export default function SalesPage() {
-  return <DomainPage domain="sales" />;
+  return <SalesPageLayout />;
 }
