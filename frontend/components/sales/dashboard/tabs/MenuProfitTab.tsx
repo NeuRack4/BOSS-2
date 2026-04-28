@@ -225,8 +225,8 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
               <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
               <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
               <div className="shrink-0 text-right">
-                <p className="text-[10px] text-slate-500">{fmt(menu.price)}원</p>
-                <p className={`text-[10px] font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
+                <p className="text-xs text-slate-500">{fmt(menu.price)}원</p>
+                <p className={`text-sm font-bold ${MARGIN_COLOR(menu.margin_rate ?? 0).text}`}>
                   {menu.margin_rate?.toFixed(0)}%
                 </p>
               </div>
