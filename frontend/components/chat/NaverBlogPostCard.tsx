@@ -11,7 +11,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export type NaverBlogPayload = {
   title: string;
@@ -72,13 +76,48 @@ function BlogBody({
 
 export const NaverBlogPostCard = ({
   payload,
+  accountId,
 }: {
   payload: NaverBlogPayload;
+  accountId?: string;
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [imgIdx, setImgIdx] = useState(0);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    success: boolean;
+    post_url?: string;
+    error?: string;
+  } | null>(null);
+
+  const handleUpload = async () => {
+    if (!accountId) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/marketing/blog/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: accountId,
+          title: payload.title,
+          content: payload.content,
+          tags: payload.tags,
+          image_urls: payload.image_urls ?? [],
+        }),
+      });
+      const json = await res.json();
+      setUploadResult(json);
+    } catch {
+      setUploadResult({ success: false, error: "네트워크 오류가 발생했어요." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const isCookieError = uploadResult?.error?.includes("쿠키") ?? false;
 
   const images = payload.image_urls ?? [];
   const hasImages = images.length > 0;
@@ -245,14 +284,69 @@ export const NaverBlogPostCard = ({
       </div>
 
       {/* ── 게시 버튼 ── */}
-      <div className="border-t border-[#f0f0f0] px-5 py-3">
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#03C75A] py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-[#02a84a] transition-colors"
-        >
-          <ExternalLink className="h-4 w-4" />
-          네이버 블로그에 게시하기
-        </button>
+      <div className="border-t border-[#f0f0f0] px-5 py-3 space-y-2">
+        {uploadResult?.success ? (
+          <div className="flex flex-col items-center gap-1.5 py-1">
+            <div className="flex items-center gap-1.5 text-[#03C75A]">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="text-[13px] font-semibold">게시 완료!</span>
+            </div>
+            {uploadResult.post_url && (
+              <a
+                href={uploadResult.post_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[12px] text-[#03C75A] underline hover:text-[#02a84a]"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                게시된 포스트 보기
+              </a>
+            )}
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={uploading || !accountId}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#03C75A] py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-[#02a84a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  게시 중...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="h-4 w-4" />
+                  네이버 블로그에 게시하기
+                </>
+              )}
+            </button>
+            {uploadResult?.error && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-center text-[11.5px] text-red-500">
+                  {uploadResult.error}
+                </p>
+                {isCookieError && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent("boss:open-integrations-modal", {
+                          detail: { tab: "naver" },
+                        }),
+                      )
+                    }
+                    className="text-[12px] font-medium text-[#03C75A] underline hover:text-[#02a84a]"
+                  >
+                    플랫폼 연결 설정 열기 →
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

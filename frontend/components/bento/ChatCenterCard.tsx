@@ -3,10 +3,9 @@
 import { MessageSquarePlus } from "lucide-react";
 import { InlineChat } from "@/components/chat/InlineChat";
 import { useChat } from "@/components/chat/ChatContext";
-import { SpeakerBadge } from "@/components/chat/SpeakerBadge";
 
 export const ChatCenterCard = () => {
-  const { requestNewSession, lastSpeaker } = useChat();
+  const { requestNewSession } = useChat();
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[5px] bg-[#ffffff] text-[#030303] shadow-lg">
@@ -14,7 +13,7 @@ export const ChatCenterCard = () => {
         <div className="text-xl font-bold tracking-tight text-[#030303]">
           I&apos;m BOSS
         </div>
-        <SpeakerBadge speakers={lastSpeaker} />
+        <div />
         <button
           type="button"
           onClick={requestNewSession}

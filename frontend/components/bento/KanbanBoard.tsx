@@ -149,6 +149,13 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
     [moveCard],
   );
 
+  const MARKETING_DISPLAY_NAMES: Record<string, string> = {
+    Social: "인스타그램",
+    Blog: "네이버 Blog",
+    "YouTube Shorts": "유튜브 Shorts",
+    "성과 분석": "성과 분석",
+  };
+
   if (loading && !board) {
     return (
       <div className="rounded-[5px] border border-[color:var(--kb-border)] bg-[color:var(--kb-surface)] p-8 text-center text-xs text-[color:var(--kb-fg-muted)]">
@@ -197,7 +204,30 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
               onCardClick={handleCardClick}
             />
           )}
-          {board.sub_hubs.map((h) =>
+          {(domain === "sales"
+            ? (() => {
+                const SALES_HUB_ORDER = ["Revenue", "Costs", "Pricing", "Reports"];
+                return [...board.sub_hubs]
+                  .filter((h) => SALES_HUB_ORDER.includes(h.title))
+                  .sort(
+                    (a, b) =>
+                      SALES_HUB_ORDER.indexOf(a.title) -
+                      SALES_HUB_ORDER.indexOf(b.title),
+                  );
+              })()
+            : domain === "marketing"
+            ? (() => {
+                const MARKETING_HUB_ORDER = ["Social", "Blog", "YouTube Shorts", "성과 분석"];
+                return [...board.sub_hubs]
+                  .filter((h) => MARKETING_HUB_ORDER.includes(h.title))
+                  .sort(
+                    (a, b) =>
+                      MARKETING_HUB_ORDER.indexOf(a.title) -
+                      MARKETING_HUB_ORDER.indexOf(b.title),
+                  );
+              })()
+            : board.sub_hubs
+          ).map((h) =>
             domain === "recruitment" && h.title === "Managing" ? (
               <div
                 key={h.id}
@@ -232,7 +262,7 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
             ) : (
               <KanbanColumn
                 key={h.id}
-                title={h.title}
+                title={MARKETING_DISPLAY_NAMES[h.title] ?? h.title}
                 subHubId={h.id}
                 domain={domain}
                 cards={board.cards[h.id] ?? []}

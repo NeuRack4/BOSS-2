@@ -39,6 +39,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [integrationsInitialTab, setIntegrationsInitialTab] = useState<"youtube" | "instagram" | "naver" | undefined>(undefined);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const layoutCtx = useLayout();
 
@@ -63,6 +64,11 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     const onOpenComment = () => setCommentOpen(true);
     const onOpenDmCampaign = () => setDmCampaignOpen(true);
     const onOpenSubsidy = () => setSubsidyOpen(true);
+    const onOpenIntegrations = (e: Event) => {
+      const tab = (e as CustomEvent).detail?.tab as "youtube" | "instagram" | "naver" | undefined;
+      setIntegrationsInitialTab(tab);
+      setIntegrationsOpen(true);
+    };
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
     window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);
@@ -72,6 +78,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     window.addEventListener("boss:open-comment-modal", onOpenComment);
     window.addEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
     window.addEventListener("boss:open-subsidy-modal", onOpenSubsidy);
+    window.addEventListener("boss:open-integrations-modal", onOpenIntegrations);
     return () => {
       window.removeEventListener("boss:open-schedule-modal", onOpenSchedule);
       window.removeEventListener("boss:open-activity-modal", onOpenActivity);
@@ -88,6 +95,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         onOpenDmCampaign,
       );
       window.removeEventListener("boss:open-subsidy-modal", onOpenSubsidy);
+      window.removeEventListener("boss:open-integrations-modal", onOpenIntegrations);
     };
   }, []);
 
@@ -333,6 +341,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
       <IntegrationsModal
         open={integrationsOpen}
         onClose={() => setIntegrationsOpen(false)}
+        initialTab={integrationsInitialTab}
       />
       <PaymentModal open={paymentOpen} onClose={() => setPaymentOpen(false)} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />

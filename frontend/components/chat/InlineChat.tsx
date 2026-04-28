@@ -84,10 +84,7 @@ import {
   ReviewReplyFormCard,
   extractReviewReplyForm,
 } from "./ReviewReplyFormCard";
-import {
-  ScheduleFormCard,
-  extractScheduleForm,
-} from "./ScheduleFormCard";
+import { ScheduleFormCard, extractScheduleForm } from "./ScheduleFormCard";
 import { useNodeDetail } from "@/components/detail/NodeDetailContext";
 import { OnboardingFormCard } from "./OnboardingFormCard";
 import {
@@ -95,6 +92,21 @@ import {
   extractEmployeePickerPayload,
   type EmployeePickerPayload,
 } from "./EmployeePickerCard";
+import {
+  SubsidyRecommendCard,
+  extractSubsidyPayload,
+  type SubsidyPayload,
+} from "./SubsidyRecommendCard";
+import {
+  JobPostingCard,
+  extractJobPostingsPayload,
+  type JobPostingsPayload,
+} from "./JobPostingCard";
+import {
+  ResumeCard,
+  extractResumePayloads,
+  type ResumePayload,
+} from "./ResumeCard";
 
 type UploadCategory =
   | "documents"
@@ -137,6 +149,7 @@ type Message = {
   salesInsight?: SalesInsightPayload;
   marketingReport?: MarketingReportPayload;
   eventPoster?: EventPosterPayload;
+  eventPosters?: EventPosterPayload[];
   eventPlanForm?: boolean;
   snsPostForm?: boolean;
   blogPostForm?: boolean;
@@ -144,6 +157,8 @@ type Message = {
   scheduleForm?: boolean;
   employeePicker?: EmployeePickerPayload;
   adminApp?: { payload: AdminApplicationPayload; content: string };
+  jobPostings?: JobPostingsPayload;
+  resumes?: ResumePayload[];
   savedArtifactId?: string;
   savedDomain?: string;
   savedArtifactMeta?: { type: string; recordedDate: string; title: string };
@@ -212,12 +227,6 @@ const DOMAIN_CAPABILITIES: Array<{
       { name: "매출 입력", prompt: "오늘 매출 입력하기" },
       { name: "비용 입력", prompt: "오늘 비용 입력하기" },
       { name: "매출 리포트", prompt: "이번 달 매출 요약 정리해줘" },
-      { name: "가격 전략", prompt: "가격 전략 추천해줘" },
-      { name: "메뉴 관리", prompt: "메뉴 목록 보여줘" },
-      { name: "메뉴 수익성 분석", prompt: "메뉴 수익성 분석해줘" },
-      { name: "고객 스크립트", prompt: "고객 응대 스크립트 만들어줘" },
-      { name: "고객 분석", prompt: "고객 분석 리포트 만들어줘" },
-      { name: "프로모션", prompt: "프로모션 기획해줘" },
     ],
   },
   {
@@ -225,11 +234,9 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#d4a588",
     bg: "#f7e6da",
     items: [
-      { name: "채용 공고 작성", prompt: "채용 공고 초안 작성해줘" },
-      { name: "채용 공고 포스터", prompt: "채용 공고 포스터 이미지 만들어줘" },
-      { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
-      { name: "이력서 분석", prompt: "이력서 분석해줘." },
+      { name: "채용 공고", prompt: "채용 공고 초안 작성해줘" },
       { name: "면접 질문지", prompt: "이력서 바탕으로 면접 질문 뽑아줘." },
+      { name: "면접 평가표", prompt: "면접 평가표 양식 만들어줘" },
     ],
   },
   {
@@ -324,13 +331,7 @@ const DOMAIN_CAPABILITIES: Array<{
           </svg>
         ),
       },
-      { name: "이벤트 기획", prompt: "프로모션 이벤트 기획해줘" },
-      { name: "리뷰 답글", prompt: "리뷰 답글 작성해줘" },
       { name: "성과 리포트", prompt: "인스타그램·유튜브 성과 리포트 보여줘" },
-      {
-        name: "자동화 스케줄",
-        prompt: "마케팅 자동화 스케줄 설정해줘",
-      },
     ],
   },
   {
@@ -338,11 +339,9 @@ const DOMAIN_CAPABILITIES: Array<{
     accent: "#7977a0",
     bg: "#c8c7d6",
     items: [
-      { name: "서류 공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
-      { name: "지원사업 추천", prompt: "지원사업 추천해줘" },
-      { name: "행정 신청서", prompt: "행정 신청서 작성해줘" },
-      { name: "급여 명세서", prompt: "급여명세서 만들어줘" },
-      { name: "세무 자문", prompt: "세무 자문 받고 싶어" },
+      { name: "공정성 분석", prompt: "업로드한 계약서 공정성 분석해줘" },
+      { name: "지원사업", prompt: "지원사업 추천해줘" },
+      { name: "신청서 초안", prompt: "행정 신청서 작성해줘" },
       { name: "법률 자문", prompt: "법률 자문 받고 싶어" },
     ],
   },
@@ -671,16 +670,21 @@ export const InlineChat = () => {
               extractMenuChartPayload(afterShorts);
             const { cleaned: afterMktReport, payload: mktReport } =
               extractMarketingReportPayload(afterMenu);
-            const { cleaned: afterEventPoster, payload: eventPoster } =
-              extractEventPosterPayload(afterMktReport);
+            const {
+              cleaned: afterEventPoster,
+              payload: eventPoster,
+              payloads: eventPosters,
+            } = extractEventPosterPayload(afterMktReport);
             const { cleaned: afterInstagram, payload: igPayload } =
               extractInstagramPayload(afterEventPoster);
             const { cleaned: afterEventForm, hasForm: eventPlanForm } =
               extractEventPlanForm(afterInstagram);
             const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
               extractScheduleForm(afterEventForm);
-            const { cleaned: cleanedContent, payload: employeePicker } =
+            const { cleaned: afterEmployeePicker, payload: employeePicker } =
               extractEmployeePickerPayload(afterScheduleForm);
+            const { cleaned: cleanedContent, payloads: resumes } =
+              extractResumePayloads(afterEmployeePicker);
             return {
               role: m.role === "user" ? "user" : "assistant",
               content: cleanedContent,
@@ -699,10 +703,12 @@ export const InlineChat = () => {
               menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
               eventPoster: eventPoster ?? undefined,
+              eventPosters: eventPosters.length > 0 ? eventPosters : undefined,
               instagram: igPayload ?? undefined,
               eventPlanForm: eventPlanForm || undefined,
               scheduleForm: scheduleForm || undefined,
               employeePicker: employeePicker ?? undefined,
+              resumes: resumes.length > 0 ? resumes : undefined,
             };
           },
         );
@@ -1018,8 +1024,8 @@ export const InlineChat = () => {
         );
 
         if (otherNonDocs.length > 0) {
-          // "other" 카테고리 파일은 이력서일 수 있으므로 upload_payloads 로 보관해
-          // 다음 chat 요청에 함께 전송한다 (recruit_resume_parse 라우팅용).
+          // "other" 카테고리 파일(이력서 등)은 upload_payloads 로 즉시 orchestrator에 전달.
+          // 오케스트레이터가 upload_override 로 recruit_resume_parse 를 자동 실행한다.
           const payloads = otherNonDocs
             .filter((it) => it.storage_path)
             .map((it) => ({
@@ -1033,18 +1039,11 @@ export const InlineChat = () => {
               parsed_len: it.parsed_len ?? 0,
               uploaded_at: new Date().toISOString(),
             }));
-          if (payloads.length > 0) setPendingUploads(payloads);
-
-          const lines = otherNonDocs.map((it) => {
-            const cat = (it.final_category ?? "other") as UploadCategory;
-            if (cat === "other")
-              return `- **${it.title}** 파일을 저장했어요. 이력서 분석이나 면접 질문 생성이 필요하면 말씀해주세요.`;
-            return `- **${it.title}** → ${NON_DOC_HINT[cat] ?? "저장만 해뒀어요."}`;
-          });
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: lines.join("\n") },
-          ]);
+          if (payloads.length > 0) {
+            setPendingUploads(payloads);
+            const names = otherNonDocs.map((it) => `"${it.title}"`).join(", ");
+            await sendRef.current?.(`업로드한 파일 ${names} 을 분석해주세요.`);
+          }
         }
 
         if (receiptItems.length > 0 && userId) {
@@ -1283,8 +1282,11 @@ export const InlineChat = () => {
           extractMenuChartPayload(afterInsight);
         const { cleaned: afterMarketing, payload: marketingReport } =
           extractMarketingReportPayload(afterMenu);
-        const { cleaned: afterEventPoster, payload: eventPoster } =
-          extractEventPosterPayload(afterMarketing);
+        const {
+          cleaned: afterEventPoster,
+          payload: eventPoster,
+          payloads: eventPosters,
+        } = extractEventPosterPayload(afterMarketing);
         const { cleaned: afterInstagram, payload: instagram } =
           extractInstagramPayload(afterEventPoster);
         const { cleaned: afterNaverBlog, payload: naverBlog } =
@@ -1299,8 +1301,10 @@ export const InlineChat = () => {
           extractReviewReplyForm(afterBlogForm);
         const { cleaned: afterScheduleForm, hasForm: scheduleForm } =
           extractScheduleForm(afterReviewForm);
-        const { cleaned: cleanReply, payload: employeePicker } =
+        const { cleaned: afterEmployeePicker2, payload: employeePicker } =
           extractEmployeePickerPayload(afterScheduleForm);
+        const { cleaned: cleanReply, payloads: resumes } =
+          extractResumePayloads(afterEmployeePicker2);
         setMessages((prev) => [
           ...prev,
           {
@@ -1317,6 +1321,7 @@ export const InlineChat = () => {
             salesInsight: salesInsight ?? undefined,
             marketingReport: marketingReport ?? undefined,
             eventPoster: eventPoster ?? undefined,
+            eventPosters: eventPosters.length > 0 ? eventPosters : undefined,
             instagram: instagram ?? undefined,
             naverBlog: naverBlog ?? undefined,
             eventPlanForm: eventPlanForm || undefined,
@@ -1325,6 +1330,7 @@ export const InlineChat = () => {
             reviewReplyForm: reviewReplyForm || undefined,
             scheduleForm: scheduleForm || undefined,
             employeePicker: employeePicker ?? undefined,
+            resumes: resumes.length > 0 ? resumes : undefined,
             adminApp: adminAppPayloadNew
               ? { payload: adminAppPayloadNew, content: adminAppDocContent }
               : undefined,
@@ -1560,16 +1566,19 @@ export const InlineChat = () => {
       )}
       <div className="flex h-full min-h-0 flex-col">
         {messages.length === 0 && !loading ? (
-          <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-            <div className="mb-4 text-center font-mono text-lg font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
-              Ask the chatbot.
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto flex max-w-md flex-col gap-4 pb-2">
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-4">
+            <div className="flex flex-col items-center gap-12">
+              <div className="text-center font-mono text-3xl font-semibold uppercase tracking-[0.15em] text-[#030303]/70">
+                Ask the chatbot
+              </div>
+              <div className="grid w-fit grid-cols-2 gap-3">
                 {DOMAIN_CAPABILITIES.map((domain) => (
-                  <div key={domain.label}>
+                  <div
+                    key={domain.label}
+                    className="flex w-36 flex-col gap-1.5"
+                  >
                     <div
-                      className="mb-2 inline-block rounded-[4px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
+                      className="mb-0.5 inline-block self-center rounded-[4px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
                       style={{
                         backgroundColor: domain.bg,
                         color: domain.accent,
@@ -1577,20 +1586,18 @@ export const InlineChat = () => {
                     >
                       {domain.label}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {domain.items.map((item) => (
-                        <button
-                          key={item.name}
-                          type="button"
-                          disabled={loading}
-                          onClick={() => send(item.prompt)}
-                          className="flex items-center gap-1.5 rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
-                        >
-                          {item.icon}
-                          {item.name}
-                        </button>
-                      ))}
-                    </div>
+                    {domain.items.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => send(item.prompt)}
+                        className="flex items-center justify-center gap-1.5 rounded-[5px] border border-[#030303]/[0.07] bg-[#fcfcfc] px-2.5 py-1.5 text-[12px] text-[#030303]/75 transition-colors hover:bg-[#030303]/[0.05] hover:text-[#030303] disabled:opacity-40"
+                      >
+                        {item.icon}
+                        {item.name}
+                      </button>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -1618,6 +1625,7 @@ export const InlineChat = () => {
                 msg.menuChart ?? null;
               let salesInsightPayload: SalesInsightPayload | null =
                 msg.salesInsight ?? null;
+              let subsidyPayload: SubsidyPayload | null = null;
               // real-time: msg.adminApp 에 저장된 값 우선 사용
               let adminAppPayload: AdminApplicationPayload | null =
                 msg.adminApp?.payload ?? null;
@@ -1683,6 +1691,17 @@ export const InlineChat = () => {
                 const mcExtracted = extractMenuChartPayload(displayText || "");
                 displayText = mcExtracted.cleaned;
                 if (mcExtracted.payload) menuChartPayload = mcExtracted.payload;
+
+                const sbExtracted = extractSubsidyPayload(displayText || "");
+                displayText = sbExtracted.cleaned;
+                if (sbExtracted.payload) subsidyPayload = sbExtracted.payload;
+
+                const jpExtracted = extractJobPostingsPayload(
+                  displayText || "",
+                );
+                displayText = jpExtracted.cleaned;
+                if (jpExtracted.payload)
+                  (msg as Message).jobPostings = jpExtracted.payload;
               }
 
               return (
@@ -1771,7 +1790,7 @@ export const InlineChat = () => {
                   )}
                   {naverBlogPayload && msg.role === "assistant" && (
                     <div className="flex justify-center w-full py-1">
-                      <NaverBlogPostCard payload={naverBlogPayload} />
+                      <NaverBlogPostCard payload={naverBlogPayload} accountId={userId} />
                     </div>
                   )}
                   {reviewReplyPayload && msg.role === "assistant" && (
@@ -1819,6 +1838,25 @@ export const InlineChat = () => {
                       <MenuAnalysisCard payload={menuChartPayload} />
                     </div>
                   )}
+                  {msg.role === "assistant" && subsidyPayload && (
+                    <div className="ml-8 max-w-[85%]">
+                      <SubsidyRecommendCard payload={subsidyPayload} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" && msg.jobPostings && (
+                    <div className="ml-8 max-w-[90%]">
+                      <JobPostingCard payload={msg.jobPostings} />
+                    </div>
+                  )}
+                  {msg.role === "assistant" &&
+                    msg.resumes?.map((resume, ri) => (
+                      <div
+                        key={resume.resume_id ?? ri}
+                        className="ml-8 max-w-[90%]"
+                      >
+                        <ResumeCard payload={resume} />
+                      </div>
+                    ))}
                   {msg.role === "assistant" && adminAppPayload && userId && (
                     <div className="ml-8 max-w-[90%]">
                       <AdminApplicationCard
@@ -1835,11 +1873,18 @@ export const InlineChat = () => {
                       <MarketingReportCard payload={msg.marketingReport} />
                     </div>
                   )}
-                  {msg.role === "assistant" && msg.eventPoster && (
-                    <div className="ml-8 max-w-[85%]">
-                      <EventPosterCard payload={msg.eventPoster} />
-                    </div>
-                  )}
+                  {msg.role === "assistant" &&
+                    (
+                      msg.eventPosters ??
+                      (msg.eventPoster ? [msg.eventPoster] : [])
+                    ).map((ep, pi) => (
+                      <div
+                        key={ep.artifact_id ?? pi}
+                        className="ml-8 max-w-[85%]"
+                      >
+                        <EventPosterCard payload={ep} />
+                      </div>
+                    ))}
                   {msg.role === "assistant" && msg.eventPlanForm && (
                     <div className="ml-8">
                       <EventPlanFormCard

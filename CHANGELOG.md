@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] — 2026-04-28
+
+### Added — Marketing: 네이버 블로그 자동 업로드
+
+- **NaverBlogPostCard 게시 버튼 활성화** (`frontend/components/chat/NaverBlogPostCard.tsx`) — AI 미리보기 카드에 "네이버 블로그에 게시하기" 버튼 연결. `POST /api/marketing/blog/upload` 호출, 업로드 중 스피너·완료 링크·에러 메시지 표시.
+- **쿠키 오류 시 IntegrationsModal 바로가기** — 업로드 오류 메시지에 "쿠키"가 포함되면 "플랫폼 연결 설정 열기 →" 버튼 노출, `boss:open-integrations-modal` CustomEvent로 네이버 탭 직접 열기.
+- **IntegrationsModal `initialTab` 지원** (`frontend/components/layout/IntegrationsModal.tsx`) — `initialTab` prop 추가. `boss:open-integrations-modal` 이벤트의 `detail.tab` 값으로 특정 탭 자동 선택.
+- **Header 이벤트 구독 추가** (`frontend/components/layout/Header.tsx`) — `boss:open-integrations-modal` 이벤트 수신 후 `integrationsInitialTab` 상태로 모달에 전달.
+- **이미지 지원 (미리보기 + 실제 업로드)** — `write_blog_post` 도구에 `image_urls_json` 파라미터 추가(`_marketing_tools.py`). 메시지 내 이미지 URL 파싱 fallback 추가(`marketing.py`). `NaverBlogUploadRequest`에 `image_urls` 필드 추가(`routers/marketing.py`). 프론트 카드에서 `payload.image_urls` 업로드 요청에 포함.
+- **Playwright 네이버 자동 업로드** (`backend/app/services/naver_blog_runner.py`) — Smart Editor(SE One) Playwright 자동화. `playwright>=1.40.0` 의존성 추가(`requirements.txt`).
+- **ctypes 클립보드 직접 쓰기** — PowerShell 서브프로세스 대신 `ctypes.windll.user32/kernel32` 로 클립보드 직접 작성. 포커스 탈취 없이 전체 본문 정상 입력. PowerShell은 fallback으로만 유지.
+
+### Added — Marketing: 즉시 응답 pre-routing
+
+- **블로그 포스트 즉시 폼 표시** (`marketing.py`) — "블로그 포스트 작성해줘" 류 메시지 감지 시 질문 없이 `run_blog_post_form()` 바로 실행. `_BLOG_FORM_TRIGGER_RE` / `_BLOG_TOPIC_PRESENT_RE` 정규식으로 주제 포함 여부 판별.
+- **성과 리포트 즉시 실행** (`marketing.py`) — "인스타그램/유튜브 성과 리포트" 류 메시지 감지 시 질문 없이 `run_marketing_report()` 바로 실행.
+- **Planner 규칙 강화** (`_planner.py`) — "폼 우선 규칙"에 `mkt_blog_post_form`, `mkt_marketing_report` ask_user 금지 케이스 명시. 두 capability는 항상 즉시 dispatch.
+
+### Added — Marketing: 칸반 탭 정리
+
+- **마케팅 칸반 4개 탭으로 재편** (`KanbanBoard.tsx`) — 인스타그램 / 네이버 Blog / 유튜브 Shorts / 성과 분析 순 고정. Campaigns·Events·Reviews 컬럼 숨김(기존 아티팩트 보존). 각 컬럼에 한국어 표시명 적용(`MARKETING_DISPLAY_NAMES`).
+- **DB 마이그레이션 `039_marketing_subhubs_v2`** — 모든 계정에 "YouTube Shorts", "성과 분析" 서브허브 추가. `ensure_standard_sub_hubs` 함수를 새 표준 4개 서브허브로 갱신.
+
+### Fixed — Marketing Agent
+
+- **OpenAI 429 rate limit 지수 백오프** (`marketing.py`) — `_invoke_with_retry()` 추가. 429 오류 시 최대 3회 재시도, 대기 시간은 5s→10s→20s 또는 오류 메시지의 `try again in Xs` 파싱값 사용.
+- **네이버 블로그 본문 순서 뒤섞임 수정** (`naver_blog_runner.py`) — 세그먼트 루프 내 `focus_body_area()` + `Control+End` 제거. 자연 커서 흐름 유지로 내용 순서 정상화.
+
+---
+
+## [3.2.0] — 2026-04-27
+
+### Added — Sales UI
+
+- **PriceStrategyView 컴포넌트** (`frontend/components/sales/PriceStrategyView.tsx`) — 가격 전략 artifact 모달 전용 렌더러. 현재 가격 분석·시장 포지셔닝·추천 가격대·실행 방안 4섹션을 컬러 라벨 배지 + 번호 원형 + 여백 스타일로 가독성 개선.
+- **NodeDetailModal price_strategy 전용 렌더링 연결** — `artifact.type === "price_strategy"` 조건 추가, `PriceStrategyView` 적용.
+
+### Changed — Sales Kanban
+
+- **Sales 칸반 서브허브 순서 고정** (`KanbanBoard.tsx`) — Revenue → Costs → Pricing → Reports 순서로 정렬. Customers 서브허브 숨김 처리.
+
+### Fixed — Sales Agent (DeepAgent 호환)
+
+- **`_run_sales_agent` tool 범위 최적화** — capability별 필요한 tool만 전달하는 `tools` 파라미터 추가. `run_price_strategy` 는 `write_price_strategy` + `ask_user` 2개만 사용해 gpt-4o-mini tool 선택 정확도 향상.
+- **`_run_sales_agent` fallback 품질 개선** — terminal tool 미호출 시 `fallback_result_data` 기반 artifact 강제 저장. AI 텍스트 200자 미만이면 `chat_completion` 재생성 후 저장. 응답에 포함된 tool 지시문 자동 제거.
+- **`run_price_strategy` 응답 개선** — 저장 후 챗봇에는 짧은 확인 메시지만 반환, 상세 내용은 칸반 카드에서 확인하도록 분리.
+- **`_insights.py` 모델 변경** — 4섹션 분석 LLM `gpt-4o` → `gpt-4o-mini`로 변경해 Rate limit 429 방지.
+- **`_ocr.py` 모델 변경** — 영수증·메뉴판 Vision 모델 `gpt-4o` → `gpt-4o-mini`로 변경.
+
+### Fixed — Orchestrator (공용)
+
+- **receipt_payload 강제 override 추가** (`orchestrator.py`) — 영수증/CSV/Excel 업로드 시 Planner가 ask/chitchat으로 오라우팅해도 `sales_parse_receipt` 또는 `sales_parse_csv`로 강제 dispatch.
+- **solo_cap override 추가** (`orchestrator.py`) — `sales_parse_receipt`, `sales_parse_csv`, `sales_menu_ocr`는 항상 단독 실행 강제. Planner가 다른 capability와 함께 dispatch해도 upload 관련 capability만 남기고 나머지 제거.
+- **Planner opening 원칙 추가** (`_planner_tools.py`) — `dispatch` tool의 `opening` 파라미터 설명에 미래형 작성 원칙 추가. 과거형("됐습니다", "저장되었습니다") 사용 금지 명시.
+
+---
+
+## [3.1.0] — 2026-04-27
+
+### Changed — Memory (refactor)
+
+- **장기기억 저장 구조 전면 개편 (v2.0)** — 도메인×날짜 단일 blob append 방식에서 artifact별 개별 markdown row 방식으로 전환. 신규 artifact 생성 시 전체 재임베딩 없이 단순 insert 1회로 저장.
+- **저장 포맷 구조화** — `## [domain] artifact_type — YYYY-MM-DD HH:MM` 헤더 + 제목 + gpt-4o-mini 요약 2~3문장의 markdown 형식으로 RAG recall 품질 개선.
+- **자동 컨텍스트 압축** — 도메인별 비압축 row 20개 초과 시 오래된 기록을 gpt-4o-mini로 자동 압축·병합하여 1개 row로 대체. 압축 row는 7일 TTL 미적용으로 장기 recall 보장.
+- **DB 마이그레이션 `038_memory_long_v2`** — `artifact_type`, `event_time`, `is_compressed` 컬럼 추가. digest 기반 unique index·`upsert_memory_long` RPC 제거. FTS 자동 업데이트 트리거 추가. `memory_search` RPC 압축 row TTL 예외 처리.
+- **에이전트 코드 무수정** — `log_artifact_to_memory()` 시그니처 동일 유지, recruitment·marketing·sales·documents 에이전트 파일 변경 없음.
+
+---
+
+## [3.0.0] — 2026-04-26
+
+### Changed — UI / Chat (refactor)
+
+- **초기 화면 퀵액션 버튼 전면 개편** — 도메인별 버튼 수 축소 (Sales 3 · Recruitment 3 · Marketing 4 · Documents 4). 레이아웃을 기존 가로 나열에서 2×2 도메인 그리드(1행: Sales·Recruitment / 2행: Marketing·Documents)로 변경. 각 도메인 내 버튼은 세로 정렬. 전체 그리드를 채팅 영역 정중앙에 플로팅 배치.
+- **ASK THE CHATBOT 텍스트 개선** — 글씨 크기 확대(`text-3xl`), 마침표 제거, 버튼 그리드와 간격 확대(`gap-12`).
+- **버튼·도메인 레이블 가운데 정렬** — 버튼 텍스트 `justify-center`, 도메인 레이블 `self-center` 적용.
+- **LAST SPEAKER 배지 제거** — `ChatCenterCard` 헤더에서 `SpeakerBadge` 컴포넌트 제거.
+
+### Fixed — Sales (refactor)
+
+- **SalesInputTable 저장 버그 완전 수정** — Save 클릭 후 "확인한 매출 N건 저장해줘." 메시지를 보내면 Planner가 `mode="ask"`로 응답해 항목 정보를 재요청하던 버그 수정. `orchestrator.py`에 `pending_save` 강제 override 블록 추가 — Planner 모드와 무관하게 `pending_save.items`가 존재하면 `sales_save_revenue` / `sales_save_costs`로 강제 dispatch. 기존 `upload_hint` override 패턴과 동일 구조 적용.
+- **run_revenue_entry pending_save 가드** — `pending_save.kind=="revenue"`이고 items가 있을 때 `run_save_revenue`로 즉시 위임 (orchestrator override의 보조 안전망).
+
+---
+
 ## [2.10.1] — 2026-04-24
 
 ### Fixed — Sales (feature/sales_bugfix)

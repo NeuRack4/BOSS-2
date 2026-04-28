@@ -197,7 +197,7 @@ async def generate_job_posting_poster(
         raise RuntimeError("job_posting_poster artifact 저장 실패")
     artifact_id = insert.data[0]["id"]
 
-    # 5. derives_from 엣지
+    # 5. derives_from 엣지 + Job_posting 서브허브 contains 엣지
     try:
         sb.table("artifact_edges").insert({
             "account_id": account_id,
@@ -207,6 +207,21 @@ async def generate_job_posting_poster(
         }).execute()
     except Exception:
         log.exception("derives_from edge insert failed")
+    try:
+        from app.agents._artifact import pick_sub_hub_id
+        hub_id = pick_sub_hub_id(
+            sb, account_id, "recruitment",
+            prefer_keywords=("Job_posting", "posting", "채용공고"),
+        )
+        if hub_id:
+            sb.table("artifact_edges").insert({
+                "account_id": account_id,
+                "parent_id":  hub_id,
+                "child_id":   artifact_id,
+                "relation":   "contains",
+            }).execute()
+    except Exception:
+        log.exception("sub_hub contains edge insert failed")
 
     # 6. activity_logs + 임베딩 (best-effort)
     try:

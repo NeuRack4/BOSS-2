@@ -19,6 +19,8 @@ _SET_NICKNAME_RE = re.compile(r"\[SET_NICKNAME\](.*?)\[/SET_NICKNAME\]", re.DOTA
 _SET_PROFILE_RE = re.compile(r"\[SET_PROFILE\](.*?)\[/SET_PROFILE\]", re.DOTALL)
 _ARTIFACT_RE = re.compile(r"\[ARTIFACT\](.*?)\[/ARTIFACT\]", re.DOTALL)
 _CHOICES_RE = re.compile(r"\[CHOICES\](.*?)\[/CHOICES\]", re.DOTALL)
+# [[TAG]]...[[/TAG]] — 프론트 인라인 카드용 이중 브래킷 마커 (합성 시 passthrough 대상)
+_DOUBLE_BRACKET_MARKER_RE = re.compile(r"\[\[[A-Z_]+\]\][\s\S]*?\[\[/[A-Z_]+\]\]", re.DOTALL)
 
 CORE_PROFILE_KEYS = (
     "business_type",
@@ -337,12 +339,14 @@ async def classify_intent(message: str, history: list[dict]) -> list[str]:
                 "- recruitment: 채용공고·면접·직원 관리 + **채용공고 이미지/포스터/썸네일 생성**\n"
                 "- marketing: SNS·광고·이벤트 기획·블로그·리뷰 답글 작성 + **광고 이미지·썸네일·배너 생성** + **유튜브 쇼츠·영상·숏폼 제작**\n"
                 "- sales: 매출 입력/분석·비용 입력/기록·가격·고객 응대 스크립트\n"
-                "- documents: 두 가지 작업 모두 포함.\n"
+                "- documents: 세 가지 작업 모두 포함.\n"
                 "    (1) 계약서·견적서·공지·행정 서류 **작성/검토**.\n"
                 "    (2) **한국의 모든 법률·법령·조례·시행령·시행규칙에 대한 질문** — 조언 요청이든 단순 내용 문의든 "
                 "전부 documents 로 분류. 분야 불문 (노동·임대차·공정거래·개인정보·세법·상법·프랜차이즈·전자상거래·식품위생·"
                 "소방법·건축법·도로교통법·환경·저작권·의료법·형법 등). 예: '소방법 알려줘', '임대료 인상 거절할 수 있나요?', "
                 "'음식점 영업허가 절차', '개인정보 유출 과태료', '근로자가 무단 퇴사하면?', '상표 출원 어떻게 해?'.\n"
+                "    (3) **정부지원사업·보조금·창업지원 추천** — '지원사업 추천', '보조금 뭐가 있어', '정부지원 받고 싶어', "
+                "'어떤 지원사업이 잘 맞을까' 등 → documents 로 분류.\n"
                 "- planning: 여러 도메인에 걸친 기간 단위 할 일 정리/플랜 요청 (예: '이번 주 할 일', '오늘 뭐 해야 돼')\n"
                 "- chitchat: 인사, 이름/호칭 설정, BOSS 사용법, 상태 질문, 감사 인사\n"
                 "- refuse: 위 어디에도 속하지 않는 요청 (코딩, 날씨·뉴스, 철학·연애 상담, 일반 상식·역사·과학 QA 등). "
@@ -454,6 +458,24 @@ def _save_profile_updates(account_id: str, core: dict, meta: dict) -> None:
 _PROFILE_STAGE_ALLOWED = {"창업 준비", "오픈 직전", "영업 중", "확장 중"}
 _PROFILE_CHANNELS_ALLOWED = {"offline", "online", "both"}
 
+# Planner/LLM이 유사 표현으로 저장할 때 정규 값으로 매핑
+_STAGE_NORMALIZE: dict[str, str] = {
+    "창업 준비": "창업 준비",
+    "창업 준비 중": "창업 준비",
+    "창업 준비중": "창업 준비",
+    "오픈 직전": "오픈 직전",
+    "창업 초기": "오픈 직전",
+    "창업 초기 (1년 미만)": "오픈 직전",
+    "영업 중": "영업 중",
+    "영업중": "영업 중",
+    "성장기": "영업 중",
+    "성장기 (1~3년)": "영업 중",
+    "확장 중": "확장 중",
+    "확장중": "확장 중",
+    "안정기": "확장 중",
+    "안정기 (3년 이상)": "확장 중",
+}
+
 
 def _extract_and_save_profile(account_id: str, reply: str) -> str:
     """응답에서 [SET_PROFILE] 블록을 파싱해 저장, 본문에선 제거."""
@@ -471,8 +493,10 @@ def _extract_and_save_profile(account_id: str, reply: str) -> str:
             if not key or not val:
                 continue
             if key in CORE_PROFILE_KEYS:
-                if key == "business_stage" and val not in _PROFILE_STAGE_ALLOWED:
-                    continue
+                if key == "business_stage":
+                    val = _STAGE_NORMALIZE.get(val, val)
+                    if val not in _PROFILE_STAGE_ALLOWED:
+                        continue
                 if key == "channels" and val.lower() not in _PROFILE_CHANNELS_ALLOWED:
                     continue
                 core[key] = val[:200]
@@ -539,7 +563,7 @@ def _nickname_context(account_id: str) -> str:
     return "\n\n[사용자 닉네임]\n(아직 미설정 — 사용자가 이름/호칭/가게 이름을 알려주면 [SET_NICKNAME] 블록으로 저장할 것)"
 
 
-PROFILE_NUDGE_THRESHOLD = 3
+PROFILE_NUDGE_THRESHOLD = 5
 
 
 def _profile_nudge_context(account_id: str) -> str:
@@ -701,6 +725,70 @@ async def _dispatch_via_planner(
         }
         mode = "dispatch"
 
+    # pending_save 가 있는데 planner 가 올바른 capability 로 dispatch 하지 않았으면 강제 override
+    # (SalesInputTable/CostInputTable Save 버튼 경로 — Planner 의 ask/chitchat/오라우팅 방지)
+    from app.agents._sales_context import get_pending_save as _get_pending_save
+    _pending_save = _get_pending_save() or {}
+    _save_kind = _pending_save.get("kind")
+    _save_items = _pending_save.get("items")
+    if _save_items:
+        _target_cap = "sales_save_revenue" if _save_kind == "revenue" else (
+            "sales_save_costs" if _save_kind == "cost" else None
+        )
+        if _target_cap and _target_cap in dispatch:
+            _dispatched_caps = (
+                {s["capability"] for s in (result.get("steps") or [])}
+                if mode == "dispatch" else set()
+            )
+            if _target_cap not in _dispatched_caps:
+                log.info(
+                    "[planner] account=%s pending_save_override kind=%s mode=%s → force %s",
+                    account_id, _save_kind, mode, _target_cap,
+                )
+                result = {
+                    "mode": "dispatch",
+                    "opening": result.get("opening") or "",
+                    "brief": result.get("brief") or "",
+                    "steps": [{"capability": _target_cap, "args": {}, "depends_on": None}],
+                    "question": "",
+                    "choices": [],
+                    "profile_updates": result.get("profile_updates") or {},
+                }
+                mode = "dispatch"
+
+    # receipt_payload 가 있는데 planner 가 올바른 capability 로 dispatch 하지 않았으면 강제 override
+    # (영수증 이미지 OCR / CSV / Excel 업로드 경로 — Planner 의 ask/chitchat/오라우팅 방지)
+    from app.agents._sales_context import get_pending_receipt as _get_pending_receipt
+    _pending_receipt = _get_pending_receipt() or {}
+    if _pending_receipt.get("storage_path"):
+        _mime = _pending_receipt.get("mime_type") or ""
+        _fname = (_pending_receipt.get("original_name") or "").lower()
+        _is_csv = (
+            "csv" in _mime or "excel" in _mime or "spreadsheet" in _mime
+            or _fname.endswith(".csv") or _fname.endswith(".xlsx") or _fname.endswith(".xls")
+        )
+        _receipt_cap = "sales_parse_csv" if _is_csv else "sales_parse_receipt"
+        if _receipt_cap in dispatch:
+            _dispatched_caps = (
+                {s["capability"] for s in (result.get("steps") or [])}
+                if mode == "dispatch" else set()
+            )
+            if _receipt_cap not in _dispatched_caps:
+                log.info(
+                    "[planner] account=%s receipt_override mime=%s mode=%s → force %s",
+                    account_id, _mime, mode, _receipt_cap,
+                )
+                result = {
+                    "mode": "dispatch",
+                    "opening": result.get("opening") or "",
+                    "brief": result.get("brief") or "",
+                    "steps": [{"capability": _receipt_cap, "args": {}, "depends_on": None}],
+                    "question": "",
+                    "choices": [],
+                    "profile_updates": result.get("profile_updates") or {},
+                }
+                mode = "dispatch"
+
     opening = (result.get("opening") or "").strip()
     brief = (result.get("brief") or "").strip()
 
@@ -713,8 +801,10 @@ async def _dispatch_via_planner(
             if not isinstance(v, str) or not v.strip():
                 continue
             if k in CORE_PROFILE_KEYS:
-                if k == "business_stage" and v not in _PROFILE_STAGE_ALLOWED:
-                    continue
+                if k == "business_stage":
+                    v = _STAGE_NORMALIZE.get(v, v)
+                    if v not in _PROFILE_STAGE_ALLOWED:
+                        continue
                 if k == "channels" and v.lower() not in _PROFILE_CHANNELS_ALLOWED:
                     continue
                 core[k] = v[:200]
@@ -764,6 +854,16 @@ async def _dispatch_via_planner(
         # dispatch 인데 step 이 없다 → 의미 없음. 폴백.
         log.info("[planner] account=%s dispatch without steps → fallback", account_id)
         return None
+
+    # sales_parse_receipt / sales_parse_csv 는 단독 실행 강제
+    # — 사용자가 테이블 확인 후 저장해야 하므로 다른 capability 와 함께 실행 금지
+    _SOLO_CAPS = {"sales_parse_receipt", "sales_parse_csv", "sales_menu_ocr"}
+    if any(s["capability"] in _SOLO_CAPS for s in steps) and len(steps) > 1:
+        steps = [s for s in steps if s["capability"] in _SOLO_CAPS]
+        log.info(
+            "[planner] account=%s solo_cap_override → steps reduced to %s",
+            account_id, [s["capability"] for s in steps],
+        )
 
     # capability 유효성 확인
     for s in steps:
@@ -977,10 +1077,15 @@ async def _synthesize_cross_domain(
     """
     artifact_summaries: list[dict] = []
     clean_map: dict[str, str] = {}
+    passthrough_markers: list[str] = []
     for dom, raw in per_domain_replies.items():
         for a in _extract_artifact_summaries(raw):
             artifact_summaries.append({"domain": dom, **a})
-        clean_map[dom] = _strip_inline_blocks(raw)
+        stripped = _strip_inline_blocks(raw)
+        # [[TAG]]...[[/TAG]] 마커 수집 후 제거 — LLM 합성 후 재첨부
+        markers = _DOUBLE_BRACKET_MARKER_RE.findall(stripped)
+        passthrough_markers.extend(markers)
+        clean_map[dom] = _DOUBLE_BRACKET_MARKER_RE.sub("", stripped).strip()
 
     parts = [f"[{dom} 모듈 응답]\n{txt}" for dom, txt in clean_map.items()]
     if artifact_summaries:
@@ -1012,6 +1117,8 @@ async def _synthesize_cross_domain(
         temperature=0.3,
     )
     reply = resp.choices[0].message.content or ""
+    if passthrough_markers:
+        reply = reply.rstrip() + "\n\n" + "\n\n".join(passthrough_markers)
     return _extract_and_save_nickname(account_id, reply)
 
 

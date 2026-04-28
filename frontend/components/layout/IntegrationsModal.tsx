@@ -11,7 +11,7 @@ type PlatformStatus = {
   [key: string]: unknown;
 };
 type Tab = "youtube" | "instagram" | "naver";
-type Props = { open: boolean; onClose: () => void };
+type Props = { open: boolean; onClose: () => void; initialTab?: Tab };
 
 /* ── 플랫폼 탭 색상 ───────────────────────────────────────────────────────── */
 const TAB_COLOR: Record<Tab, { underline: string; dot: string; icon: string }> =
@@ -198,10 +198,14 @@ const StatusBanner = ({
 /* ── 메인 컴포넌트 ─────────────────────────────────────────────────────────── */
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export const IntegrationsModal = ({ open, onClose }: Props) => {
+export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
   const supabase = createClient();
   const [accountId, setAccountId] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("youtube");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "youtube");
+
+  useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab);
+  }, [open, initialTab]);
 
   const [naverStatus, setNaverStatus] = useState<PlatformStatus>({
     connected: false,

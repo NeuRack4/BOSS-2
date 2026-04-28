@@ -31,6 +31,8 @@ from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     ARTIFACT_RULE,
+    NICKNAME_RULE,
+    PROFILE_RULE,
 )
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
@@ -38,7 +40,21 @@ from app.agents._artifact import (
     save_artifact_from_reply,
     list_sub_hub_titles,
     today_context,
+    pick_sub_hub_id,
+    record_artifact_for_focus,
 )
+from app.agents._agent_context import inject_agent_context
+from app.agents._sales_tools import (
+    SALES_TOOLS,
+    init_sales_result_store,
+    get_sales_result_store,
+    get_sales_extra,
+    write_price_strategy as _tool_write_price_strategy,
+    write_customer_script as _tool_write_customer_script,
+    ask_user as _tool_ask_user,
+)
+from deepagents import create_deep_agent
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -319,6 +335,8 @@ artifact 저장 시 sub_domain 필드를 반드시 포함:
 → [CHOICES] 버튼 출력 금지
 → 반드시 [ACTION:OPEN_SALES_TABLE:{"date":"오늘날짜","items":[]}] 마커만 출력
 """
+    + NICKNAME_RULE
+    + PROFILE_RULE
 )
 
 
@@ -458,6 +476,20 @@ async def run_revenue_entry(
     (기존 `_parse_sales_from_message` + `[ACTION:OPEN_SALES_TABLE]` 파이프라인 재사용).
     """
     log.info("[SALES] run_revenue_entry 진입 | account=%s", account_id)
+
+    # pending_save(kind=revenue)가 있으면 SalesInputTable Save 버튼 경로 — 저장으로 위임
+    from app.agents._sales_context import get_pending_save
+    pending = get_pending_save() or {}
+    if pending.get("kind") == "revenue" and pending.get("items"):
+        log.info("[SALES] run_revenue_entry → pending_save 감지, run_save_revenue 위임")
+        return await run_save_revenue(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
     text = (raw_text or "").strip() or message
     return await run(text, account_id, history, rag_context, long_term_context)
 
@@ -531,7 +563,7 @@ async def run_sales_report(
     return result["chat_text"]
 
 
-@_traceable(name="sales.run_price_strategy")
+@_traceable(name="sales.run_price_strategy", run_type="chain")
 async def run_price_strategy(
     *,
     account_id: str,
@@ -545,6 +577,7 @@ async def run_price_strategy(
     goal: str | None = None,
 ) -> str:
     log.info("[SALES] run_price_strategy 진입 | account=%s target=%s", account_id, target)
+    system = _build_sales_agent_system(account_id, rag_context, long_term_context)
     lines = [f"[대상] {target}"]
     if current_price:
         lines.append(f"[현재 가격] {current_price}")
@@ -552,15 +585,42 @@ async def run_price_strategy(
         lines.append(f"[경쟁/시장 기준] {benchmark}")
     if goal:
         lines.append(f"[목표] {goal}")
-    synthetic = (
-        "가격 전략(price_strategy) 을 작성해주세요. [ARTIFACT] 블록(type=price_strategy) 으로 저장.\n"
-        + "\n".join(lines)
-        + f"\n\n원본 사용자 요청: {message}"
+    info_str = "\n".join(lines)
+    system += (
+        "\n\n[가격 전략 작성 요청 — 정보 확정]\n"
+        "아래 마크다운 구조로 전략 문서를 작성한 뒤 write_price_strategy를 호출하세요.\n"
+        "## 현재 가격 분석\n## 시장 포지셔닝\n## 추천 가격대 및 근거\n## 실행 방안\n\n"
+        + info_str
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    synthetic = (
+        f"다음 정보로 가격 전략 문서를 마크다운 형식으로 작성하세요:\n{info_str}\n\n"
+        "문서 구성:\n"
+        "## 현재 가격 분석\n"
+        "## 시장 포지셔닝\n"
+        "## 추천 가격대 및 근거 (구체적 수치 포함)\n"
+        "## 실행 방안 (즉시 적용 가능한 3가지)\n\n"
+        "작성 후 write_price_strategy 도구로 저장하세요.\n"
+        f"원본 요청: {message}"
+    )
+    title = f"{target} 가격 전략"
+    await _run_sales_agent(
+        account_id, synthetic, history, rag_context, long_term_context, system,
+        tools=[_tool_write_price_strategy, _tool_ask_user],
+        fallback_result_data={
+            "action": "write_price_strategy",
+            "title": title,
+            "content": "",
+            "target": target,
+            "current_price": current_price or "",
+            "benchmark": benchmark or "",
+            "goal": goal or "",
+            "sub_domain": "Pricing",
+        },
+    )
+    return f"**{title}**을 Pricing에 저장했습니다. 칸반에서 상세 내용을 확인하세요."
 
 
-@_traceable(name="sales.run_customer_script")
+@_traceable(name="sales.run_customer_script", run_type="chain")
 async def run_customer_script(
     *,
     account_id: str,
@@ -573,20 +633,26 @@ async def run_customer_script(
     channel: str | None = None,
 ) -> str:
     log.info("[SALES] run_customer_script 진입 | account=%s situation=%s", account_id, situation)
+    system = _build_sales_agent_system(account_id, rag_context, long_term_context)
     lines = [f"[응대 상황] {situation}"]
     if tone:
         lines.append(f"[톤] {tone}")
     if channel:
         lines.append(f"[채널] {channel}")
+    system += (
+        "\n\n[고객 응대 스크립트 작성 요청 — 정보 확정]\n"
+        "스크립트를 작성하고 write_customer_script를 호출하세요.\n"
+        + "\n".join(lines)
+    )
     synthetic = (
-        "고객 응대 스크립트(customer_script) 를 작성해주세요. [ARTIFACT] 블록(type=customer_script) 으로 저장.\n"
+        "고객 응대 스크립트(customer_script)를 작성해주세요. write_customer_script로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
-@_traceable(name="sales.run_promotion")
+@_traceable(name="sales.run_promotion", run_type="chain")
 async def run_promotion(
     *,
     account_id: str,
@@ -601,6 +667,7 @@ async def run_promotion(
     target: str | None = None,
 ) -> str:
     log.info("[SALES] run_promotion 진입 | account=%s title=%s", account_id, title)
+    system = _build_sales_agent_system(account_id, rag_context, long_term_context)
     lines = [
         f"[프로모션명] {title}",
         f"[기간] {start_date} ~ {end_date}",
@@ -608,16 +675,20 @@ async def run_promotion(
     ]
     if target:
         lines.append(f"[대상] {target}")
+    system += (
+        "\n\n[프로모션 기획 요청 — 정보 확정]\n"
+        f"기획서를 작성하고 write_promotion을 호출하세요 (start_date='{start_date}', end_date='{end_date}').\n"
+        + "\n".join(lines)
+    )
     synthetic = (
-        f"'{title}' 할인/프로모션(promotion) 기획서를 작성해주세요. "
-        "[ARTIFACT] 블록(type=promotion, start_date, end_date, due_label='프로모션 종료') 으로 저장.\n"
+        f"'{title}' 할인·프로모션(promotion) 기획서를 작성해주세요. write_promotion으로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
-@_traceable(name="sales.run_sales_checklist")
+@_traceable(name="sales.run_sales_checklist", run_type="chain")
 async def run_sales_checklist(
     *,
     account_id: str,
@@ -628,11 +699,16 @@ async def run_sales_checklist(
     topic: str,
 ) -> str:
     log.info("[SALES] run_sales_checklist 진입 | account=%s topic=%s", account_id, topic)
+    system = _build_sales_agent_system(account_id, rag_context, long_term_context)
+    system += (
+        "\n\n[체크리스트 작성 요청 — 정보 확정]\n"
+        f"'{topic}' 주제로 체크리스트를 작성하고 write_checklist를 호출하세요."
+    )
     synthetic = (
-        f"'{topic}' 주제로 매출/운영 체크리스트(checklist) 를 작성해주세요. [ARTIFACT] 블록(type=checklist) 으로 저장.\n\n"
+        f"'{topic}' 주제로 매출·운영 체크리스트(checklist)를 작성해주세요. write_checklist로 저장하세요.\n\n"
         f"원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
 @_traceable(name="sales.run_cost_entry")
@@ -1521,7 +1597,10 @@ def describe(account_id: str) -> list[dict]:
                         f"[즉시 호출 가능] 방금 업로드된 영수증 '{fname}' 를 OCR 해서 매출/비용 항목을 "
                         "추출하고 SalesInputTable(또는 CostInputTable) 을 여는 ACTION 마커를 응답에 담는다. "
                         "사용자가 '저장해줘', '기록해줘', '매출로 처리' 등을 요청하면 즉시 호출. "
-                        "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중."
+                        "영수증 업로드 안 됐다고 답하지 말 것 — 이미 서버가 스토리지에 파일을 보관 중. "
+                        "⚠️ 이 capability 단독으로만 dispatch 할 것 — sales_revenue_entry·sales_cost_entry 등 "
+                        "다른 capability 와 함께 dispatch 하지 말 것. 사용자가 테이블에서 확인 후 저장해야 하므로 "
+                        "이 단계에서 저장까지 진행하면 안 된다."
                     ),
                     "handler": run_parse_receipt,
                     "parameters": {"type": "object", "properties": {}},
@@ -1565,6 +1644,494 @@ def _last_message_was_cost_prompt(history: list[dict]) -> bool:
                 or "OPEN_COST_TABLE" in content
             )
     return False
+
+
+# ── DeepAgent 시스템 프롬프트 ────────────────────────────────────────────────
+
+AGENT_SYSTEM_PROMPT = (
+    """당신은 소상공인 매출 관리 전문 AI 에이전트입니다.
+카페, 음식점, 책방, 의류점, 뷰티샵, 편의점 등 모든 업종의 매출·비용·가격·고객을 담당합니다.
+사용자 프로필(업종·상호·위치·목표)을 최대한 활용해 맞춤형 분석과 전략을 제공합니다.
+
+[핵심 원칙]
+1. 자료 작성 요청 시 write_* 도구를 호출해 결과물을 저장하세요.
+2. 타입별 필수 필드가 모두 확정되면 **즉시** 완성된 결과물을 write_* 도구로 저장하세요.
+3. 공통 필드(업종·목표·타겟)는 프로필에 있으면 자동 사용, 합리적으로 추정해서 작성.
+4. 필수 정보가 부족하면 ask_user 도구로 하나씩 되물으세요.
+5. 한 턴에 하나의 terminal tool만 호출하세요.
+6. placeholder([가게명], [가격] 등) 절대 금지 — 모르면 ask_user로 먼저 물어보세요.
+7. 결과물이 완성됐으면 write_* 도구를 즉시 호출하세요. 추가 질문 금지.
+
+[도구 선택 가이드]
+- 가격 전략·할인 정책 → write_price_strategy
+- 고객 응대 스크립트(문의·컴플레인·업셀) → write_customer_script
+- 고객 유형·패턴 분석 → write_customer_analysis
+- 할인·프로모션 기획서 → write_promotion
+- 매출·운영 체크리스트 → write_checklist
+- 정보 부족 시 질문 → ask_user
+
+[sub_domain 매핑 가이드]
+- price_strategy, menu_list → Pricing
+- customer_script, customer_analysis → Customers
+- promotion, sales_report, checklist → Reports
+- cost_report → Costs
+- revenue_entry → Revenue
+시스템 컨텍스트의 "이 계정의 sales 서브허브" 목록에 위 이름이 있으면 반드시 해당 이름으로 sub_domain을 채운다.
+
+"""
+    + _PRICE_STRATEGY_FORMAT
+    + _CUSTOMER_FORMAT
+    + _REQUIRED_FIELDS
+    + CLARIFY_RULE
+    + """
+작성 원칙:
+- 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
+- 없는 수치(매출·방문자 수 등)는 절대 추측하지 않음
+- 실용적이고 바로 사용 가능한 한국어로 작성
+"""
+    + NICKNAME_RULE
+    + PROFILE_RULE
+)
+
+_SALES_TERMINAL_REMINDER = """
+[경고] terminal tool을 호출하지 않았습니다.
+반드시 다음 중 하나를 즉시 호출하세요:
+- write_price_strategy(...) — 가격 전략 저장
+- write_customer_script(...) — 고객 응대 스크립트 저장
+- write_customer_analysis(...) — 고객 분석 저장
+- write_promotion(...) — 프로모션 기획서 저장
+- write_checklist(...) — 체크리스트 저장
+- ask_user(...) — 사용자에게 추가 정보 요청
+
+자료 작성 요청에서 terminal tool 미호출은 오류입니다.
+"""
+
+
+def _make_sales_model():
+    """Sales DeepAgent용 LLM 모델 생성."""
+    if settings.planner_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=settings.planner_claude_model,
+            temperature=0.3,
+            api_key=settings.anthropic_api_key,
+        )
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0.3,
+        api_key=settings.openai_api_key,
+    )
+
+
+@_traceable(name="sales._run_sales_agent", run_type="chain")
+async def _run_sales_agent(
+    account_id: str,
+    message: str,
+    history: list[dict],
+    rag_context: str,
+    long_term_context: str,
+    system_prompt: str,
+    tools: list | None = None,
+    fallback_result_data: dict | None = None,
+) -> str:
+    """Sales DeepAgent를 실행하고 결과를 반환합니다."""
+    inject_agent_context(account_id, message, history, rag_context, long_term_context)
+    init_sales_result_store()
+
+    model = _make_sales_model()
+    active_tools = tools if tools is not None else SALES_TOOLS
+    messages_in = [*history[-6:], {"role": "user", "content": message}]
+
+    async def _invoke(sys: str) -> list:
+        agent = create_deep_agent(model=model, tools=active_tools, system_prompt=sys)
+        result = await agent.ainvoke({"messages": messages_in})
+        return result.get("messages", [])
+
+    try:
+        out_messages = await _invoke(system_prompt)
+    except Exception as exc:
+        log.exception("[sales] deepagent invoke failed")
+        return f"매출 처리 중 오류가 발생했습니다: {exc}"
+
+    result_data = get_sales_result_store()
+
+    if not result_data:
+        log.info("[sales] account=%s no terminal tool — retry", account_id)
+        try:
+            init_sales_result_store()
+            out_messages = await _invoke(system_prompt + "\n\n" + _SALES_TERMINAL_REMINDER)
+        except Exception as exc:
+            log.exception("[sales] retry invoke failed")
+            return f"매출 처리 중 오류가 발생했습니다: {exc}"
+        result_data = get_sales_result_store()
+
+    if not result_data:
+        from langchain_core.messages import AIMessage
+        ai_text = ""
+        for msg in reversed(out_messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                content = msg.content
+                if isinstance(content, list):
+                    texts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
+                    if texts:
+                        ai_text = " ".join(texts).strip()
+                        break
+                elif isinstance(content, str) and content.strip():
+                    ai_text = content.strip()
+                    break
+
+        # fallback_result_data가 있으면 artifact 강제 저장
+        if fallback_result_data is not None:
+            # ai_text 품질 부족 시 tool 지시문 제거 후 직접 재생성
+            if len(ai_text) < 200:
+                log.info("[sales] account=%s ai_text 품질 부족(%d자) — chat_completion 재생성", account_id, len(ai_text))
+                # synthetic message에서 tool 지시문 제거한 순수 작성 요청
+                clean_prompt = message.split("write_price_strategy")[0].split("작성 후")[0].strip()
+                try:
+                    regen = await chat_completion(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "소상공인 전문 컨설턴트. 마크다운 형식으로 상세하고 구체적인 문서를 작성하세요. "
+                                    "도구 호출 지시문이나 '저장하세요' 같은 문구는 절대 포함하지 마세요."
+                                ),
+                            },
+                            {"role": "user", "content": clean_prompt},
+                        ],
+                        temperature=0.4,
+                        max_tokens=1000,
+                    )
+                    ai_text = (regen.choices[0].message.content or "").strip() or ai_text
+                except Exception:
+                    log.exception("[sales] fallback content regen failed account=%s", account_id)
+
+            # 응답에 남은 tool 지시문 제거
+            import re as _re
+            ai_text = _re.sub(
+                r"\n*위 문서를.*?저장하세요\.?\s*$",
+                "",
+                ai_text,
+                flags=_re.DOTALL | _re.IGNORECASE,
+            ).strip()
+
+            log.info("[sales] account=%s fallback_result_data 사용 — artifact 강제 저장", account_id)
+            fallback_result_data = {**fallback_result_data, "content": ai_text}
+            result_data = fallback_result_data
+        else:
+            return ai_text or "처리 결과를 반환하지 못했습니다."
+
+    action = result_data.get("action")
+    if action == "write_price_strategy":
+        return await _execute_write_price_strategy(account_id, result_data)
+    if action == "write_customer_script":
+        return await _execute_write_customer_script(account_id, result_data)
+    if action == "write_customer_analysis":
+        return await _execute_write_customer_analysis(account_id, result_data)
+    if action == "write_promotion":
+        return await _execute_write_promotion(account_id, result_data)
+    if action == "write_checklist":
+        return await _execute_write_checklist(account_id, result_data)
+    if action == "ask_user":
+        q = result_data.get("question", "무엇을 도와드릴까요?")
+        choices = result_data.get("choices", [])
+        if choices:
+            choices_str = "\n".join(f"- {c}" for c in choices)
+            return f"{q}\n\n[CHOICES]\n{choices_str}"
+        return q
+    return "알 수 없는 action입니다."
+
+
+# ── Execute functions (terminal tool 결과 처리 + artifact 저장) ───────────────
+
+async def _execute_write_price_strategy(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "가격 전략"
+    content = result_data.get("content") or ""
+    sub_domain = result_data.get("sub_domain") or "Pricing"
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["sales"],
+            "kind": "artifact",
+            "type": "price_strategy",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "sales", prefer_keywords=(sub_domain, "Pricing"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id, "type": "artifact_created",
+                    "domain": "sales", "title": title,
+                    "description": "가격 전략 생성",
+                    "metadata": {"artifact_id": artifact_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "sales", "price_strategy", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[sales] write_price_strategy artifact insert failed")
+
+    return content
+
+
+async def _execute_write_customer_script(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "고객 응대 스크립트"
+    content = result_data.get("content") or ""
+    sub_domain = result_data.get("sub_domain") or "Customers"
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["sales"],
+            "kind": "artifact",
+            "type": "customer_script",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "sales", prefer_keywords=(sub_domain, "Customers"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id, "type": "artifact_created",
+                    "domain": "sales", "title": title,
+                    "description": "고객 응대 스크립트 생성",
+                    "metadata": {"artifact_id": artifact_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "sales", "customer_script", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[sales] write_customer_script artifact insert failed")
+
+    return content
+
+
+async def _execute_write_customer_analysis(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "고객 분석"
+    content = result_data.get("content") or ""
+    sub_domain = result_data.get("sub_domain") or "Customers"
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["sales"],
+            "kind": "artifact",
+            "type": "customer_analysis",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "sales", prefer_keywords=(sub_domain, "Customers"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id, "type": "artifact_created",
+                    "domain": "sales", "title": title,
+                    "description": "고객 분석 생성",
+                    "metadata": {"artifact_id": artifact_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "sales", "customer_analysis", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[sales] write_customer_analysis artifact insert failed")
+
+    return content
+
+
+async def _execute_write_promotion(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "프로모션"
+    content = result_data.get("content") or ""
+    start_date = result_data.get("start_date") or ""
+    end_date = result_data.get("end_date") or ""
+    sub_domain = result_data.get("sub_domain") or "Reports"
+
+    meta: dict = {}
+    if start_date:
+        meta["start_date"] = start_date
+    if end_date:
+        meta["end_date"] = end_date
+        meta["due_label"] = "프로모션 종료"
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["sales"],
+            "kind": "artifact",
+            "type": "promotion",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": meta,
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "sales", prefer_keywords=(sub_domain, "Reports"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id, "type": "artifact_created",
+                    "domain": "sales", "title": title,
+                    "description": f"프로모션 기획 생성 ({start_date} ~ {end_date})" if start_date else "프로모션 기획 생성",
+                    "metadata": {"artifact_id": artifact_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "sales", "promotion", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[sales] write_promotion artifact insert failed")
+
+    return content
+
+
+async def _execute_write_checklist(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "체크리스트"
+    content = result_data.get("content") or ""
+    sub_domain = result_data.get("sub_domain") or "Reports"
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["sales"],
+            "kind": "artifact",
+            "type": "checklist",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "sales", prefer_keywords=(sub_domain, "Reports"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                sb.table("activity_logs").insert({
+                    "account_id": account_id, "type": "artifact_created",
+                    "domain": "sales", "title": title,
+                    "description": "체크리스트 생성",
+                    "metadata": {"artifact_id": artifact_id},
+                }).execute()
+            except Exception:
+                pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "sales", "checklist", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[sales] write_checklist artifact insert failed")
+
+    return content
+
+
+def _build_sales_agent_system(
+    account_id: str,
+    rag_context: str,
+    long_term_context: str,
+) -> str:
+    """공통 Sales DeepAgent 시스템 프롬프트 조립."""
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "sales")
+    if hubs:
+        system += "\n\n[이 계정의 sales 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "sales")
+    if fb:
+        system += f"\n\n{fb}"
+    return system
 
 
 # ── 메인 run ─────────────────────────────────────────────────────────────────
