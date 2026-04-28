@@ -45,7 +45,7 @@ async def get_users(account_id: str = Query(...)):
 
     auth_users = sb.auth.admin.list_users()
     email_map: dict[str, str] = {
-        u.id: u.email for u in (auth_users.users if auth_users else [])
+        u.id: u.email for u in (auth_users if isinstance(auth_users, list) else getattr(auth_users, "users", []) or [])
     }
 
     subs_res = sb.table("subscriptions").select("account_id,plan,status").execute()
