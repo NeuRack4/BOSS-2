@@ -110,8 +110,7 @@ export function ScheduleFormCard({
   const chipOff =
     "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400";
 
-  const showWeekday =
-    frequency === "weekly" || frequency === "biweekly";
+  const showWeekday = frequency === "weekly" || frequency === "biweekly";
   const showMonthDay = frequency === "monthly";
 
   return (

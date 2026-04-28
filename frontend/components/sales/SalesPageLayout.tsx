@@ -1,32 +1,32 @@
 // frontend/components/sales/SalesPageLayout.tsx
-"use client"
+"use client";
 
-import Link from "next/link"
-import { ArrowLeft, TrendingUp } from "lucide-react"
-import { Header } from "@/components/layout/Header"
-import { BriefingLoader } from "@/components/chat/BriefingLoader"
-import { useChat } from "@/components/chat/ChatContext"
-import { KanbanBoard } from "@/components/bento/KanbanBoard"
-import { DOMAIN_META } from "@/components/bento/types"
-import { cn } from "@/lib/utils"
-import { SalesDashboard } from "@/components/sales/dashboard/SalesDashboard"
+import Link from "next/link";
+import { ArrowLeft, TrendingUp } from "lucide-react";
+import { Header } from "@/components/layout/Header";
+import { BriefingLoader } from "@/components/chat/BriefingLoader";
+import { useChat } from "@/components/chat/ChatContext";
+import { KanbanBoard } from "@/components/bento/KanbanBoard";
+import { DOMAIN_META } from "@/components/bento/types";
+import { cn } from "@/lib/utils";
+import { SalesDashboard } from "@/components/sales/dashboard/SalesDashboard";
 
 export const SalesPageLayout = () => {
-  const meta = DOMAIN_META["sales"]
-  const { userId } = useChat()
+  const meta = DOMAIN_META["sales"];
+  const { userId } = useChat();
 
   const handleChatMessage = (msg: string) => {
     // /sales 페이지엔 InlineChat이 없으므로 클립보드 복사 방식 사용
     navigator.clipboard.writeText(msg).catch(() => {
       // clipboard API 미지원 환경 fallback
-      const ta = document.createElement("textarea")
-      ta.value = msg
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand("copy")
-      document.body.removeChild(ta)
-    })
-  }
+      const ta = document.createElement("textarea");
+      ta.value = msg;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    });
+  };
 
   return (
     <div className="bento-shell flex h-screen flex-col overflow-hidden">
@@ -86,5 +86,5 @@ export const SalesPageLayout = () => {
       </main>
       <BriefingLoader />
     </div>
-  )
-}
+  );
+};

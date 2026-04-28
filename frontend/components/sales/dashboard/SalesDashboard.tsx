@@ -1,38 +1,39 @@
 // frontend/components/sales/dashboard/SalesDashboard.tsx
-"use client"
+"use client";
 
-import { useState } from "react"
-import { ChevronDown, ChevronUp, RefreshCw, BarChart2 } from "lucide-react"
-import { useDashboardData } from "./hooks/useDashboardData"
-import { OverviewTab } from "./tabs/OverviewTab"
-import { RevenueDetailTab } from "./tabs/RevenueDetailTab"
-import { CostTab } from "./tabs/CostTab"
-import { MenuProfitTab } from "./tabs/MenuProfitTab"
+import { useState } from "react";
+import { ChevronDown, ChevronUp, RefreshCw, BarChart2 } from "lucide-react";
+import { useDashboardData } from "./hooks/useDashboardData";
+import { OverviewTab } from "./tabs/OverviewTab";
+import { RevenueDetailTab } from "./tabs/RevenueDetailTab";
+import { CostTab } from "./tabs/CostTab";
+import { MenuProfitTab } from "./tabs/MenuProfitTab";
 
 const fmt = (n: number) =>
-  n >= 10_000 ? `${(n / 10_000).toFixed(1)}만` : n.toLocaleString()
+  n >= 10_000 ? `${(n / 10_000).toFixed(1)}만` : n.toLocaleString();
 
-type Tab = "overview" | "revenue" | "cost" | "menu"
+type Tab = "overview" | "revenue" | "cost" | "menu";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "개요" },
   { key: "revenue", label: "매출 상세" },
   { key: "cost", label: "비용" },
   { key: "menu", label: "메뉴 수익성" },
-]
+];
 
 type Props = {
-  accountId: string
-  onChatMessage?: (msg: string) => void
-}
+  accountId: string;
+  onChatMessage?: (msg: string) => void;
+};
 
 export function SalesDashboard({ accountId, onChatMessage }: Props) {
-  const [collapsed, setCollapsed] = useState(false)
-  const [activeTab, setActiveTab] = useState<Tab>("overview")
-  const { state, periodActivation, refresh } = useDashboardData(accountId)
+  const [collapsed, setCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const { state, periodActivation, refresh } = useDashboardData(accountId);
 
-  const goalPercent = state.goal?.achievement_rate != null
-    ? Math.round(state.goal.achievement_rate)
-    : 0
+  const goalPercent =
+    state.goal?.achievement_rate != null
+      ? Math.round(state.goal.achievement_rate)
+      : 0;
 
   // ── 접힌 상태: 미니 바 ─────────────────────────────────────────────────────
   if (collapsed) {
@@ -47,8 +48,11 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
             오늘 {fmt(state.todayRevenue)}원
           </span>
           {state.todayChangeRate != null && (
-            <span className={`text-xs ${state.todayChangeRate >= 0 ? "text-green-600" : "text-red-500"}`}>
-              {state.todayChangeRate >= 0 ? "+" : ""}{state.todayChangeRate.toFixed(1)}%
+            <span
+              className={`text-xs ${state.todayChangeRate >= 0 ? "text-green-600" : "text-red-500"}`}
+            >
+              {state.todayChangeRate >= 0 ? "+" : ""}
+              {state.todayChangeRate.toFixed(1)}%
             </span>
           )}
           <span className="text-xs text-slate-400">목표 {goalPercent}%</span>
@@ -60,7 +64,7 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
           펼치기 <ChevronDown className="h-3.5 w-3.5" />
         </button>
       </div>
-    )
+    );
   }
 
   // ── 펼쳐진 상태 ───────────────────────────────────────────────────────────
@@ -69,7 +73,7 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
       {/* 헤더: 탭 + 접기 버튼 */}
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div className="flex gap-1">
-          {TABS.map(tab => (
+          {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -116,7 +120,10 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
       {!state.loading && state.error && (
         <div className="p-8 text-center">
           <p className="text-sm text-slate-400">데이터를 불러오지 못했어요</p>
-          <button onClick={refresh} className="mt-2 text-xs text-green-600 underline">
+          <button
+            onClick={refresh}
+            className="mt-2 text-xs text-green-600 underline"
+          >
             다시 시도
           </button>
         </div>
@@ -145,5 +152,5 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
         </>
       )}
     </div>
-  )
+  );
 }

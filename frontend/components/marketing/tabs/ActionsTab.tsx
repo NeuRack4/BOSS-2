@@ -1,21 +1,36 @@
 // frontend/components/marketing/tabs/ActionsTab.tsx
-"use client"
+"use client";
 
-import { useState } from "react"
-import type { ActionItem } from "../types"
+import { useState } from "react";
+import type { ActionItem } from "../types";
 
-const PRIORITY_META: Record<string, { label: string; border: string; text: string }> = {
-  high:   { label: "이번 주",     border: "border-l-orange-400", text: "text-orange-500" },
-  medium: { label: "이번 달",     border: "border-l-slate-400",  text: "text-slate-500"  },
-  low:    { label: "여유 있을 때", border: "border-l-slate-300",  text: "text-slate-400"  },
-}
+const PRIORITY_META: Record<
+  string,
+  { label: string; border: string; text: string }
+> = {
+  high: {
+    label: "이번 주",
+    border: "border-l-orange-400",
+    text: "text-orange-500",
+  },
+  medium: {
+    label: "이번 달",
+    border: "border-l-slate-400",
+    text: "text-slate-500",
+  },
+  low: {
+    label: "여유 있을 때",
+    border: "border-l-slate-300",
+    text: "text-slate-400",
+  },
+};
 
 const CATEGORY_LABEL: Record<string, string> = {
   instagram: "인스타그램",
   youtube: "유튜브",
   content: "콘텐츠",
   general: "전반",
-}
+};
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -30,13 +45,13 @@ function ChevronIcon({ open }: { open: boolean }) {
     >
       <polyline points="4 6 8 10 12 6" />
     </svg>
-  )
+  );
 }
 
 function ActionCard({ item, index }: { item: ActionItem; index: number }) {
-  const [open, setOpen] = useState(false)
-  const priority = item.priority ?? "medium"
-  const meta = PRIORITY_META[priority] ?? PRIORITY_META.medium
+  const [open, setOpen] = useState(false);
+  const priority = item.priority ?? "medium";
+  const meta = PRIORITY_META[priority] ?? PRIORITY_META.medium;
 
   return (
     <div
@@ -82,7 +97,9 @@ function ActionCard({ item, index }: { item: ActionItem; index: number }) {
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 아이디어
               </p>
-              <p className="text-sm leading-relaxed text-slate-700">{item.idea}</p>
+              <p className="text-sm leading-relaxed text-slate-700">
+                {item.idea}
+              </p>
             </div>
           )}
           {item.steps && item.steps.length > 0 && (
@@ -106,7 +123,9 @@ function ActionCard({ item, index }: { item: ActionItem; index: number }) {
           )}
           {item.expected && (
             <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-              <span className="shrink-0 text-xs font-medium text-slate-400">기대효과</span>
+              <span className="shrink-0 text-xs font-medium text-slate-400">
+                기대효과
+              </span>
               <span className="text-sm text-slate-700">{item.expected}</span>
             </div>
           )}
@@ -116,14 +135,14 @@ function ActionCard({ item, index }: { item: ActionItem; index: number }) {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 type Props = {
-  actions: ActionItem[]
-  loading: boolean
-  loaded: boolean
-}
+  actions: ActionItem[];
+  loading: boolean;
+  loaded: boolean;
+};
 
 export function ActionsTab({ actions, loading, loaded }: Props) {
   if (loading) {
@@ -136,7 +155,7 @@ export function ActionsTab({ actions, loading, loaded }: Props) {
           성과 데이터를 분석해 할 일을 생성하고 있어요…
         </p>
       </div>
-    )
+    );
   }
 
   if (loaded && actions.length === 0) {
@@ -144,7 +163,7 @@ export function ActionsTab({ actions, loading, loaded }: Props) {
       <div className="py-12 text-center text-sm text-slate-400">
         할 일 항목을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.
       </div>
-    )
+    );
   }
 
   if (!loaded) {
@@ -152,11 +171,11 @@ export function ActionsTab({ actions, loading, loaded }: Props) {
       <div className="py-12 text-center text-sm text-slate-400">
         탭을 클릭하면 AI가 할 일을 생성합니다.
       </div>
-    )
+    );
   }
 
-  const highItems = actions.filter((a) => a.priority === "high")
-  const restItems = actions.filter((a) => a.priority !== "high")
+  const highItems = actions.filter((a) => a.priority === "high");
+  const restItems = actions.filter((a) => a.priority !== "high");
 
   return (
     <div className="space-y-4 p-4">
@@ -181,5 +200,5 @@ export function ActionsTab({ actions, loading, loaded }: Props) {
         </div>
       )}
     </div>
-  )
+  );
 }

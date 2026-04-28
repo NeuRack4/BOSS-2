@@ -86,7 +86,8 @@ export function EventPlanFormCard({
 
   const inputCls =
     "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors";
-  const labelCls = "block text-[11px] font-semibold text-neutral-500 mb-1.5 uppercase tracking-wide";
+  const labelCls =
+    "block text-[11px] font-semibold text-neutral-500 mb-1.5 uppercase tracking-wide";
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden w-full max-w-[480px] shadow-md">

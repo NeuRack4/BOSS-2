@@ -1,18 +1,18 @@
 // frontend/components/marketing/tabs/YoutubeTab.tsx
-"use client"
+"use client";
 
-import type { YoutubeData } from "../types"
+import type { YoutubeData } from "../types";
 
-const fmt = (n: number) => n.toLocaleString("ko-KR")
+const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 function StatCell({
   label,
   value,
   sub,
 }: {
-  label: string
-  value: string
-  sub?: string
+  label: string;
+  value: string;
+  sub?: string;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -22,7 +22,7 @@ function StatCell({
       <span className="text-[15px] font-semibold text-slate-800">{value}</span>
       {sub && <span className="text-[11px] text-slate-400">{sub}</span>}
     </div>
-  )
+  );
 }
 
 export function YoutubeTab({
@@ -31,13 +31,13 @@ export function YoutubeTab({
   onConnect,
   connecting,
 }: {
-  yt: YoutubeData
-  periodDays: number
-  onConnect?: () => void
-  connecting?: boolean
+  yt: YoutubeData;
+  periodDays: number;
+  onConnect?: () => void;
+  connecting?: boolean;
 }) {
-  const ch = yt.channel
-  const hasError = !ch || !!ch.error
+  const ch = yt.channel;
+  const hasError = !ch || !!ch.error;
 
   if (hasError) {
     return (
@@ -67,7 +67,7 @@ export function YoutubeTab({
           </p>
         )}
       </div>
-    )
+    );
   }
 
   return (
@@ -119,7 +119,8 @@ export function YoutubeTab({
                     {v.title || v.video_id}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-400">
-                    조회 {fmt(v.views)} · {fmt(v.watch_minutes)}분 · 좋아요 {fmt(v.likes)}
+                    조회 {fmt(v.views)} · {fmt(v.watch_minutes)}분 · 좋아요{" "}
+                    {fmt(v.likes)}
                   </p>
                 </div>
                 <svg
@@ -129,7 +130,11 @@ export function YoutubeTab({
                   stroke="currentColor"
                   strokeWidth={2}
                 >
-                  <path d="M3 13L13 3M13 3H7M13 3v6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M3 13L13 3M13 3H7M13 3v6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </a>
             ))}
@@ -137,5 +142,5 @@ export function YoutubeTab({
         </div>
       )}
     </div>
-  )
+  );
 }

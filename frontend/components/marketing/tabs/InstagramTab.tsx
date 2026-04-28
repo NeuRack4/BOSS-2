@@ -1,18 +1,18 @@
 // frontend/components/marketing/tabs/InstagramTab.tsx
-"use client"
+"use client";
 
-import type { InstagramData } from "../types"
+import type { InstagramData } from "../types";
 
-const fmt = (n: number) => n.toLocaleString("ko-KR")
+const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 function StatCell({
   label,
   value,
   sub,
 }: {
-  label: string
-  value: string
-  sub?: string
+  label: string;
+  value: string;
+  sub?: string;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -22,15 +22,15 @@ function StatCell({
       <span className="text-[15px] font-semibold text-slate-800">{value}</span>
       {sub && <span className="text-[11px] text-slate-400">{sub}</span>}
     </div>
-  )
+  );
 }
 
 export function InstagramTab({
   ig,
   periodDays,
 }: {
-  ig: InstagramData
-  periodDays: number
+  ig: InstagramData;
+  periodDays: number;
 }) {
   if (ig.error) {
     return (
@@ -40,7 +40,7 @@ export function InstagramTab({
           관리자 설정에서 Meta 액세스 토큰을 등록하면 연결됩니다.
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -48,10 +48,7 @@ export function InstagramTab({
       {/* 계정 통계 */}
       {ig.account && (
         <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-4">
-          <StatCell
-            label="팔로워"
-            value={fmt(ig.account.followers_count)}
-          />
+          <StatCell label="팔로워" value={fmt(ig.account.followers_count)} />
           <StatCell
             label="도달수"
             value={fmt(ig.account.reach)}
@@ -101,7 +98,8 @@ export function InstagramTab({
                     {post.caption || "(캡션 없음)"}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-400">
-                    engagement {fmt(post.engagement)} · 저장 {fmt(post.saved)} · 도달 {fmt(post.reach)}
+                    engagement {fmt(post.engagement)} · 저장 {fmt(post.saved)} ·
+                    도달 {fmt(post.reach)}
                   </p>
                 </div>
                 <svg
@@ -111,7 +109,11 @@ export function InstagramTab({
                   stroke="currentColor"
                   strokeWidth={2}
                 >
-                  <path d="M3 13L13 3M13 3H7M13 3v6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M3 13L13 3M13 3H7M13 3v6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </a>
             ))}
@@ -119,5 +121,5 @@ export function InstagramTab({
         </div>
       )}
     </div>
-  )
+  );
 }
