@@ -13,12 +13,27 @@ const MARGIN_COLOR = (rate: number) =>
   rate >= 40 ? { bar: "#f59e0b", text: "text-yellow-600", bg: "bg-yellow-50" } :
                { bar: "#ef4444", text: "text-red-500",    bg: "bg-red-50"   }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  음료: "#3b82f6", 음식: "#f97316", 디저트: "#ec4899", 기타: "#94a3b8",
+// 실제 존재하는 카테고리에 동적으로 색상 배정
+const COLOR_PALETTE = [
+  "#3b82f6", // blue
+  "#f97316", // orange
+  "#ec4899", // pink
+  "#22c55e", // green
+  "#8b5cf6", // purple
+  "#f59e0b", // amber
+  "#06b6d4", // cyan
+  "#ef4444", // red
+]
+
+function buildCategoryColorMap(menus: MenuItem[]): Record<string, string> {
+  const cats = [...new Set(menus.map(m => m.category).filter(Boolean))]
+  return Object.fromEntries(cats.map((cat, i) => [cat, COLOR_PALETTE[i % COLOR_PALETTE.length]]))
 }
 
 // ── 메뉴 마진 행 ───────────────────────────────────────────────────────────────
-function MenuRow({ menu, maxMargin }: { menu: MenuItem; maxMargin: number }) {
+function MenuRow({ menu, maxMargin, categoryColorMap }: {
+  menu: MenuItem; maxMargin: number; categoryColorMap: Record<string, string>
+}) {
   const rate = menu.margin_rate ?? 0
   const color = MARGIN_COLOR(rate)
   const barPct = maxMargin > 0 ? (rate / maxMargin) * 100 : 0
@@ -28,7 +43,7 @@ function MenuRow({ menu, maxMargin }: { menu: MenuItem; maxMargin: number }) {
       {/* 카테고리 도트 */}
       <div
         className="h-2 w-2 shrink-0 rounded-full"
-        style={{ backgroundColor: CATEGORY_COLORS[menu.category] ?? "#94a3b8" }}
+        style={{ backgroundColor: categoryColorMap[menu.category] ?? "#94a3b8" }}
       />
 
       {/* 메뉴명 */}
@@ -111,6 +126,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
     )
   }
 
+  const categoryColorMap = buildCategoryColorMap(menus)
   const menusWithMargin = menus.filter(m => m.margin_rate != null)
   const sorted = [...menusWithMargin].sort((a, b) => (b.margin_rate ?? 0) - (a.margin_rate ?? 0))
   const maxMargin = sorted[0]?.margin_rate ?? 100
@@ -185,7 +201,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           {/* 메뉴 목록 */}
           <div className="divide-y divide-slate-50">
             {sorted.map(menu => (
-              <MenuRow key={menu.id} menu={menu} maxMargin={maxMargin} />
+              <MenuRow key={menu.id} menu={menu} maxMargin={maxMargin} categoryColorMap={categoryColorMap} />
             ))}
             {menusWithMargin.length === 0 && (
               <div className="py-6 text-center text-xs text-slate-400">
@@ -194,15 +210,25 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
             )}
           </div>
 
-          {/* 카테고리별 평균 마진 */}
+          {/* 범례 + 카테고리별 평균 마진 */}
           {categoryStats.length > 0 && (
-            <div className="border-t border-slate-100 p-3">
-              <p className="mb-2 text-[10px] font-semibold text-slate-500">카테고리별 평균 마진</p>
+            <div className="border-t border-slate-100 p-3 space-y-2">
+              {/* 범례 */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {Object.entries(categoryColorMap).map(([cat, color]) => (
+                  <div key={cat} className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span className="text-[10px] text-slate-500">{cat}</span>
+                  </div>
+                ))}
+              </div>
+              {/* 카테고리별 평균 마진 */}
+              <p className="text-[10px] font-semibold text-slate-400">카테고리별 평균 마진</p>
               <div className="flex flex-wrap gap-2">
                 {categoryStats.map(({ cat, avg }) => {
-                  const color = MARGIN_COLOR(avg)
+                  const marginColor = MARGIN_COLOR(avg)
                   return (
-                    <div key={cat} className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${color.bg} ${color.text}`}>
+                    <div key={cat} className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${marginColor.bg} ${marginColor.text}`}>
                       {cat} {avg}%
                     </div>
                   )
