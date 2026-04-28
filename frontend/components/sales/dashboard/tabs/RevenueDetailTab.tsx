@@ -1,7 +1,7 @@
 // frontend/components/sales/dashboard/tabs/RevenueDetailTab.tsx
 "use client"
 
-import { useRef, useEffect, useState } from "react"
+import { useState } from "react"
 import { MessageCircle } from "lucide-react"
 import type { CategoryItem, DailyData, PeriodActivation } from "../types"
 
@@ -34,57 +34,124 @@ function CategoryBar({ item, maxPct }: { item: CategoryItem; maxPct: number }) {
   )
 }
 
-// ── 주간 미니 바 차트 ──────────────────────────────────────────────────────────
-function WeekMiniChart({ data }: { data: DailyData[] }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(300)
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [])
-
+// ── 주간 상세 뷰 ───────────────────────────────────────────────────────────────
+function WeekDetailView({ data }: { data: DailyData[] }) {
+  const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
+  const todayStr = new Date().toISOString().split("T")[0]
   const maxAmount = Math.max(...data.map(d => d.amount), 1)
-  const chartH = 60
-  const dayLabels = ["월", "화", "수", "목", "금", "토", "일"]
-  const barW = (width - 16) / Math.max(data.length, 1)
+  const realDays = data.filter(d => !d.isEstimated)
+  const recordedCount = realDays.length
+
+  // 최고 매출 요일
+  const bestEntry = [...data].sort((a, b) => b.amount - a.amount)[0]
+
+  // 추세: 전반부(처음 3일) vs 후반부(마지막 3일) 평균 비교
+  const firstHalf = data.slice(0, 3).reduce((s, d) => s + d.amount, 0) / 3
+  const lastHalf = data.slice(4, 7).reduce((s, d) => s + d.amount, 0) / 3
+  const trend = lastHalf > firstHalf * 1.05 ? "up" : lastHalf < firstHalf * 0.95 ? "down" : "flat"
 
   return (
-    <div ref={containerRef} className="w-full">
-      <svg width={width} height={chartH + 20}>
-        {data.map((d, i) => {
-          const barH = Math.max((d.amount / maxAmount) * chartH, d.amount > 0 ? 3 : 0)
-          const x = 8 + i * barW + barW * 0.1
-          const y = chartH - barH
+    <div className="space-y-3">
+      {/* 요일별 테이블 */}
+      <div className="space-y-1.5">
+        {data.map(d => {
           const dayIdx = new Date(d.date).getDay()
-          const label = dayLabels[(dayIdx + 6) % 7]
-          const isToday = d.date === new Date().toISOString().split("T")[0]
+          const label = DAY_LABELS[(dayIdx + 6) % 7]
+          const mmdd = d.date.slice(5).replace("-", "/")
+          const isToday = d.date === todayStr
+          const isBest = d.date === bestEntry?.date && d.amount > 0
+          const barPct = (d.amount / maxAmount) * 100
 
           return (
-            <g key={d.date}>
-              <rect
-                x={x} y={y}
-                width={barW * 0.8} height={barH}
-                rx={3}
-                fill={isToday ? "#3b82f6" : d.isEstimated ? "#94a3b8" : "#60a5fa"}
-                opacity={d.isEstimated ? 0.45 : 1}
-              />
-              <text
-                x={x + (barW * 0.8) / 2} y={chartH + 14}
-                textAnchor="middle" fontSize={9}
-                fill={isToday ? "#3b82f6" : "#94a3b8"}
-                fontWeight={isToday ? "bold" : "normal"}
-              >
-                {label}
-              </text>
-            </g>
+            <div
+              key={d.date}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                isToday ? "bg-blue-50" : "bg-slate-50"
+              }`}
+            >
+              {/* 요일 + 날짜 */}
+              <div className="w-14 shrink-0">
+                <span className={`text-xs font-bold ${isToday ? "text-blue-600" : "text-slate-600"}`}>
+                  {label}
+                </span>
+                <span className="ml-1 text-[10px] text-slate-400">{mmdd}</span>
+              </div>
+
+              {/* 인라인 바 */}
+              <div className="flex-1 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${barPct}%`,
+                    backgroundColor: d.isEstimated ? "#94a3b8" : isToday ? "#3b82f6" : "#60a5fa",
+                    opacity: d.isEstimated ? 0.5 : 1,
+                  }}
+                />
+              </div>
+
+              {/* 금액 */}
+              <div className="w-20 shrink-0 text-right">
+                <span className={`text-xs font-semibold ${
+                  d.isEstimated ? "text-slate-400" : isToday ? "text-blue-700" : "text-slate-700"
+                }`}>
+                  {d.amount > 0 ? `${fmt(d.amount)}원` : "—"}
+                </span>
+              </div>
+
+              {/* 배지 */}
+              <div className="w-10 shrink-0 text-right">
+                {isBest && <span className="text-yellow-400 text-xs">★</span>}
+                {isToday && !isBest && <span className="text-[9px] text-blue-500 font-bold">오늘</span>}
+                {d.isEstimated && !isToday && (
+                  <span className="text-[9px] text-slate-400">추정</span>
+                )}
+              </div>
+            </div>
           )
         })}
-      </svg>
-      {data.some(d => d.isEstimated) && (
-        <p className="text-[10px] text-slate-400">🔵 회색 막대는 추정치 — 매일 기록할수록 정확해져요</p>
+      </div>
+
+      {/* 기록 현황 */}
+      <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-medium text-slate-600">이번주 기록 현황</span>
+          <span className="text-xs font-bold text-blue-600">{recordedCount}/7일</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+          <div
+            className="h-full rounded-full bg-blue-400 transition-all duration-500"
+            style={{ width: `${(recordedCount / 7) * 100}%` }}
+          />
+        </div>
+        {recordedCount < 7 && (
+          <p className="mt-1.5 text-[10px] text-slate-400">
+            {7 - recordedCount}일 더 기록하면 완주 — 매일 기록할수록 AI 분석이 정확해져요
+          </p>
+        )}
+      </div>
+
+      {/* 추세 */}
+      {recordedCount >= 3 && (
+        <div className={`rounded-lg px-3 py-2 text-xs font-medium ${
+          trend === "up" ? "bg-blue-50 text-blue-700" :
+          trend === "down" ? "bg-orange-50 text-orange-600" :
+          "bg-slate-50 text-slate-600"
+        }`}>
+          {trend === "up" && "📈 이번주 후반으로 갈수록 매출이 오르고 있어요"}
+          {trend === "down" && "📉 이번주 후반으로 갈수록 매출이 줄고 있어요"}
+          {trend === "flat" && "➡️ 이번주 매출이 안정적으로 유지되고 있어요"}
+        </div>
+      )}
+
+      {/* 최고 요일 */}
+      {bestEntry && bestEntry.amount > 0 && !bestEntry.isEstimated && (
+        <div className="flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-2">
+          <span className="text-yellow-500">★</span>
+          <span className="text-xs text-yellow-700">
+            이번주 최고 매출: {DAY_LABELS[(new Date(bestEntry.date).getDay() + 6) % 7]}요일{" "}
+            <strong>{fmt(bestEntry.amount)}원</strong>
+          </span>
+        </div>
       )}
     </div>
   )
@@ -183,24 +250,21 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
       {/* 이번주 뷰 */}
       {period === "week" && (
         <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-          {weekTotal > 0 ? (
+          {weeklyData.length > 0 ? (
             <>
-              <div className="mb-3 flex justify-between">
-                <div>
-                  <p className="text-xs font-medium text-slate-500">이번 주 총 매출</p>
-                  <p className="mt-0.5 text-2xl font-bold text-slate-800">{fmt(weekTotal)}원</p>
+              {/* 요약 수치 */}
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-blue-50 px-3 py-2.5">
+                  <p className="text-[10px] font-medium text-blue-500">이번주 총 매출</p>
+                  <p className="mt-0.5 text-lg font-bold text-blue-800">{fmt(weekTotal)}원</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium text-slate-500">일평균</p>
-                  <p className="mt-0.5 text-lg font-semibold text-blue-600">{fmt(weekAvg)}원</p>
+                <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-medium text-slate-500">일평균</p>
+                  <p className="mt-0.5 text-lg font-bold text-slate-700">{fmt(weekAvg)}원</p>
                 </div>
               </div>
-              <WeekMiniChart data={weeklyData} />
-              {weeklyData.filter(d => !d.isEstimated).length < 7 && (
-                <p className="mt-2 text-[10px] text-slate-400">
-                  실제 기록 {weeklyData.filter(d => !d.isEstimated).length}일 / 회색 막대는 평균 추정치
-                </p>
-              )}
+              {/* 요일별 상세 */}
+              <WeekDetailView data={weeklyData} />
             </>
           ) : (
             <div className="py-4 text-center">
