@@ -60,6 +60,7 @@ const INITIAL_STATE: DashboardState = {
   overview: null,
   categories: [],
   aiInsight: null,
+  menus: [],
   loading: true,
   error: false,
 }
@@ -77,12 +78,13 @@ export function useDashboardData(accountId: string) {
     setState(prev => ({ ...prev, loading: true, error: false }))
 
     try {
-      const [ovRes, dvRes, glRes, catRes, insRes] = await Promise.all([
+      const [ovRes, dvRes, glRes, catRes, insRes, menuRes] = await Promise.all([
         fetch(`${API}/api/stats/overview?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
         fetch(`${API}/api/stats/daily?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
         fetch(`${API}/api/stats/goal?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
         fetch(`${API}/api/stats/category-breakdown?account_id=${accountId}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
         fetch(`${API}/api/stats/benchmark-insight?account_id=${accountId}&compare_months_ago=1`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        fetch(`${API}/api/menus?account_id=${accountId}&active_only=true`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
       ])
 
       const series: DayPoint[] = dvRes.data?.series ?? []
@@ -130,6 +132,7 @@ export function useDashboardData(accountId: string) {
         overview: ovRes.data ?? null,
         categories: catRes.data?.items ?? [],
         aiInsight: insRes.data ?? null,
+        menus: Array.isArray(menuRes.data) ? menuRes.data : (menuRes.data?.menus ?? []),
         loading: false,
         error: false,
       })

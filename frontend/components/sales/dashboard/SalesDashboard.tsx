@@ -140,7 +140,7 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
             <CostTab overview={state.overview} onChatMessage={onChatMessage} />
           )}
           {activeTab === "menu" && (
-            <MenuProfitTab categories={state.categories} onChatMessage={onChatMessage} />
+            <MenuProfitTab menus={state.menus} onChatMessage={onChatMessage} />
           )}
         </>
       )}

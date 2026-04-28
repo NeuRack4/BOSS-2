@@ -65,8 +65,20 @@ export type DashboardState = {
   overview: OverviewData | null
   categories: CategoryItem[]
   aiInsight: InsightData | null
+  menus: MenuItem[]
   loading: boolean
   error: boolean
+}
+
+export type MenuItem = {
+  id: string
+  name: string
+  category: string
+  price: number
+  cost_price: number
+  margin_rate: number | null
+  margin_amount: number | null
+  is_active: boolean
 }
 
 export type PeriodActivation = {
