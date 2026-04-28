@@ -53,7 +53,8 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cost_price: val }),
     })
-    window.dispatchEvent(new CustomEvent("menu-data-updated"))
+    window.dispatchEvent(new CustomEvent("menu-data-updated"))  // MenuListPanel 갱신
+    window.dispatchEvent(new CustomEvent("menu-cost-saved"))    // 대시보드 갱신
     setSaving(false)
     setEditing(false)
   }

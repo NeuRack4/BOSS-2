@@ -158,11 +158,11 @@ export function useDashboardData(accountId: string) {
     return () => window.removeEventListener("sales-data-saved", handler)
   }, [])
 
-  // D: 메뉴 원가 인라인 입력 후 대시보드 자동 갱신
+  // D: 메뉴 원가 인라인 입력 후 대시보드 갱신 (menu-cost-saved 이벤트 전용)
   useEffect(() => {
     const handler = () => { fetchAllRef.current() }
-    window.addEventListener("menu-data-updated", handler)
-    return () => window.removeEventListener("menu-data-updated", handler)
+    window.addEventListener("menu-cost-saved", handler)
+    return () => window.removeEventListener("menu-cost-saved", handler)
   }, [])
 
   return { state, periodActivation, refresh: () => fetchAllRef.current() }
