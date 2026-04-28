@@ -30,16 +30,36 @@ function buildCategoryColorMap(menus: MenuItem[]): Record<string, string> {
   return Object.fromEntries(cats.map((cat, i) => [cat, COLOR_PALETTE[i % COLOR_PALETTE.length]]))
 }
 
-// ── 메뉴 마진 행 ───────────────────────────────────────────────────────────────
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+
+// ── 메뉴 마진 행 (원가 인라인 입력 포함) ──────────────────────────────────────
 function MenuRow({ menu, maxMargin, categoryColorMap }: {
   menu: MenuItem; maxMargin: number; categoryColorMap: Record<string, string>
 }) {
   const rate = menu.margin_rate ?? 0
   const color = MARGIN_COLOR(rate)
   const barPct = maxMargin > 0 ? (rate / maxMargin) * 100 : 0
+  const hasCost = menu.cost_price > 0
+  const [editing, setEditing] = useState(false)
+  const [costInput, setCostInput] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const saveCost = async () => {
+    const val = parseInt(costInput.replace(/,/g, ""), 10)
+    if (!val || val <= 0) return
+    setSaving(true)
+    await fetch(`${API}/api/menus/${menu.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cost_price: val }),
+    })
+    window.dispatchEvent(new CustomEvent("menu-data-updated"))
+    setSaving(false)
+    setEditing(false)
+  }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-slate-50">
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-50">
       {/* 카테고리 도트 */}
       <div
         className="h-2 w-2 shrink-0 rounded-full"
@@ -52,7 +72,7 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
       </div>
 
       {/* 마진율 바 */}
-      <div className="w-20 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="w-20 h-2 shrink-0 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${barPct}%`, backgroundColor: color.bar }}
@@ -60,13 +80,47 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
       </div>
 
       {/* 마진율 % */}
-      <div className={`w-10 shrink-0 text-right text-xs font-bold ${color.text}`}>
-        {rate.toFixed(0)}%
+      <div className={`w-8 shrink-0 text-right text-xs font-bold ${hasCost ? color.text : "text-slate-300"}`}>
+        {hasCost ? `${rate.toFixed(0)}%` : "—"}
       </div>
 
-      {/* 가격 */}
-      <div className="w-16 shrink-0 text-right text-[10px] text-slate-400">
-        {fmt(menu.price)}원
+      {/* 판매가 | 원가 */}
+      <div className="flex shrink-0 items-center gap-1 text-[10px]">
+        <span className="text-slate-400">{fmt(menu.price)}원</span>
+        <span className="text-slate-200">|</span>
+        {hasCost && !editing ? (
+          <button
+            onClick={() => { setEditing(true); setCostInput(String(menu.cost_price)) }}
+            className="text-slate-400 hover:text-blue-500 transition"
+          >
+            {fmt(menu.cost_price)}원
+          </button>
+        ) : editing ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={costInput}
+              onChange={e => setCostInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && saveCost()}
+              className="w-16 rounded border border-blue-300 px-1 py-0.5 text-[10px] outline-none focus:border-blue-500"
+              placeholder="원가"
+              autoFocus
+            />
+            <button onClick={saveCost} disabled={saving}
+              className="rounded bg-blue-500 px-1.5 py-0.5 text-[9px] text-white hover:bg-blue-600">
+              {saving ? "…" : "저장"}
+            </button>
+            <button onClick={() => setEditing(false)}
+              className="text-[9px] text-slate-400 hover:text-slate-600">취소</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setEditing(true); setCostInput("") }}
+            className="rounded bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-500 hover:bg-orange-100 transition"
+          >
+            원가 입력
+          </button>
+        )}
       </div>
     </div>
   )
@@ -194,8 +248,8 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
             <div className="w-2 shrink-0" />
             <div className="w-36 text-[10px] font-semibold text-slate-400">메뉴명</div>
             <div className="w-20 text-[10px] font-semibold text-slate-400">마진율</div>
-            <div className="w-10 text-right text-[10px] font-semibold text-slate-400">%</div>
-            <div className="w-16 text-right text-[10px] font-semibold text-slate-400">판매가</div>
+            <div className="w-8 text-right text-[10px] font-semibold text-slate-400">%</div>
+            <div className="text-[10px] font-semibold text-slate-400">판매가 | 원가</div>
           </div>
 
           {/* 메뉴 목록 */}
@@ -253,9 +307,8 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
 
           {menusWithMargin.map(menu => (
             <div key={menu.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
-              {/* 배지 — 메뉴명 바로 옆 */}
               <QuadrantBadge menu={menu} avgPrice={avgPrice} avgMargin={avgMargin} />
-              <span className="flex-1 truncate text-xs font-medium text-slate-700">{menu.name}</span>
+              <span className="w-36 shrink-0 truncate text-xs font-medium text-slate-700">{menu.name}</span>
               <p className="shrink-0 text-xs">
                 <span className="text-slate-500">{fmt(menu.price)}원</span>
                 <span className="mx-1 text-slate-300">|</span>
