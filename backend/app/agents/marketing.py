@@ -1069,6 +1069,69 @@ async def run_marketing_plan(
     return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+def _get_upcoming_holidays(today: "date", days_ahead: int = 60) -> list[dict]:
+    """오늘부터 days_ahead일 이내에 있는 기념일 목록 반환."""
+    from datetime import date, timedelta
+
+    year = today.year
+
+    # 고정 기념일 (매년 같은 날짜)
+    fixed: list[tuple[int, int, str]] = [
+        (1,  1,  "새해 첫날"),
+        (2,  14, "밸런타인데이"),
+        (3,  1,  "삼일절"),
+        (3,  14, "화이트데이"),
+        (4,  5,  "식목일"),
+        (5,  5,  "어린이날"),
+        (5,  8,  "어버이날"),
+        (5,  15, "스승의 날"),
+        (6,  6,  "현충일"),
+        (8,  15, "광복절"),
+        (10, 3,  "개천절"),
+        (10, 9,  "한글날"),
+        (11, 11, "빼빼로데이"),
+        (12, 25, "크리스마스"),
+    ]
+
+    # 음력 기반 기념일 (그레고리력 변환 하드코딩 2025~2027)
+    lunar: list[tuple[int, int, int, str]] = [
+        # (year, month, day, name)
+        (2025, 1, 28, "설날 연휴 시작"),
+        (2025, 1, 29, "설날"),
+        (2025, 10, 5, "추석 연휴 시작"),
+        (2025, 10, 6, "추석"),
+        (2026, 2, 17, "설날"),
+        (2026, 9, 24, "추석 연휴 시작"),
+        (2026, 9, 25, "추석"),
+        (2027, 2,  7, "설날"),
+        (2027, 10, 14, "추석 연휴 시작"),
+        (2027, 10, 15, "추석"),
+    ]
+
+    end = today + timedelta(days=days_ahead)
+    result: list[dict] = []
+
+    for month, day, name in fixed:
+        for y in (year, year + 1):
+            try:
+                d = date(y, month, day)
+            except ValueError:
+                continue
+            if today <= d <= end:
+                result.append({"name": name, "date": d.strftime("%m월 %d일"), "days_left": (d - today).days})
+
+    for y, m, day, name in lunar:
+        try:
+            d = date(y, m, day)
+        except ValueError:
+            continue
+        if today <= d <= end:
+            result.append({"name": name, "date": d.strftime("%m월 %d일"), "days_left": (d - today).days})
+
+    result.sort(key=lambda x: x["days_left"])
+    return result
+
+
 async def run_marketing_report(
     *,
     account_id: str,
@@ -1136,26 +1199,118 @@ async def run_marketing_report(
 
     data_summary = "\n\n".join(summary_parts)
 
-    # GPT-4o로 인사이트 분석
+    # GPT-4o로 인사이트 분석 + 액션 아이템 병렬 생성
     analysis_prompt = (
         f"소상공인 마케팅 성과 데이터를 분석해서 실질적인 인사이트를 제공해주세요.\n\n"
         f"{data_summary}\n\n"
         "다음 3가지를 간결하게 작성해주세요:\n"
         "1. 이번 기간 성과 요약 (2~3줄)\n"
         "2. 잘된 점 + 개선 포인트 (각 1~2가지)\n"
-        "3. 다음 기간 추천 액션 (2~3가지, 구체적으로)\n\n"
+        "3. 다음 기간 핵심 방향 (1~2줄)\n\n"
         "소상공인 입장에서 쉽게 이해할 수 있는 언어로 작성하세요."
     )
 
-    try:
-        resp = await chat_completion(
-            messages=[{"role": "user", "content": analysis_prompt}],
-            model="gpt-4o",
-            temperature=0.4,
+    from datetime import date as _date
+    _today = _date.today()
+    today_str = _today.strftime("%Y년 %m월 %d일")
+
+    # 다가오는 기념일 계산
+    upcoming_holidays = _get_upcoming_holidays(_today, days_ahead=60)
+    if upcoming_holidays:
+        holiday_lines = "\n".join(
+            f"  - {h['name']} ({h['date']}, {h['days_left']}일 후)"
+            for h in upcoming_holidays
         )
-        analysis = resp.choices[0].message.content or "분석 데이터를 불러올 수 없습니다."
-    except Exception:
+        holiday_section = f"\n[다가오는 기념일 (60일 이내)]\n{holiday_lines}\n"
+    else:
+        holiday_section = ""
+
+    # 플랫폼 연결 상태에 따라 가능한 카테고리 안내
+    available_categories: list[str] = ["content", "general"]
+    if ig_ok:
+        available_categories.insert(0, "instagram")
+    if yt_ok:
+        available_categories.insert(0, "youtube")
+    available_str = ", ".join(f'"{c}"' for c in available_categories)
+
+    actions_prompt = (
+        f"오늘은 {today_str}입니다. 소상공인의 마케팅 성과 데이터를 바탕으로 "
+        f"지금 당장 실행 가능한 구체적인 마케팅 할 일 3~5개를 기획해주세요.\n\n"
+        f"{data_summary}"
+        f"{holiday_section}\n"
+        "각 할 일은 '팔로워 늘리기' 같은 막연한 목표가 아니라, 실제로 실행에 옮길 수 있는 "
+        "구체적인 아이디어여야 합니다. 연결된 플랫폼 데이터가 없더라도 콘텐츠 전략·이벤트 기획 등 "
+        "일반 마케팅 액션을 반드시 3개 이상 생성하세요.\n"
+        "다가오는 기념일이 있다면 해당 날짜에 맞춘 이벤트·콘텐츠를 우선적으로 제안하고, "
+        "기념일 이름과 날짜를 title 또는 idea에 자연스럽게 반영하세요.\n\n"
+        "아래 JSON 배열 형식으로만 응답하세요 (설명 텍스트 없이, 배열만):\n"
+        '[\n'
+        '  {\n'
+        f'    "priority": "high",\n'
+        f'    "category": {available_categories[0]!r},\n'
+        '    "title": "액션 제목 (20자 이내)",\n'
+        '    "target": "타겟층 (예: 20~30대 여성, 뷰티 관심층)",\n'
+        '    "period": "실행 기간 (예: 5월 3일 ~ 5월 10일)",\n'
+        '    "idea": "구체적인 이벤트·콘텐츠 아이디어 (2~3문장, 형식·소재·메시지 포함)",\n'
+        '    "steps": ["실행 단계 1", "실행 단계 2", "실행 단계 3"],\n'
+        '    "expected": "기대 효과 (예: 팔로워 +50~100명, 도달수 1.5배)",\n'
+        '    "why": "이 액션이 필요한 이유 (수치 근거 포함, 1문장)"\n'
+        '  }\n'
+        ']\n\n'
+        f'priority: "high"(이번 주), "medium"(이번 달), "low"(여유 있을 때)\n'
+        f'category 허용값: {available_str}\n'
+        'steps는 2~4개 배열. JSON 외 텍스트 절대 포함하지 마세요.'
+    )
+
+    try:
+        analysis_resp, actions_resp = await _asyncio.gather(
+            chat_completion(
+                messages=[{"role": "user", "content": analysis_prompt}],
+                model="gpt-4o",
+                temperature=0.4,
+            ),
+            chat_completion(
+                messages=[{"role": "user", "content": actions_prompt}],
+                model="gpt-4o",
+                temperature=0.3,
+            ),
+            return_exceptions=True,
+        )
+
+        if isinstance(analysis_resp, Exception):
+            analysis = "분석 중 오류가 발생했습니다."
+        else:
+            analysis = analysis_resp.choices[0].message.content or "분석 데이터를 불러올 수 없습니다."
+
+        actions: list[dict] = []
+        if isinstance(actions_resp, Exception):
+            log.warning("run_marketing_report: actions LLM call failed: %s", actions_resp)
+        else:
+            import re as _re
+            raw_actions = actions_resp.choices[0].message.content or "[]"
+            log.debug("run_marketing_report: raw actions response: %s", raw_actions[:300])
+            # ```json ... ``` 또는 ``` ... ``` 블록 추출, 없으면 전체 텍스트 사용
+            code_block = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_actions)
+            if code_block:
+                raw_actions = code_block.group(1).strip()
+            else:
+                # JSON 배열 직접 추출 시도
+                arr_match = _re.search(r"\[[\s\S]*\]", raw_actions)
+                if arr_match:
+                    raw_actions = arr_match.group(0)
+            try:
+                parsed = _json.loads(raw_actions.strip())
+                if isinstance(parsed, list):
+                    actions = parsed
+                    log.info("run_marketing_report: generated %d action items", len(actions))
+                else:
+                    log.warning("run_marketing_report: actions parsed but not a list: %s", type(parsed))
+            except Exception as e:
+                log.warning("run_marketing_report: actions JSON parse failed: %s | raw: %s", e, raw_actions[:200])
+    except Exception as e:
+        log.exception("run_marketing_report: unexpected error: %s", e)
         analysis = "분석 중 오류가 발생했습니다."
+        actions = []
 
     # [[MARKETING_REPORT]] 마커 생성
     report_payload = {
@@ -1163,6 +1318,7 @@ async def run_marketing_report(
         "instagram": ig_data if ig_ok else {"error": ig_data.get("error")},
         "youtube": yt_data if yt_ok else {"error": yt_data.get("channel", {}).get("error")},
         "analysis": analysis,
+        "actions": actions,
     }
     marker = f"\n\n[[MARKETING_REPORT]]{_json.dumps(report_payload, ensure_ascii=False)}[[/MARKETING_REPORT]]"
 
