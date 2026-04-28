@@ -47,12 +47,12 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
       />
 
       {/* 메뉴명 */}
-      <div className="w-24 shrink-0 truncate text-xs font-medium text-slate-700">
+      <div className="w-36 shrink-0 truncate text-xs font-medium text-slate-700">
         {menu.name}
       </div>
 
       {/* 마진율 바 */}
-      <div className="flex-1 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="w-20 h-2 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${barPct}%`, backgroundColor: color.bar }}
@@ -192,8 +192,8 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           {/* 헤더 */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-3 py-2">
             <div className="w-2 shrink-0" />
-            <div className="w-24 text-[10px] font-semibold text-slate-400">메뉴명</div>
-            <div className="flex-1 text-[10px] font-semibold text-slate-400">마진율</div>
+            <div className="w-36 text-[10px] font-semibold text-slate-400">메뉴명</div>
+            <div className="w-20 text-[10px] font-semibold text-slate-400">마진율</div>
             <div className="w-10 text-right text-[10px] font-semibold text-slate-400">%</div>
             <div className="w-16 text-right text-[10px] font-semibold text-slate-400">판매가</div>
           </div>
