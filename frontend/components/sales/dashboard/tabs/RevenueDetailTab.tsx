@@ -1,7 +1,7 @@
 // frontend/components/sales/dashboard/tabs/RevenueDetailTab.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MessageCircle } from "lucide-react"
 import type { CategoryItem, DailyData, PeriodActivation } from "../types"
 
@@ -240,6 +240,16 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
     periodActivation.week ? "week" : "today"
   const [period, setPeriod] = useState<"today" | "week" | "month">(defaultPeriod)
   const [copied, setCopied] = useState(false)
+
+  // periodActivation이 바뀌면 비활성 기간 선택 중일 경우 자동 전환
+  useEffect(() => {
+    if (period === "month" && !periodActivation.month) {
+      setPeriod(periodActivation.week ? "week" : "today")
+    } else if (period === "week" && !periodActivation.week) {
+      setPeriod("today")
+    }
+  }, [periodActivation.month, periodActivation.week])
+
   const handleCTA = (msg: string) => {
     onChatMessage?.(msg)
     setCopied(true)
