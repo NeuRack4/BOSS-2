@@ -234,7 +234,7 @@ type Props = {
 }
 
 export function RevenueDetailTab({ categories, weeklyData, periodActivation, onChatMessage }: Props) {
-  const [period, setPeriod] = useState<"today" | "week" | "month">("today")
+  const [period, setPeriod] = useState<"today" | "week" | "month">("month")
   const [copied, setCopied] = useState(false)
   const handleCTA = (msg: string) => {
     onChatMessage?.(msg)
