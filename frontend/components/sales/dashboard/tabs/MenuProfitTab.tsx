@@ -162,7 +162,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
             key={v}
             onClick={() => setView(v)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-              view === v ? "bg-green-500 text-white" : "border border-slate-200 text-slate-500 hover:border-green-300"
+              view === v ? "bg-violet-600 text-white" : "border border-slate-200 text-slate-500 hover:border-violet-300 hover:text-violet-600"
             }`}
           >
             {v === "margin" ? "마진율 순위" : "4분면 분석"}
@@ -219,6 +219,12 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           <p className="text-[10px] text-slate-500 mb-3">
             평균 판매가 {fmt(Math.round(avgPrice))}원 / 평균 마진 {avgMargin.toFixed(0)}% 기준
           </p>
+          {/* 컬럼 레이블 */}
+          <div className="flex items-center gap-2 px-2 pb-1">
+            <div className="flex-1" />
+            <p className="shrink-0 text-[10px] text-slate-400">가격 | 마진율</p>
+          </div>
+
           {menusWithMargin.map(menu => (
             <div key={menu.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
               {/* 배지 — 메뉴명 바로 옆 */}
