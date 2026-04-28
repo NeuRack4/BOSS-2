@@ -162,7 +162,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
             key={v}
             onClick={() => setView(v)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-              view === v ? "bg-violet-600 text-white" : "border border-slate-200 text-slate-500 hover:border-violet-300 hover:text-violet-600"
+              view === v ? "bg-blue-500 text-white" : "border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600"
             }`}
           >
             {v === "margin" ? "마진율 순위" : "4분면 분석"}
