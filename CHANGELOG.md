@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] — 2026-04-29
+
+### Fixed — ngrok fetch 패치 버그 수정
+
+- **`frontend/app/layout.tsx`** — `window.fetch` 패치 두 가지 버그 수정:
+  1. `orig.apply(this, arguments)` → `orig.call(this, url, opts)`: `fetch(url)` 처럼 opts 없이 호출할 경우 수정된 opts(ngrok 헤더 포함)가 원본 fetch에 전달되지 않던 문제 수정.
+  2. `Object.assign({}, opts.headers)` → `new Headers(opts&&opts.headers||{})`: `opts.headers`가 `Headers` 인스턴스일 때 `Object.assign`이 헤더를 복사하지 못하던 문제 수정.
+
+---
+
 ## [4.0.0] — 2026-04-29
 
 ### Added — Deployment: Vercel 프론트엔드 배포 + ngrok 백엔드 공개 연결
