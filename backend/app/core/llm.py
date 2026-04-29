@@ -122,13 +122,25 @@ async def _planner_anthropic(
         "name": tool_name,
         "description": "Emit the orchestrator plan as structured JSON.",
         "input_schema": tool_schema,
+        "cache_control": {"type": "ephemeral"},
     }
+
+    # system을 content block 리스트로 구성 — 첫 블록(정적)에 cache_control 부착
+    if system_parts:
+        system_blocks: list[dict] | None = []
+        for i, part in enumerate(system_parts):
+            block: dict = {"type": "text", "text": part}
+            if i == 0:
+                block["cache_control"] = {"type": "ephemeral"}
+            system_blocks.append(block)
+    else:
+        system_blocks = None
 
     resp = await anthropic.messages.create(
         model=settings.planner_claude_model,
         max_tokens=max_tokens,
         temperature=temperature,
-        system="\n\n".join(system_parts) if system_parts else None,
+        system=system_blocks,
         messages=anth_messages,
         tools=[tool],
         tool_choice={"type": "tool", "name": tool_name},
