@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1] — 2026-04-29
+
+### Fixed — Sales: 알림 설정 토글 UI 수정
+
+- **`NotificationTab.tsx`** — 알림 받기 토글의 원(circle)이 컨테이너 밖으로 벗어나던 문제 수정. 토글 크기(`h-6 w-11`)·원 크기(`h-5 w-5`) 및 이동값(`translate-x-5`) 조정.
+
 ## [3.11.0] — 2026-04-29
 
 ### Added — Sales: Slack 알림 기능
