@@ -81,13 +81,13 @@ export function NotificationTab({ accountId, slackConnected, onOpenConnect }: Pr
           <div className="w-[30px]" />
           <button
             onClick={() => setEnabled((v) => !v)}
-            className={`relative h-5 w-9 rounded-full transition-colors ${
+            className={`relative h-6 w-11 rounded-full transition-colors ${
               enabled ? "bg-[#7C3AED]" : "bg-slate-200"
             }`}
           >
             <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                enabled ? "translate-x-4" : "translate-x-0.5"
+              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                enabled ? "translate-x-5" : "translate-x-0"
               }`}
             />
           </button>
