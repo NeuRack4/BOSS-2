@@ -58,4 +58,9 @@ celery_app.conf.beat_schedule = {
         "task":     "app.scheduler.tasks.charge_subscriptions",
         "schedule": crontab(hour=9, minute=0),
     },
+    # Sales Slack 알림 — 매시 정각 KST
+    "sales-slack-notify": {
+        "task": "app.scheduler.tasks.sales_slack_notify",
+        "schedule": crontab(minute=0),
+    },
 }

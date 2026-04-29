@@ -43,12 +43,14 @@ from app.routers import (
     memory,
     menus,
     memos,
+    notifications,
     payment,
     pos,
     recruitment,
     reviews,
     sales,
     schedules,
+    slack,
     stats,
     search,
     subsidies,
@@ -97,6 +99,8 @@ app.include_router(employees_router)
 app.include_router(work_records_router)
 app.include_router(docx.router)
 app.include_router(admin.router)
+app.include_router(slack.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

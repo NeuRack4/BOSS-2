@@ -38,7 +38,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
-    "youtube" | "instagram" | "naver" | undefined
+    "youtube" | "instagram" | "naver" | "slack" | undefined
   >(undefined);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const layoutCtx = useLayout();
@@ -68,10 +68,18 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         | "youtube"
         | "instagram"
         | "naver"
+        | "slack"
         | undefined;
       setIntegrationsInitialTab(tab);
       setIntegrationsOpen(true);
     };
+
+    // Slack OAuth 완료 후 리다이렉트 시 Connect 모달 자동 오픈
+    if (window.location.search.includes("slack_connected=true")) {
+      window.history.replaceState({}, "", window.location.pathname);
+      setIntegrationsInitialTab("slack");
+      setIntegrationsOpen(true);
+    }
     window.addEventListener("boss:open-schedule-modal", onOpenSchedule);
     window.addEventListener("boss:open-activity-modal", onOpenActivity);
     window.addEventListener("boss:open-chat-history-modal", onOpenChatHistory);

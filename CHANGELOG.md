@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] — 2026-04-29
+
+### Added — Sales: Slack 알림 기능
+
+- **DB** (`supabase/migrations/043_slack_notification.sql`) — `slack_connections`, `notification_settings` 테이블 신규 추가.
+- **`backend/app/routers/slack.py`** — Slack OAuth 연동 라우터. `GET /api/slack/oauth/url`, `GET /api/slack/oauth/callback`, `GET /api/slack/status`, `DELETE /api/slack/disconnect` 4개 엔드포인트. 봇 토큰 방식으로 DM 전송.
+- **`backend/app/routers/notifications.py`** — 알림 설정 라우터. `GET/POST /api/notifications/settings` (시간·ON/OFF upsert).
+- **`backend/app/scheduler/tasks.py`** — `sales_slack_notify` Celery 태스크 추가. 매시 정각 실행, 오늘 매출 입력 여부 확인 후 미입력 시 독려 DM / 입력 시 GPT-4o-mini AI 분석 리포트 DM 전송.
+- **`backend/app/scheduler/celery_app.py`** — `sales-slack-notify` beat_schedule 등록 (매시 정각).
+- **`frontend/components/layout/slack/SlackTab.tsx`** — Connect 모달 Slack 탭. 연결 전/후 UI, 새 탭 OAuth 방식(모달 유지), localStorage 신호로 연결 완료 자동 감지.
+- **`frontend/app/slack-success/page.tsx`** — OAuth 완료 후 새 탭 자동 닫기 + 원본 탭 신호 전달 페이지.
+- **`frontend/components/sales/dashboard/tabs/NotificationTab.tsx`** — Sales 대시보드 알림 설정 탭. ON/OFF 토글, 0~23시 전체 시간 드롭다운, 저장.
+- **`frontend/components/layout/IntegrationsModal.tsx`** — Connect 모달에 Slack 탭 추가.
+- **`frontend/components/sales/dashboard/SalesDashboard.tsx`** — 대시보드 탭5 알림 설정 추가, Slack 연동 상태 실시간 조회.
+- **`frontend/components/layout/Header.tsx`** — OAuth 완료 후 `slack_connected` 감지 → Connect 모달 Slack 탭 자동 오픈.
+
 ## [3.10.0] — 2026-04-29
 
 ### Fixed — Planner: Anthropic KV 캐시 복구

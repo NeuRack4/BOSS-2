@@ -1,23 +1,25 @@
 // frontend/components/sales/dashboard/SalesDashboard.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, RefreshCw, BarChart2 } from "lucide-react";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { RevenueDetailTab } from "./tabs/RevenueDetailTab";
 import { CostTab } from "./tabs/CostTab";
 import { MenuProfitTab } from "./tabs/MenuProfitTab";
+import { NotificationTab } from "./tabs/NotificationTab";
 
 const fmt = (n: number) =>
   n >= 10_000 ? `${(n / 10_000).toFixed(1)}만` : n.toLocaleString();
 
-type Tab = "overview" | "revenue" | "cost" | "menu";
+type Tab = "overview" | "revenue" | "cost" | "menu" | "notification";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "개요" },
   { key: "revenue", label: "매출 상세" },
   { key: "cost", label: "비용" },
   { key: "menu", label: "메뉴 수익성" },
+  { key: "notification", label: "알림 설정" },
 ];
 
 type Props = {
@@ -28,7 +30,16 @@ type Props = {
 export function SalesDashboard({ accountId, onChatMessage }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [slackConnected, setSlackConnected] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const { state, periodActivation, refresh } = useDashboardData(accountId);
+
+  useEffect(() => {
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    fetch(`${API}/api/slack/status?account_id=${accountId}`)
+      .then((r) => r.json())
+      .then((res) => setSlackConnected(res.connected ?? false));
+  }, [accountId]);
 
   const goalPercent =
     state.goal?.achievement_rate != null
@@ -148,6 +159,13 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
           )}
           {activeTab === "menu" && (
             <MenuProfitTab menus={state.menus} accountId={accountId} onChatMessage={onChatMessage} />
+          )}
+          {activeTab === "notification" && (
+            <NotificationTab
+              accountId={accountId}
+              slackConnected={slackConnected}
+              onOpenConnect={() => setConnectOpen(true)}
+            />
           )}
         </>
       )}
