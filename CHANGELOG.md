@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1] — 2026-04-29
+
+### Fixed — layout: ngrok Script 위치 및 strategy 수정
+
+- **`frontend/app/layout.tsx`** — `<Script strategy="beforeInteractive">`를 `<html>` 직속 자식으로 배치해 발생하던 hydration 에러 수정.
+  - `<Script>`를 `<body>` 안으로 이동
+  - `strategy="beforeInteractive"` → `strategy="afterInteractive"` 변경 (`<html>` 외부에 sync/defer 스크립트 렌더 불가 제약 해소)
+
+---
+
+## [4.1.0] — 2026-04-29
+
+### Added — Sales: OCR LangGraph 파이프라인 고도화
+
+- **`_ocr_menu_graph.py`** — 메뉴판 OCR LangGraph 4노드 파이프라인 신규 구현. `ocr → validate → retry → save` 구조. validate 실패 시 더 상세한 프롬프트로 1회 재시도. LangSmith 노드별 추적 적용.
+- **`_ocr_receipt_graph.py`** — 영수증 OCR LangGraph 4노드 파이프라인 신규 구현. items 0개·type 오류·amount 음수 검증 후 실패 시 상세 프롬프트로 재시도. LangSmith 추적 적용.
+- **`sales.py`** — 기존 `parse_menu_from_bytes`, `parse_receipt_from_storage` 단순 GPT 1회 호출을 LangGraph 파이프라인 진입점(`run_menu_ocr_graph`, `run_receipt_ocr_graph`)으로 교체.
+
 ## [4.0.1] — 2026-04-29
 
 ### Fixed — ngrok fetch 패치 버그 수정
