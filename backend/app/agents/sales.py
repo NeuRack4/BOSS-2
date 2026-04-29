@@ -1468,7 +1468,7 @@ def describe(account_id: str) -> list[dict]:
         },
         {
             "name": "sales_checklist",
-            "description": "재고/발주/마감 등 매출 관련 체크리스트.",
+            "description": "매출·비용·재료비 절감·원가 관리·재고·발주·마감 등 영업 운영 전반에 관한 체크리스트. 소상공인 가게 운영에 필요한 실천 목록 작성.",
             "handler": run_sales_checklist,
             "parameters": {
                 "type": "object",

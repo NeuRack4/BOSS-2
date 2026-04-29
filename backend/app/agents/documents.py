@@ -305,7 +305,7 @@ async def _execute_write(account_id: str, result_data: dict) -> str:
     }.get(doc_type, "서류")
 
     return f"{doc_label} **{title}**을 작성하고 저장했습니다." + (
-        f"\n\n캔버스에서 확인하실 수 있어요. (artifact id: `{artifact_id}`)" if artifact_id else ""
+        f"\n\n📋 칸반 보드에서 확인하실 수 있어요." if artifact_id else ""
     )
 
 
@@ -405,7 +405,7 @@ async def _execute_write_admin_docx(account_id: str, result_data: dict) -> str:
     if download_url:
         reply += f"📄 **[{filename} 다운로드]({download_url})**\n\n"
     if artifact_id:
-        reply += f"캔버스에서 확인하실 수 있어요. (artifact id: `{artifact_id}`)"
+        reply += f"📋 칸반 보드에서 확인하실 수 있어요."
     return reply
 
 
@@ -556,7 +556,7 @@ def _format_review_append(result: dict) -> str:
         if len(risks) > 5:
             lines.append(f"... 외 {len(risks) - 5}건 (분석 노드에서 전체 확인)")
     lines.append("")
-    lines.append(f"_(분석 artifact: `{result['analysis_id']}` — 캔버스에서 확인할 수 있어요.)_")
+    lines.append(f"_(분석이 완료됐어요. 칸반 보드 Reports에서 확인하실 수 있어요.)_")
     payload = {
         "analysis_id": result["analysis_id"],
         "gap_ratio":   result["gap_ratio"],
