@@ -63,6 +63,7 @@ export interface ActionItem {
   title: string;
   target: string;
   period: string;
+  due_date?: string;
   idea: string;
   steps: string[];
   expected: string;

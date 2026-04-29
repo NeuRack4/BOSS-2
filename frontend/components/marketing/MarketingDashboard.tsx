@@ -221,6 +221,7 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
           )}
           {activeTab === "actions" && (
             <ActionsTab
+              accountId={accountId}
               actions={state.actions}
               loading={state.actionsLoading}
               loaded={state.actionsLoaded}

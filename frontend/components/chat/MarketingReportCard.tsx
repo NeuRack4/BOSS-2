@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { createClient } from "@/lib/supabase/client";
 
@@ -82,6 +82,19 @@ export interface MarketingReportPayload {
   analysis: string;
   actions?: ActionItem[];
 }
+
+type ReportTab = "overview" | "instagram" | "youtube" | "actions";
+
+const REPORT_TABS: {
+  key: ReportTab;
+  label: string;
+  activeClass: string;
+}[] = [
+  { key: "overview", label: "\uac1c\uc694", activeClass: "bg-slate-700 text-white" },
+  { key: "instagram", label: "\uc778\uc2a4\ud0c0", activeClass: "bg-pink-500 text-white" },
+  { key: "youtube", label: "\uc720\ud29c\ube0c", activeClass: "bg-red-500 text-white" },
+  { key: "actions", label: "\ud560 \uc77c", activeClass: "bg-orange-400 text-white" },
+];
 
 // ── 파서 ──────────────────────────────────────────────────────────────────
 
@@ -341,9 +354,7 @@ export function MarketingReportCard({
   payload: MarketingReportPayload;
 }) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  const [tab, setTab] = useState<
-    "overview" | "instagram" | "youtube" | "actions"
-  >("actions");
+  const [tab, setTab] = useState<ReportTab>("overview");
   const [ytConnecting, setYtConnecting] = useState(false);
   const [ytData, setYtData] = useState<YoutubeData>(payload.youtube);
 
@@ -401,39 +412,32 @@ export function MarketingReportCard({
   }, [apiBase, getAccountId, payload.period_days]);
 
   return (
-    <div className="rounded-[5px] border border-neutral-200 bg-white overflow-hidden w-full max-w-[520px] shadow-sm">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-200">
+    <div className="w-full max-w-[520px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             Marketing Report
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
-            최근 {payload.period_days}일
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+            {"\ucd5c\uadfc "}
+            {payload.period_days}
+            {"\uc77c"}
           </span>
         </div>
         <div className="flex gap-1">
-          {(["actions", "overview", "instagram", "youtube"] as const).map(
-            (t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`text-[11px] px-2.5 py-1 rounded-[4px] transition-colors ${
-                  tab === t
-                    ? "bg-neutral-800 text-white"
-                    : "text-neutral-500 hover:bg-neutral-100"
-                }`}
-              >
-                {t === "actions"
-                  ? "할 일"
-                  : t === "overview"
-                    ? "분석"
-                    : t === "instagram"
-                      ? "인스타"
-                      : "유튜브"}
-              </button>
-            ),
-          )}
+          {REPORT_TABS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                tab === item.key
+                  ? item.activeClass
+                  : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
 
