@@ -62,17 +62,25 @@ async def get_account_insights(
     total_impressions = 0
     total_profile_views = 0
 
-    if "data" in insights_data:
+    if "error" in insights_data:
+        log.warning("[instagram_insights] account insights API error: %s", insights_data["error"])
+    elif "data" in insights_data:
         for metric in insights_data["data"]:
             name = metric.get("name")
-            values = metric.get("values", [])
-            total = sum(v.get("value", 0) for v in values)
+            # v18+ 이후: total_value 포맷 / 이전: values[] 배열 포맷 모두 처리
+            if "total_value" in metric:
+                total = metric["total_value"].get("value", 0)
+            else:
+                values = metric.get("values", [])
+                total = sum(v.get("value", 0) for v in values)
             if name == "reach":
                 total_reach = total
             elif name == "impressions":
                 total_impressions = total
             elif name == "profile_views":
                 total_profile_views = total
+    else:
+        log.warning("[instagram_insights] unexpected insights response: %s", str(insights_data)[:300])
 
     return {
         "username": username,
@@ -108,47 +116,135 @@ async def get_media_insights(
             if not media_id:
                 continue
 
+            media_type = media.get("media_type", "")
+            # REELS는 별도 지표 사용 (engagement/impressions 미지원)
+            if media_type == "VIDEO":
+                metric_str = "reach,saved,likes,comments,shares"
+            else:
+                metric_str = "reach,impressions,saved,likes,comments,shares"
+
             r_insight = await client.get(
                 f"{_GRAPH_BASE}/{media_id}/insights",
                 params={
-                    "metric": "reach,impressions,engagement,saved",
+                    "metric": metric_str,
                     "access_token": access_token,
                 },
             )
             insight_data = r_insight.json()
 
+            if "error" in insight_data:
+                log.debug(
+                    "[instagram_insights] media %s insights error: %s",
+                    media_id, insight_data["error"].get("message", "")
+                )
+                insight_data = {}
+
             metrics: dict[str, int] = {}
             for item in insight_data.get("data", []):
                 name = item.get("name", "")
-                # video/reels는 value 직접, image는 values[0].value
-                val = item.get("value") or (item.get("values") or [{}])[0].get("value", 0)
+                # v18+ total_value 포맷 / 이전 value/values 포맷 모두 처리
+                if "total_value" in item:
+                    val = item["total_value"].get("value", 0)
+                elif item.get("value") is not None:
+                    val = item["value"]
+                else:
+                    val = (item.get("values") or [{}])[0].get("value", 0)
                 metrics[name] = int(val or 0)
+
+            # engagement = likes + comments + shares + saves (deprecated 지표 대체)
+            engagement = (
+                metrics.get("likes", 0)
+                + metrics.get("comments", 0)
+                + metrics.get("shares", 0)
+                + metrics.get("saved", 0)
+            )
 
             caption_raw = media.get("caption") or ""
             results.append({
                 "id": media_id,
                 "timestamp": media.get("timestamp", ""),
                 "caption": caption_raw[:80] + ("…" if len(caption_raw) > 80 else ""),
-                "media_type": media.get("media_type", ""),
+                "media_type": media_type,
                 "permalink": media.get("permalink", ""),
                 "reach": metrics.get("reach", 0),
                 "impressions": metrics.get("impressions", 0),
-                "engagement": metrics.get("engagement", 0),
+                "engagement": engagement,
                 "saved": metrics.get("saved", 0),
             })
 
     return results
 
 
-async def collect_report_data(days: int = 30) -> dict:
+async def get_daily_reach(
+    access_token: str,
+    ig_user_id: str,
+    days: int = 30,
+) -> list[dict]:
+    """일별 도달수 데이터 (values[] 배열에서 추출)."""
+    until = datetime.now(timezone.utc)
+    since = until - timedelta(days=days)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"{_GRAPH_BASE}/{ig_user_id}/insights",
+            params={
+                "metric": "reach",
+                "period": "day",
+                "since": int(since.timestamp()),
+                "until": int(until.timestamp()),
+                "access_token": access_token,
+            },
+        )
+        data = r.json()
+
+    if "error" in data or "data" not in data:
+        return []
+
+    for metric in data["data"]:
+        if metric.get("name") == "reach":
+            values = metric.get("values", [])
+            return [
+                {
+                    "date": v.get("end_time", "")[:10],
+                    "reach": v.get("value", 0),
+                }
+                for v in values
+                if v.get("end_time")
+            ]
+    return []
+
+
+async def collect_report_data(days: int = 30, account_id: str = "") -> dict:
     """전체 인스타그램 리포트 데이터 수집."""
-    from app.core.config import settings
+    # DB 우선, fallback → env
+    access_token = ""
+    ig_user_id = ""
 
-    if not settings.meta_access_token or not settings.instagram_user_id:
-        return {"error": "Instagram 계정이 연결되지 않았습니다. 환경변수를 확인해주세요."}
+    if account_id:
+        try:
+            from app.core.supabase import get_supabase
+            sb = get_supabase()
+            res = (
+                sb.table("platform_credentials")
+                .select("credentials")
+                .eq("account_id", account_id)
+                .eq("platform", "instagram")
+                .execute()
+            )
+            if res.data:
+                creds = res.data[0]["credentials"]
+                access_token = creds.get("meta_access_token", "")
+                ig_user_id = creds.get("instagram_user_id", "")
+        except Exception:
+            pass
 
-    access_token = settings.meta_access_token
-    ig_user_id = settings.instagram_user_id
+    if not access_token or not ig_user_id:
+        from app.core.config import settings
+        access_token = access_token or settings.meta_access_token or ""
+        ig_user_id = ig_user_id or settings.instagram_user_id or ""
+
+    if not access_token or not ig_user_id:
+        return {"error": "Instagram 계정이 연결되지 않았습니다. 플랫폼 연동 설정에서 연결해 주세요."}
 
     try:
         account = await get_account_insights(access_token, ig_user_id, days)

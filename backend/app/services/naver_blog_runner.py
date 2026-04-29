@@ -3,19 +3,61 @@
 import sys
 import json
 import re
-import base64
-import subprocess
 import time
 from pathlib import Path
 
-COOKIE_PATH = Path(__file__).parent / "naver_cookies.json"
+COOKIE_PATH = Path(__file__).parent / "naver_cookies.json"  # 로컬 fallback용
 
 _JS_CLICK_SEL = "(selector) => { const el = document.querySelector(selector); if (el) { el.click(); return true; } return false; }"
 _JS_CLICK_TEXT = "(text) => { const btns = [...document.querySelectorAll('button')]; const el = btns.find(b => b.innerText.trim().includes(text)); if (el) { el.click(); return true; } return false; }"
 
 
 def set_clipboard(text: str) -> None:
-    """Base64 → UTF-16LE 경유로 한글 텍스트를 안전하게 Windows 클립보드에 씁니다."""
+    """ctypes로 Windows 클립보드에 직접 씁니다 (포커스 빼앗지 않음). 실패 시 PowerShell 폴백."""
+    import ctypes
+    import base64
+    import subprocess
+
+    CF_UNICODETEXT = 13
+    GMEM_MOVEABLE = 0x0002
+    encoded = (text + "\0").encode("utf-16-le")
+    size = len(encoded)
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    for attempt in range(5):
+        if user32.OpenClipboard(0):
+            break
+        time.sleep(0.1)
+    else:
+        # OpenClipboard 5회 실패 → PowerShell 폴백
+        _set_clipboard_powershell(text)
+        return
+
+    try:
+        user32.EmptyClipboard()
+        h_mem = kernel32.GlobalAlloc(GMEM_MOVEABLE, size)
+        if not h_mem:
+            user32.CloseClipboard()
+            _set_clipboard_powershell(text)
+            return
+        p_mem = kernel32.GlobalLock(h_mem)
+        if not p_mem:
+            kernel32.GlobalFree(h_mem)
+            user32.CloseClipboard()
+            _set_clipboard_powershell(text)
+            return
+        ctypes.memmove(p_mem, encoded, size)
+        kernel32.GlobalUnlock(h_mem)
+        user32.SetClipboardData(CF_UNICODETEXT, h_mem)
+    finally:
+        user32.CloseClipboard()
+
+
+def _set_clipboard_powershell(text: str) -> None:
+    """PowerShell 폴백 클립보드 쓰기 (포커스 영향 최소화를 위해 -WindowStyle Hidden 사용)."""
+    import base64
+    import subprocess
     b64 = base64.b64encode(text.encode("utf-16-le")).decode("ascii")
     ps_cmd = (
         "Add-Type -AssemblyName System.Windows.Forms; "
@@ -24,7 +66,8 @@ def set_clipboard(text: str) -> None:
         "[Windows.Forms.Clipboard]::SetText($str)"
     )
     subprocess.run(
-        ["powershell", "-sta", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+        ["powershell", "-sta", "-NoProfile", "-NonInteractive",
+         "-WindowStyle", "Hidden", "-Command", ps_cmd],
         capture_output=True,
         timeout=15,
     )
@@ -32,9 +75,9 @@ def set_clipboard(text: str) -> None:
 
 def paste_text(page, text: str) -> None:
     set_clipboard(text)
-    time.sleep(0.6)
+    time.sleep(0.15)
     page.keyboard.press("Control+v")
-    time.sleep(0.6)
+    time.sleep(0.3)
 
 
 def strip_markdown(text: str) -> str:
@@ -285,6 +328,7 @@ def main():
     title_override = data.get("title", "")
     tags_override = data.get("tags", [])
     image_urls = data.get("image_urls", [])
+    cookies_from_payload = data.get("cookies")  # DB에서 전달된 쿠키 (없으면 파일 fallback)
 
     parsed_title, segments, parsed_tags = parse_content(content)
     title = title_override or parsed_title
@@ -307,11 +351,14 @@ def main():
             return page.evaluate(_JS_CLICK_SEL, sel)
 
         try:
-            if not COOKIE_PATH.exists():
-                print(json.dumps({"error": "먼저 naver_login_setup을 실행하세요."}))
+            if cookies_from_payload:
+                cookies = cookies_from_payload
+            elif COOKIE_PATH.exists():
+                cookies = json.loads(COOKIE_PATH.read_text(encoding="utf-8"))
+            else:
+                print(json.dumps({"error": "네이버 블로그 쿠키가 없습니다. 플랫폼 연결 설정에서 쿠키를 업로드해 주세요."}))
                 sys.exit(1)
 
-            cookies = json.loads(COOKIE_PATH.read_text(encoding="utf-8"))
             context.add_cookies(cookies)
 
             page.goto(f"https://blog.naver.com/{blog_id}", wait_until="domcontentloaded")
@@ -419,9 +466,9 @@ def main():
                     continue
                 elif kind == "subheading":
                     page.keyboard.press("Control+b")
-                    time.sleep(0.2)
+                    time.sleep(0.15)
                     paste_text(page, text)
-                    time.sleep(0.2)
+                    time.sleep(0.15)
                     page.keyboard.press("Control+b")
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(300)

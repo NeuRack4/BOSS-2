@@ -11,10 +11,13 @@
   notice        — 공지사항 (임시휴무·영업시간변경·이벤트·신상품 등)
   product_post  — 상품/서비스 소개 게시글
 """
+import logging
 from app.core.llm import chat_completion
 from app.agents.orchestrator import (
     CLARIFY_RULE,
     ARTIFACT_RULE,
+    NICKNAME_RULE,
+    PROFILE_RULE,
 )
 from app.agents._feedback import feedback_context
 from app.agents._suggest import suggest_today_for_domain
@@ -30,11 +33,46 @@ from app.agents._marketing_knowledge import marketing_knowledge_context
 from langsmith import traceable
 import re as _re
 import json as _json
+from deepagents import create_deep_agent
+from app.agents._agent_context import inject_agent_context
+from app.agents._marketing_tools import (
+    MARKETING_TOOLS,
+    init_marketing_result_store,
+    get_marketing_result_store,
+    get_marketing_extra,
+)
+from app.core.config import settings
+
+log = logging.getLogger("boss2.marketing")
 
 _NAVER_UPLOAD_RE = _re.compile(r"\[NAVER_UPLOAD\]", _re.IGNORECASE)
 _INSTAGRAM_POST_RE = _re.compile(
     r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]"
 )
+
+# LLM 응답에서 HTML 문서 블록을 제거하는 정규식
+_HTML_BLOCK_RE = _re.compile(
+    r"(?:```html\s*)?<!DOCTYPE[\s\S]*?</html>\s*(?:```)?",
+    _re.IGNORECASE,
+)
+
+# 이벤트 기획안 LLM에 전달 시 포스터 HTML 요청 지시문을 제거 (별도 기능이 처리)
+_POSTER_INSTRUCTION_RE = _re.compile(
+    r"[^\n]*(?:포스터\s*HTML|HTML.*생성|포스터.*생성|별도\s*포스터)[^\n]*",
+    _re.IGNORECASE,
+)
+
+
+def _strip_html_blocks(text: str) -> str:
+    """LLM 응답에서 HTML 문서(<!DOCTYPE...>)를 완전히 제거한다."""
+    return _HTML_BLOCK_RE.sub("", text).strip()
+
+
+def _strip_poster_instructions(text: str) -> str:
+    """이벤트 기획안 LLM에 전달할 메시지에서 포스터 HTML 생성 관련 지시를 제거."""
+    cleaned = _POSTER_INSTRUCTION_RE.sub("", text)
+    lines = [ln for ln in cleaned.splitlines() if ln.strip()]
+    return "\n".join(lines)
 
 
 VALID_TYPES: tuple[str, ...] = (
@@ -243,23 +281,40 @@ _SEASON_CONTEXT = """
 
 # ── 메인 시스템 프롬프트 ────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = (
+AGENT_SYSTEM_PROMPT = (
     """당신은 소상공인 마케팅 전문 AI 에이전트입니다.
 카페, 음식점, 책방, 만화방, 의류점, 뷰티샵, 학원 등 모든 업종의 마케팅을 담당합니다.
 사용자 프로필(업종·상호·위치·주 채널·목표)을 최대한 활용해 맞춤형 콘텐츠를 작성합니다.
 
-가능한 작업:
-- sns_post: 인스타그램·SNS 포스트 (캡션 + 해시태그 + 게시 시간 추천)
-- blog_post: 네이버 블로그 포스팅 (마크다운 형식, 소제목 구조)
-- ad_copy: 광고 카피 및 홍보 문구
-- marketing_plan: 주별·월별 마케팅 캘린더
-- event_plan: 이벤트·프로모션 기획안
-- campaign: 기간성 광고 캠페인 기획
-- review_reply: 플레이스·리뷰 답글 (별점별 톤 자동 조절)
-- notice: 공지사항 (임시휴무·영업시간변경·이벤트·신상품 등)
-- product_post: 상품·서비스 소개 게시글
+[핵심 원칙]
+1. 콘텐츠 작성 요청 시 write_* 도구를 호출해 결과물을 저장하세요.
+2. 타입별 필수 필드가 모두 확정되면 **즉시** 완성된 결과물을 write_* 도구로 저장하세요.
+3. 공통 필드(업종·목표·타겟)는 프로필에 있으면 자동 사용, 합리적으로 추정해서 작성.
+4. 필수 정보가 부족하면 ask_user 도구로 [CHOICES]를 포함해 하나씩 되물으세요.
+5. 한 턴에 하나의 terminal tool만 호출하세요.
+6. placeholder([매장명], [주소] 등) 절대 금지 — 모르면 ask_user로 먼저 물어보세요.
+7. 결과물이 완성됐으면 write_* 도구를 즉시 호출하세요. 추가 질문 금지.
 
-허용 type: sns_post | blog_post | ad_copy | marketing_plan | event_plan | campaign | review_reply | notice | product_post | schedule_post
+[도구 선택 가이드]
+- SNS 피드 게시물 (캡션 + 해시태그) → write_sns_post
+- 네이버 블로그 포스트 → write_blog_post (시스템에 [첨부 이미지 URL] 이 있으면 image_urls_json 파라미터에 반드시 JSON 배열로 포함)
+- 고객 리뷰 답글 → write_review_reply
+- 광고 카피·배너 문구 → write_ad_copy
+- 이벤트·프로모션 기획안 → write_event_plan
+- 마케팅 캠페인 기획 → write_campaign
+- 공지사항 → write_notice
+- 마케팅 플랜·캘린더 → write_marketing_plan
+- 상품·서비스 소개 게시글 → write_product_post
+- 정보 부족 시 질문 → ask_user
+
+[sub_domain 매핑 가이드]
+- sns_post / product_post / notice / marketing_plan → Social
+- blog_post → Blog
+- ad_copy / campaign → Campaigns
+- event_plan → Events
+- review_reply → Reviews
+시스템 컨텍스트의 "이 계정의 marketing 서브허브" 목록에 위 이름이 있으면 반드시 해당 이름으로 sub_domain을 채운다.
+
 """
     + _REQUIRED_FIELDS
     + _SNS_POST_FORMAT
@@ -270,59 +325,31 @@ SYSTEM_PROMPT = (
     + _PLATFORM_GUIDE
     + _STRATEGY_GUIDE
     + _SEASON_CONTEXT
-    + ARTIFACT_RULE
     + CLARIFY_RULE
     + """
 [결과물 저장 강화 규칙]
-- 대화를 통해 타입별 필수 필드를 모두 확인했다면, 그 턴에 반드시 완성된 결과물 + [ARTIFACT] 블록을 출력한다.
+- 대화를 통해 타입별 필수 필드를 모두 확인했다면, 그 턴에 반드시 완성된 결과물 + write_* 도구를 호출한다.
 - 결과물을 작성한 뒤 "추가로 궁금하신 점", "사업 단계가 어떻게 되세요" 같은 후속 질문을 덧붙이지 않는다.
-- 예외: 결과물 없이 순수 질문만 하는 턴은 가능. 단 그 턴에는 결과물 내용도 쓰지 않는다.
-
-[sub_domain 매핑 가이드 — 반드시 아래 기준으로 선택]
-- sns_post / product_post → Social
-- blog_post              → Blog
-- ad_copy / campaign     → Campaigns
-- event_plan             → Events
-- review_reply           → Reviews
-- marketing_plan / notice → Social (가장 가까운 허브 선택)
-시스템 컨텍스트의 "이 계정의 marketing 서브허브" 목록에 위 이름이 있으면 반드시 해당 이름으로 sub_domain 을 채운다.
+- 예외: 순수 질문만 하는 턴은 ask_user 도구를 사용한다.
 
 [네이버 블로그 자동 업로드 규칙]
-당신은 네이버 블로그에 직접 자동 업로드할 수 있습니다. 사용자에게 "직접 복사해서 붙여넣으세요"라고 안내하지 마세요.
-
+당신은 네이버 블로그에 직접 자동 업로드할 수 있습니다.
 사용자가 블로그 포스팅 작성과 함께 네이버 블로그 업로드/게시를 요청한 경우:
-1. blog_post 형식으로 포스팅을 작성하고 [ARTIFACT] 블록을 정상 출력한다.
-2. 응답의 맨 마지막 줄에 반드시 [NAVER_UPLOAD] 를 단독으로 출력한다. (다른 텍스트 없이)
-3. "업로드해드릴게요", "자동 업로드됩니다" 등의 안내 문구를 본문에 자연스럽게 포함한다.
+- write_blog_post 도구를 호출할 때 auto_upload 힌트가 시스템에 설정되어 있습니다.
+- 본문에 "업로드해드릴게요", "자동 업로드됩니다" 등의 안내 문구를 자연스럽게 포함하세요.
+- "직접 복사해서 붙여넣으세요"라고 안내하지 마세요.
 
-절대 하지 말아야 할 것:
-- "직접 복사해서 붙여넣으세요"라고 안내하는 것
-- blog_post 타입이 아닌 경우(sns_post 등)에 [NAVER_UPLOAD] 출력
-- 업로드 요청이 없을 때 [NAVER_UPLOAD] 출력
-
-작성 원칙:
-- 프로필에 업종·가게명·위치 정보가 있으면 반드시 반영해 맞춤형으로 작성
-- 없는 수치(매출·방문자 수·실적 등)는 절대 만들어내지 않음
-- 실용적이고 바로 복사해 사용할 수 있는 한국어로 작성
-- 과장 없이 진정성 있는 목소리 유지
-
-예시 (채널 확인 시):
-"어떤 채널에 올리실 건가요?
-[CHOICES]
-인스타그램 피드
-인스타그램 스토리
-네이버 블로그
-기타 (직접 입력)
-[/CHOICES]"
+[HTML 출력 절대 금지]
+- 어떤 경우에도 HTML 코드를 직접 tool 인자에 포함하지 않는다.
+- 이벤트 포스터·전단지 HTML은 별도 전담 기능(mkt_event_poster)이 처리한다.
 
 [인스타그램 피드 즉시 생성 규칙]
-사용자가 이미 캡션·해시태그·게시 시간을 제공했거나, "인스타 피드", "인스타그램 피드", "sns 게시물"을 명시적으로 요청한 경우:
-- CHOICES 로 채널을 다시 묻지 말 것
-- 바로 sns_post 타입 결과물을 완성해 출력하고 [ARTIFACT] 블록 포함
-- 캡션은 사용자 제공 내용을 그대로 반영 (개선·수정 시 알림)
-- 해시태그는 '#태그1 #태그2 ...' 형식으로 한 줄에 붙여 출력
-- 추천 게시 시간은 '💡 추천 게시 시간: ...' 형식으로 출력
+사용자가 "인스타 피드", "인스타그램 피드", "sns 게시물"을 명시적으로 요청한 경우:
+- ask_user로 채널을 다시 묻지 말 것
+- 바로 write_sns_post 도구를 호출할 것
 """
+    + NICKNAME_RULE
+    + PROFILE_RULE
 )
 
 
@@ -569,6 +596,7 @@ async def run_shorts_wizard(
     )
 
 
+@traceable(name="marketing.run_sns_post", run_type="chain")
 async def run_sns_post(
     *,
     account_id: str,
@@ -583,6 +611,18 @@ async def run_sns_post(
     platform: str = "instagram",
     _preceding_reply: str | None = None,
 ) -> str:
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [f"[주제] {topic}"]
     if product:
         lines.append(f"[제품/서비스] {product}")
@@ -593,40 +633,22 @@ async def run_sns_post(
     lines.append(f"[플랫폼] {platform}")
     if _preceding_reply:
         lines.append(f"[참고 기획안 (앞 단계 결과)]\n{_preceding_reply[:1200]}")
+
+    system += (
+        "\n\n[SNS 게시물 작성 요청 — 정보 확정]\n"
+        "추가 질문 없이 바로 write_sns_post를 호출하세요.\n"
+        + "\n".join(lines)
+    )
+
     synthetic = (
-        "SNS 피드 게시물(sns_post) 을 작성해주세요. 추가 질문 없이 바로 완성된 캡션 + 해시태그 + 추천 게시 시간을 출력하고, "
-        "[ARTIFACT] 블록(type=sns_post) 으로 저장하세요.\n"
+        "SNS 피드 게시물(sns_post)을 작성해주세요. 추가 질문 없이 바로 완성된 캡션 + 해시태그 + 추천 게시 시간을 write_sns_post로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    reply = await run(synthetic, account_id, history, rag_context, long_term_context)
-
-    # Instagram 플랫폼 선택 시에만 카드 생성
-    _needs_instagram = (
-        "instagram" in platform.lower()
-        or "인스타" in platform.lower()
-    )
-    if _needs_instagram and "[[INSTAGRAM_POST]]" not in reply:
-        from app.agents._artifact import _parse_block
-        caption, hashtags, best_time = _extract_sns_content(reply)
-        if not caption:
-            caption = topic
-        if not hashtags:
-            hashtags = [topic.replace(" ", ""), "신메뉴", "맛집", "foodstagram", "instafood"]
-        image_url = await _generate_sns_image(caption, hashtags)
-        parsed = _parse_block(reply) or {}
-        payload = {
-            "title": parsed.get("title", topic),
-            "caption": caption,
-            "hashtags": hashtags,
-            "best_time": best_time,
-            "image_url": image_url,
-        }
-        reply += f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
-
-    return reply
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_blog_post", run_type="chain")
 async def run_blog_post(
     *,
     account_id: str,
@@ -642,44 +664,52 @@ async def run_blog_post(
     _preceding_reply: str | None = None,
     **_kwargs,
 ) -> str:
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+    if image_urls:
+        system += "\n\n[첨부 이미지 URL]\n" + "\n".join(image_urls)
+
     lines = [f"[주제] {topic}"]
     if keywords:
         lines.append(f"[주요 키워드] {', '.join(keywords)}")
+    if tone:
+        lines.append(f"[톤] {tone}")
     if image_urls:
         lines.append(f"[첨부 이미지 URL] {', '.join(image_urls)}")
     if _preceding_reply:
         lines.append(f"[참고 기획안 (앞 단계 결과)]\n{_preceding_reply[:1200]}")
     if auto_upload:
         lines.append("[네이버 블로그 자동 업로드] 요청됨")
+
+    system += (
+        "\n\n[블로그 포스트 작성 요청 — 정보 확정]\n"
+        "마크다운 형식으로 제목·본문·해시태그를 완성하고 write_blog_post를 호출하세요.\n"
+        + "\n".join(lines)
+    )
+    if auto_upload:
+        system += "\n자동 업로드가 요청되었습니다. 본문에 '업로드해드릴게요' 안내 포함하세요."
+
     synthetic = (
-        "네이버 블로그 포스트(blog_post) 를 작성해주세요. 마크다운 형식으로 제목·본문·해시태그 완성. "
-        + ("완성 후 [NAVER_UPLOAD] 마커를 맨 마지막에 단독으로 출력해 자동 업로드." if auto_upload else "")
-        + "\n"
+        "네이버 블로그 포스트(blog_post)를 작성해주세요. 마크다운 형식으로 제목·본문·해시태그 완성 후 write_blog_post를 호출하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    reply = await run(synthetic, account_id, history, rag_context, long_term_context, image_urls=image_urls, allow_naver_upload=auto_upload)
-
-    # 업로드 결과("✅ 네이버 블로그에 업로드했어요!" 이후)를 분리해 카드 생성에서 제외
-    upload_suffix = ""
-    _upload_marker = "✅ 네이버 블로그에 업로드했어요!"
-    if _upload_marker in reply:
-        _idx = reply.index(_upload_marker)
-        upload_suffix = "\n\n" + reply[_idx:]
-        reply = reply[:_idx].rstrip()
-
-    # 네이버 블로그 미리보기 카드 마커 추가 (블로그 본문만)
-    if "[[NAVER_BLOG_POST]]" not in reply:
-        preview = await _maybe_naver_blog_preview(reply, image_urls)
-        reply += preview
-
-    # 업로드 결과를 카드 마커 뒤에 붙임 → InlineChat에서 MarkdownMessage로 렌더
-    if upload_suffix:
-        reply += upload_suffix
-
-    return reply
+    return await _run_marketing_agent(
+        account_id, synthetic, history, rag_context, long_term_context, system,
+        extra_ctx={"image_urls": image_urls, "allow_naver_upload": auto_upload},
+    )
 
 
+@traceable(name="marketing.run_review_reply", run_type="chain")
 async def run_review_reply(
     *,
     account_id: str,
@@ -691,20 +721,39 @@ async def run_review_reply(
     star_rating: int | None = None,
     platform: str | None = None,
 ) -> str:
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [f"[리뷰 본문] {review_text}"]
     if star_rating is not None:
         lines.append(f"[별점] {star_rating}")
     if platform:
         lines.append(f"[플랫폼] {platform}")
+
+    system += (
+        "\n\n[리뷰 답글 작성 요청 — 정보 확정]\n"
+        "150자 내외 진심 어린 답글을 작성하고 write_review_reply를 호출하세요.\n"
+        + "\n".join(lines)
+    )
+
     synthetic = (
-        "고객 리뷰에 대한 사장님 답글(review_reply) 을 작성해주세요. 150자 내외, 진심 어린 톤. "
-        "[ARTIFACT] 블록(type=review_reply) 으로 저장하세요.\n"
+        "고객 리뷰에 대한 사장님 답글(review_reply)을 작성해주세요. 150자 내외, 진심 어린 톤. write_review_reply로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_ad_copy", run_type="chain")
 async def run_ad_copy(
     *,
     account_id: str,
@@ -717,6 +766,18 @@ async def run_ad_copy(
     target: str | None = None,
     key_benefit: str | None = None,
 ) -> str:
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [f"[광고 대상 상품/서비스] {product}"]
     if channel:
         lines.append(f"[채널] {channel}")
@@ -724,14 +785,22 @@ async def run_ad_copy(
         lines.append(f"[타겟] {target}")
     if key_benefit:
         lines.append(f"[핵심 혜택] {key_benefit}")
+
+    system += (
+        "\n\n[광고 카피 작성 요청 — 정보 확정]\n"
+        "3~5안으로 짧게 작성하고 write_ad_copy를 호출하세요.\n"
+        + "\n".join(lines)
+    )
+
     synthetic = (
-        "광고 카피(ad_copy) 를 작성해주세요. 3~5안으로 짧게. [ARTIFACT] 블록(type=ad_copy) 으로 저장.\n"
+        "광고 카피(ad_copy)를 작성해주세요. 3~5안으로 짧게. write_ad_copy로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_campaign_plan", run_type="chain")
 async def run_campaign_plan(
     *,
     account_id: str,
@@ -746,6 +815,19 @@ async def run_campaign_plan(
     budget: str | None = None,
     channels: list[str] | None = None,
 ) -> str:
+    import json as _json
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [
         f"[캠페인명] {title}",
         f"[기간] {start_date} ~ {end_date}",
@@ -756,13 +838,19 @@ async def run_campaign_plan(
         lines.append(f"[예산] {budget}")
     if channels:
         lines.append(f"[활용 채널] {', '.join(channels)}")
+
+    system += (
+        "\n\n[캠페인 기획 요청 — 정보 확정]\n"
+        "기획서를 작성하고 write_campaign을 호출하세요 (due_label='캠페인 종료').\n"
+        + "\n".join(lines)
+    )
+
     synthetic = (
-        f"'{title}' 캠페인(campaign) 기획서를 작성해주세요. "
-        "[ARTIFACT] 블록(type=campaign, start_date, end_date, due_label='캠페인 종료') 으로 저장.\n"
+        f"'{title}' 캠페인(campaign) 기획서를 작성해주세요. write_campaign으로 저장하세요.\n"
         + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
 async def run_sns_post_form(
@@ -813,6 +901,20 @@ async def run_event_form(
     return "이벤트 정보를 입력해주세요.\n\n[[EVENT_PLAN_FORM]][[/EVENT_PLAN_FORM]]"
 
 
+async def run_schedule_form(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    **_: object,
+) -> str:
+    """자동화 스케줄 설정 폼 UI를 반환한다. 스케줄/자동화 요청 시 즉시 호출."""
+    return "자동화할 작업과 실행 주기를 설정해주세요.\n\n[[SCHEDULE_FORM]][[/SCHEDULE_FORM]]"
+
+
+@traceable(name="marketing.run_event_plan", run_type="chain")
 async def run_event_plan(
     *,
     account_id: str,
@@ -828,6 +930,18 @@ async def run_event_plan(
     benefit: str | None = None,
 ) -> str:
     """이벤트·프로모션 기획안을 artifact 로 등록한다. D-리마인드 알림 자동 설정."""
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [
         f"[이벤트명] {title}",
         f"[이벤트 종류] {event_type}",
@@ -839,38 +953,23 @@ async def run_event_plan(
         lines.append(f"[행사일] {due_date}")
     if benefit:
         lines.append(f"[혜택·참여방법] {benefit}")
-    synthetic = (
-        f"'{title}' 이벤트/프로모션 기획안(event_plan) 을 작성해주세요. "
-        "[ARTIFACT] 블록(type=event_plan, start_date, "
-        + ("end_date, due_label='이벤트 종료'" if end_date else "due_date, due_label='이벤트 당일'")
-        + ") 으로 저장하세요.\n"
+
+    system += (
+        "\n\n[이벤트 기획 요청 — 정보 확정]\n"
+        "기획안을 작성하고 write_event_plan을 호출하세요. HTML 코드 절대 포함 금지.\n"
         + "\n".join(lines)
-        + """
-
-[출력 형식 — 반드시 아래 구조로 작성]
-이모지 사용 금지. 대괄호 라벨([이벤트명] 등) 헤더 사용 금지.
-마크다운 굵은 글씨(**텍스트**)와 bullet(-) 만 사용. 간결하고 실용적으로.
-
-**이벤트 소개** (1~2문장, 핵심 콘셉트)
-
-**기간** : 날짜 ~ 날짜
-
-**혜택**
-- 혜택 항목 1
-- 혜택 항목 2
-
-**홍보 계획** (2~3줄)
-
-**준비 체크리스트**
-- [ ] 항목 1
-- [ ] 항목 2
-- [ ] 항목 3
-"""
-        + f"\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+
+    synthetic = (
+        f"'{title}' 이벤트/프로모션 기획안(event_plan)을 작성해주세요. "
+        "HTML 코드 절대 포함 금지. write_event_plan으로 저장하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {_strip_poster_instructions(message)}"
+    )
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+@traceable(name="marketing.run_notice", run_type="chain")
 async def run_notice(
     *,
     account_id: str,
@@ -886,6 +985,18 @@ async def run_notice(
     """공지사항(notice) 을 작성하고 artifact 로 저장한다.
     publish_sns=True 면 인스타그램용 SNS 버전도 함께 작성 → [[INSTAGRAM_POST]] 카드 자동 생성.
     """
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
     lines = [
         f"[공지 종류] {notice_type}",
         f"[핵심 내용] {content}",
@@ -896,20 +1007,129 @@ async def run_notice(
     sns_instruction = ""
     if publish_sns:
         sns_instruction = (
-            "\n\n공지 작성 후, 같은 내용을 인스타그램에 바로 올릴 수 있도록 "
-            "SNS 캡션(3~4문장) + 해시태그(15~20개) + 💡 추천 게시 시간 형식으로도 작성해주세요. "
-            "SNS 버전은 [ARTIFACT] 블록 없이 공지 하단에 바로 붙여 출력하세요."
+            " 공지 작성 후 SNS 캡션(3~4문장)+해시태그(15~20개)+💡추천게시시간도 write_sns_post로 추가 저장하세요."
         )
 
-    synthetic = (
-        f"{notice_type} 공지사항(notice) 을 작성해주세요. "
-        "짧고 명확하게, 핵심 정보만 담아서. "
-        "[ARTIFACT] 블록(type=notice) 으로 저장하세요.\n"
+    system += (
+        "\n\n[공지사항 작성 요청 — 정보 확정]\n"
+        "짧고 명확하게 작성하고 write_notice를 호출하세요." + sns_instruction + "\n"
         + "\n".join(lines)
-        + sns_instruction
+    )
+
+    synthetic = (
+        f"{notice_type} 공지사항(notice)을 작성해주세요. 짧고 명확하게. write_notice로 저장하세요.\n"
+        + "\n".join(lines)
         + f"\n\n원본 사용자 요청: {message}"
     )
-    return await run(synthetic, account_id, history, rag_context, long_term_context)
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
+
+
+@traceable(name="marketing.run_marketing_plan", run_type="chain")
+async def run_marketing_plan(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    period: str = "이번 달",
+    focus_channel: str | None = None,
+    goal: str | None = None,
+    **_kwargs,
+) -> str:
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
+    hubs = list_sub_hub_titles(account_id, "marketing")
+    if hubs:
+        system += "\n\n[이 계정의 marketing 서브허브]\n- " + "\n- ".join(hubs)
+    if long_term_context:
+        system += f"\n\n[사용자 장기 기억]\n{long_term_context}"
+    if rag_context:
+        system += f"\n\n{rag_context}"
+    fb = feedback_context(account_id, "marketing")
+    if fb:
+        system += f"\n\n{fb}"
+
+    lines = [f"[기준 기간] {period}"]
+    if focus_channel:
+        lines.append(f"[중점 채널] {focus_channel}")
+    if goal:
+        lines.append(f"[목표] {goal}")
+
+    system += (
+        "\n\n[마케팅 플랜 작성 요청 — 정보 확정]\n"
+        "주별·월별 캘린더 형식으로 작성하고 write_marketing_plan을 호출하세요.\n"
+        + "\n".join(lines)
+    )
+
+    synthetic = (
+        "마케팅 플랜·캘린더(marketing_plan)를 작성해주세요. write_marketing_plan으로 저장하세요.\n"
+        + "\n".join(lines)
+        + f"\n\n원본 사용자 요청: {message}"
+    )
+    return await _run_marketing_agent(account_id, synthetic, history, rag_context, long_term_context, system)
+
+
+def _get_upcoming_holidays(today: "date", days_ahead: int = 60) -> list[dict]:
+    """오늘부터 days_ahead일 이내에 있는 기념일 목록 반환."""
+    from datetime import date, timedelta
+
+    year = today.year
+
+    # 고정 기념일 (매년 같은 날짜)
+    fixed: list[tuple[int, int, str]] = [
+        (1,  1,  "새해 첫날"),
+        (2,  14, "밸런타인데이"),
+        (3,  1,  "삼일절"),
+        (3,  14, "화이트데이"),
+        (4,  5,  "식목일"),
+        (5,  5,  "어린이날"),
+        (5,  8,  "어버이날"),
+        (5,  15, "스승의 날"),
+        (6,  6,  "현충일"),
+        (8,  15, "광복절"),
+        (10, 3,  "개천절"),
+        (10, 9,  "한글날"),
+        (11, 11, "빼빼로데이"),
+        (12, 25, "크리스마스"),
+    ]
+
+    # 음력 기반 기념일 (그레고리력 변환 하드코딩 2025~2027)
+    lunar: list[tuple[int, int, int, str]] = [
+        # (year, month, day, name)
+        (2025, 1, 28, "설날 연휴 시작"),
+        (2025, 1, 29, "설날"),
+        (2025, 10, 5, "추석 연휴 시작"),
+        (2025, 10, 6, "추석"),
+        (2026, 2, 17, "설날"),
+        (2026, 9, 24, "추석 연휴 시작"),
+        (2026, 9, 25, "추석"),
+        (2027, 2,  7, "설날"),
+        (2027, 10, 14, "추석 연휴 시작"),
+        (2027, 10, 15, "추석"),
+    ]
+
+    end = today + timedelta(days=days_ahead)
+    result: list[dict] = []
+
+    for month, day, name in fixed:
+        for y in (year, year + 1):
+            try:
+                d = date(y, month, day)
+            except ValueError:
+                continue
+            if today <= d <= end:
+                result.append({"name": name, "date": d.strftime("%m월 %d일"), "days_left": (d - today).days})
+
+    for y, m, day, name in lunar:
+        try:
+            d = date(y, m, day)
+        except ValueError:
+            continue
+        if today <= d <= end:
+            result.append({"name": name, "date": d.strftime("%m월 %d일"), "days_left": (d - today).days})
+
+    result.sort(key=lambda x: x["days_left"])
+    return result
 
 
 async def run_marketing_report(
@@ -930,7 +1150,7 @@ async def run_marketing_report(
     # 두 플랫폼 데이터 병렬 수집
     import asyncio as _asyncio
     ig_data, yt_data = await _asyncio.gather(
-        ig_report(days=period),
+        ig_report(days=period, account_id=account_id),
         yt_report(account_id=account_id, days=period),
         return_exceptions=True,
     )
@@ -979,26 +1199,118 @@ async def run_marketing_report(
 
     data_summary = "\n\n".join(summary_parts)
 
-    # GPT-4o로 인사이트 분석
+    # GPT-4o로 인사이트 분석 + 액션 아이템 병렬 생성
     analysis_prompt = (
         f"소상공인 마케팅 성과 데이터를 분석해서 실질적인 인사이트를 제공해주세요.\n\n"
         f"{data_summary}\n\n"
         "다음 3가지를 간결하게 작성해주세요:\n"
         "1. 이번 기간 성과 요약 (2~3줄)\n"
         "2. 잘된 점 + 개선 포인트 (각 1~2가지)\n"
-        "3. 다음 기간 추천 액션 (2~3가지, 구체적으로)\n\n"
+        "3. 다음 기간 핵심 방향 (1~2줄)\n\n"
         "소상공인 입장에서 쉽게 이해할 수 있는 언어로 작성하세요."
     )
 
-    try:
-        resp = await chat_completion(
-            messages=[{"role": "user", "content": analysis_prompt}],
-            model="gpt-4o",
-            temperature=0.4,
+    from datetime import date as _date
+    _today = _date.today()
+    today_str = _today.strftime("%Y년 %m월 %d일")
+
+    # 다가오는 기념일 계산
+    upcoming_holidays = _get_upcoming_holidays(_today, days_ahead=60)
+    if upcoming_holidays:
+        holiday_lines = "\n".join(
+            f"  - {h['name']} ({h['date']}, {h['days_left']}일 후)"
+            for h in upcoming_holidays
         )
-        analysis = resp.choices[0].message.content or "분석 데이터를 불러올 수 없습니다."
-    except Exception:
+        holiday_section = f"\n[다가오는 기념일 (60일 이내)]\n{holiday_lines}\n"
+    else:
+        holiday_section = ""
+
+    # 플랫폼 연결 상태에 따라 가능한 카테고리 안내
+    available_categories: list[str] = ["content", "general"]
+    if ig_ok:
+        available_categories.insert(0, "instagram")
+    if yt_ok:
+        available_categories.insert(0, "youtube")
+    available_str = ", ".join(f'"{c}"' for c in available_categories)
+
+    actions_prompt = (
+        f"오늘은 {today_str}입니다. 소상공인의 마케팅 성과 데이터를 바탕으로 "
+        f"지금 당장 실행 가능한 구체적인 마케팅 할 일 3~5개를 기획해주세요.\n\n"
+        f"{data_summary}"
+        f"{holiday_section}\n"
+        "각 할 일은 '팔로워 늘리기' 같은 막연한 목표가 아니라, 실제로 실행에 옮길 수 있는 "
+        "구체적인 아이디어여야 합니다. 연결된 플랫폼 데이터가 없더라도 콘텐츠 전략·이벤트 기획 등 "
+        "일반 마케팅 액션을 반드시 3개 이상 생성하세요.\n"
+        "다가오는 기념일이 있다면 해당 날짜에 맞춘 이벤트·콘텐츠를 우선적으로 제안하고, "
+        "기념일 이름과 날짜를 title 또는 idea에 자연스럽게 반영하세요.\n\n"
+        "아래 JSON 배열 형식으로만 응답하세요 (설명 텍스트 없이, 배열만):\n"
+        '[\n'
+        '  {\n'
+        f'    "priority": "high",\n'
+        f'    "category": {available_categories[0]!r},\n'
+        '    "title": "액션 제목 (20자 이내)",\n'
+        '    "target": "타겟층 (예: 20~30대 여성, 뷰티 관심층)",\n'
+        '    "period": "실행 기간 (예: 5월 3일 ~ 5월 10일)",\n'
+        '    "idea": "구체적인 이벤트·콘텐츠 아이디어 (2~3문장, 형식·소재·메시지 포함)",\n'
+        '    "steps": ["실행 단계 1", "실행 단계 2", "실행 단계 3"],\n'
+        '    "expected": "기대 효과 (예: 팔로워 +50~100명, 도달수 1.5배)",\n'
+        '    "why": "이 액션이 필요한 이유 (수치 근거 포함, 1문장)"\n'
+        '  }\n'
+        ']\n\n'
+        f'priority: "high"(이번 주), "medium"(이번 달), "low"(여유 있을 때)\n'
+        f'category 허용값: {available_str}\n'
+        'steps는 2~4개 배열. JSON 외 텍스트 절대 포함하지 마세요.'
+    )
+
+    try:
+        analysis_resp, actions_resp = await _asyncio.gather(
+            chat_completion(
+                messages=[{"role": "user", "content": analysis_prompt}],
+                model="gpt-4o",
+                temperature=0.4,
+            ),
+            chat_completion(
+                messages=[{"role": "user", "content": actions_prompt}],
+                model="gpt-4o",
+                temperature=0.3,
+            ),
+            return_exceptions=True,
+        )
+
+        if isinstance(analysis_resp, Exception):
+            analysis = "분석 중 오류가 발생했습니다."
+        else:
+            analysis = analysis_resp.choices[0].message.content or "분석 데이터를 불러올 수 없습니다."
+
+        actions: list[dict] = []
+        if isinstance(actions_resp, Exception):
+            log.warning("run_marketing_report: actions LLM call failed: %s", actions_resp)
+        else:
+            import re as _re
+            raw_actions = actions_resp.choices[0].message.content or "[]"
+            log.debug("run_marketing_report: raw actions response: %s", raw_actions[:300])
+            # ```json ... ``` 또는 ``` ... ``` 블록 추출, 없으면 전체 텍스트 사용
+            code_block = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_actions)
+            if code_block:
+                raw_actions = code_block.group(1).strip()
+            else:
+                # JSON 배열 직접 추출 시도
+                arr_match = _re.search(r"\[[\s\S]*\]", raw_actions)
+                if arr_match:
+                    raw_actions = arr_match.group(0)
+            try:
+                parsed = _json.loads(raw_actions.strip())
+                if isinstance(parsed, list):
+                    actions = parsed
+                    log.info("run_marketing_report: generated %d action items", len(actions))
+                else:
+                    log.warning("run_marketing_report: actions parsed but not a list: %s", type(parsed))
+            except Exception as e:
+                log.warning("run_marketing_report: actions JSON parse failed: %s | raw: %s", e, raw_actions[:200])
+    except Exception as e:
+        log.exception("run_marketing_report: unexpected error: %s", e)
         analysis = "분석 중 오류가 발생했습니다."
+        actions = []
 
     # [[MARKETING_REPORT]] 마커 생성
     report_payload = {
@@ -1006,18 +1318,17 @@ async def run_marketing_report(
         "instagram": ig_data if ig_ok else {"error": ig_data.get("error")},
         "youtube": yt_data if yt_ok else {"error": yt_data.get("channel", {}).get("error")},
         "analysis": analysis,
+        "actions": actions,
     }
     marker = f"\n\n[[MARKETING_REPORT]]{_json.dumps(report_payload, ensure_ascii=False)}[[/MARKETING_REPORT]]"
 
-    # artifact 저장용 응답 조합
-    reply_lines = [f"최근 {period}일 마케팅 성과 리포트를 생성했습니다.\n"]
-    reply_lines.append(analysis)
-    reply_lines.append(
-        f"\n[ARTIFACT]\ntitle: 마케팅 성과 리포트 ({period}일)\ntype: marketing_report\ndomains: [marketing]\n[/ARTIFACT]"
+    # analysis는 카드(marker) 안에만 포함 — 본문 중복 노출 방지
+    reply = (
+        f"[ARTIFACT]\ntitle: 마케팅 성과 리포트 ({period}일)\ntype: marketing_report\ndomains: [marketing]\n[/ARTIFACT]"
+        + marker
     )
-    reply_lines.append(marker)
 
-    return "\n".join(reply_lines)
+    return reply
 
 
 def _cron_to_korean(cron: str) -> str:
@@ -1137,6 +1448,52 @@ async def run_schedule_post(
         f"Celery 스케줄러가 설정한 주기마다 자동으로 위 작업을 실행하고 결과를 로그로 저장합니다. "
         f"스케줄 관리는 상단 캘린더 아이콘(Schedule Manager)에서 일시정지/재개할 수 있습니다."
     )
+
+
+async def run_event_poster(
+    *,
+    account_id: str,
+    message: str,
+    history: list[dict],
+    long_term_context: str = "",
+    rag_context: str = "",
+    event_title: str,
+    event_content: str = "",
+    style: str = "",
+    source_artifact_id: str | None = None,
+    _preceding_reply: str = "",
+    **_: object,
+) -> str:
+    """이벤트 포스터 HTML을 GPT-4o로 생성하고 [[EVENT_POSTER]] 마커를 반환한다."""
+    import json as _json
+    from app.core.event_poster_gen import generate_event_poster
+
+    # event_content 우선순위: 명시값 > 이전 스텝(기획안 텍스트) > 원본 메시지
+    effective_content = (
+        event_content.strip()
+        or _preceding_reply.strip()
+        or message.strip()
+    )
+
+    try:
+        result = await generate_event_poster(
+            account_id=account_id,
+            event_title=event_title,
+            event_content=effective_content,
+            style_prompt=style,
+            source_artifact_id=source_artifact_id or None,
+        )
+    except Exception as exc:
+        log.exception("run_event_poster failed")
+        return f"포스터 생성에 실패했어요: {exc}"
+
+    payload = {
+        "artifact_id": result["artifact_id"],
+        "title": result["title"],
+        "public_url": result.get("public_url", ""),
+    }
+    marker = f"[[EVENT_POSTER]]{_json.dumps(payload, ensure_ascii=False)}[[/EVENT_POSTER]]"
+    return marker
 
 
 def describe(account_id: str) -> list[dict]:
@@ -1293,7 +1650,9 @@ def describe(account_id: str) -> list[dict]:
                 "이벤트·프로모션·세일·기념일 행사 기획안을 작성하고 artifact 로 등록한다. "
                 "start_date + end_date 또는 due_date 를 저장해 D-7/D-3/D-1/D-0 알림 자동 발생. "
                 "'이벤트 기획', '프로모션', '할인 행사', '기념일 이벤트' 요청 시 호출. "
-                "인스타 자동 게시 요청 시 mkt_sns_post(depends_on: mkt_event_plan) 을 함께 dispatch."
+                "인스타 자동 게시 요청 시 mkt_sns_post(depends_on: mkt_event_plan) 을 함께 dispatch. "
+                "포스터 생성 요청 시 mkt_event_poster(depends_on: mkt_event_plan) 을 함께 dispatch. "
+                "절대 HTML 코드를 직접 출력하지 않는다 — 포스터 HTML은 mkt_event_poster 가 처리."
             ),
             "handler": run_event_plan,
             "parameters": {
@@ -1349,11 +1708,53 @@ def describe(account_id: str) -> list[dict]:
             },
         },
         {
+            "name": "mkt_event_poster",
+            "description": (
+                "이벤트·프로모션 포스터를 HTML로 생성해 미리보기를 보여준다. "
+                "'포스터', '전단지', '홍보물', '오프라인 포스터', '이벤트 포스터' 키워드 포함 시 호출. "
+                "event_title과 event_content는 필수. style은 선택."
+            ),
+            "handler": run_event_poster,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_title": {
+                        "type": "string",
+                        "description": "이벤트·행사명 (예: '봄맞이 할인 이벤트')",
+                    },
+                    "event_content": {
+                        "type": "string",
+                        "description": "이벤트 상세 내용 (날짜, 혜택, 참여 방법 등)",
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "디자인 스타일 힌트 (선택, 예: '따뜻한 봄 컬러, 파스텔 톤')",
+                    },
+                    "source_artifact_id": {
+                        "type": "string",
+                        "description": "연결할 이벤트 기획안 artifact_id (선택)",
+                    },
+                },
+                "required": ["event_title"],
+            },
+        },
+        {
+            "name": "mkt_schedule_form",
+            "description": (
+                "자동화 스케줄 설정 폼 UI를 띄운다. "
+                "'스케줄', '자동화', '자동으로', '정기적으로', '예약', '매주', '매일' 키워드 포함 시 "
+                "구체적인 cron·task 정보 없이 바로 호출. "
+                "폼을 통해 사용자가 직접 작업·주기·시간을 선택하게 한다."
+            ),
+            "handler": run_schedule_form,
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
             "name": "mkt_schedule_post",
             "description": (
-                "마케팅 작업을 정기 자동 실행하는 스케줄을 등록한다. "
-                "'매주', '매일', '자동으로', '정기적으로', '스케줄', '예약' 키워드와 함께 "
-                "SNS 게시물·블로그·광고 카피 등 반복 작업 요청 시 호출."
+                "마케팅 작업을 정기 자동 실행하는 스케줄을 실제 등록한다. "
+                "반드시 task(작업 지시문)와 cron(5-field 표현식)이 모두 명시된 경우에만 호출. "
+                "폼 제출 후 task·cron이 메시지에 포함되어 있으면 이 capability를 호출."
             ),
             "handler": run_schedule_post,
             "parameters": {
@@ -1378,8 +1779,37 @@ def describe(account_id: str) -> list[dict]:
     ]
 
 
+# ── 폼 pre-routing 패턴 ──────────────────────────────────────────────────
+_BLOG_FORM_TRIGGER_RE = _re.compile(
+    r"블로그\s*(포스트|글|게시글|포스팅|작성|써줘|써\s*줘|작성해줘|만들어줘|만들어\s*줘|부탁|요청)",
+    _re.IGNORECASE,
+)
+_BLOG_TOPIC_PRESENT_RE = _re.compile(
+    r"(주제\s*[:：]|바로\s*완성|아래\s*정보로|키워드\s*[:：])",
+    _re.IGNORECASE,
+)
+
+
+def _needs_blog_post_form(message: str) -> bool:
+    """주제 없이 블로그 포스트를 요청하는 메시지인지 판별."""
+    return bool(_BLOG_FORM_TRIGGER_RE.search(message)) and not bool(
+        _BLOG_TOPIC_PRESENT_RE.search(message)
+    )
+
+
+_REPORT_TRIGGER_RE = _re.compile(
+    r"(성과\s*(리포트|보고|분석|보여|알려)|리포트\s*(보여|줘|알려|생성)|인스타(그램)?\s*(분석|성과|통계|지표|조회수|좋아요)|유튜브\s*(분석|성과|통계|지표|조회수)|마케팅\s*(어땠|성과|리포트)|이번\s*달?\s*마케팅|채널\s*(성과|분석))",
+    _re.IGNORECASE,
+)
+
+
+def _needs_marketing_report(message: str) -> bool:
+    """성과 리포트 요청 메시지인지 판별."""
+    return bool(_REPORT_TRIGGER_RE.search(message))
+
+
 # ──────────────────────────────────────────────────────────────────────────
-# 메인 run (legacy fallback 겸 capability wrapper 타겟)
+# 메인 run (DeepAgent 기반)
 # ──────────────────────────────────────────────────────────────────────────
 @traceable(name="marketing.run", run_type="chain")
 async def run(
@@ -1391,7 +1821,27 @@ async def run(
     image_urls: list[str] | None = None,
     allow_naver_upload: bool = False,
 ) -> str:
-    system = SYSTEM_PROMPT + "\n\n" + today_context()
+    # 블로그 포스트 요청인데 주제 없음 → 폼 즉시 반환
+    if _needs_blog_post_form(message):
+        return await run_blog_post_form(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
+    # 성과 리포트 요청 → 질문 없이 바로 조회
+    if _needs_marketing_report(message):
+        return await run_marketing_report(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
+    system = AGENT_SYSTEM_PROMPT + "\n\n" + today_context()
 
     hubs = list_sub_hub_titles(account_id, "marketing")
     if hubs:
@@ -1407,62 +1857,31 @@ async def run(
     if fb:
         system += f"\n\n{fb}"
 
-    # 지식베이스 (지원사업 + 법령) 컨텍스트 주입
     knowledge_ctx = await marketing_knowledge_context(message)
     if knowledge_ctx:
         system += f"\n\n{knowledge_ctx}"
 
-    resp = await chat_completion(
-        messages=[
-            {"role": "system", "content": system},
-            *history,
-            {"role": "user", "content": message},
-        ],
+    # 메시지 본문에서 이미지 URL 파싱 (폼 제출 시 텍스트로 포함된 경우 fallback)
+    effective_image_urls: list[str] = list(image_urls or [])
+    if not effective_image_urls:
+        _url_hits = _re.findall(
+            r'https?://\S+\.(?:jpg|jpeg|png|webp|gif)(?:\?\S*)?',
+            message, _re.IGNORECASE,
+        )
+        if not _url_hits:
+            # supabase storage URL 등 확장자 없는 경우도 커버
+            m = _re.search(r'첨부 이미지 URL[^:]*:\s*(.+)', message)
+            if m:
+                _url_hits = [u.strip() for u in m.group(1).split(',') if u.strip().startswith('http')]
+        effective_image_urls = _url_hits
+
+    if effective_image_urls:
+        system += f"\n\n[첨부 이미지 URL]\n" + "\n".join(effective_image_urls)
+
+    return await _run_marketing_agent(
+        account_id, message, history, rag_context, long_term_context, system,
+        extra_ctx={"image_urls": effective_image_urls or None, "allow_naver_upload": allow_naver_upload},
     )
-    reply = resp.choices[0].message.content
-
-    # ── 디버그 로그 (artifact 저장 여부 추적) ──────────────────────────────
-    import logging as _logging
-    _log = _logging.getLogger("boss.marketing")
-    _log.info(
-        "[marketing.run] account=%s | has_ARTIFACT=%s | has_CHOICES=%s | preview=%s",
-        account_id,
-        "[ARTIFACT]" in reply,
-        "[CHOICES]" in reply,
-        reply[:120].replace("\n", " "),
-    )
-    # ────────────────────────────────────────────────────────────────────────
-
-    # [NAVER_UPLOAD] 마커 감지 → allow_naver_upload=True일 때만 실제 업로드
-    wants_naver_upload = allow_naver_upload and bool(_NAVER_UPLOAD_RE.search(reply))
-    reply = _NAVER_UPLOAD_RE.sub("", reply).rstrip()
-
-    artifact_id = await save_artifact_from_reply(
-        account_id,
-        "marketing",
-        reply,
-        default_title="마케팅 자료",
-        valid_types=VALID_TYPES,
-    )
-
-    if wants_naver_upload:
-        reply += "\n\n" + await _try_naver_upload(reply, image_urls=image_urls)
-    else:
-        review_marker = _maybe_review_reply_card(reply)
-        if review_marker:
-            reply += review_marker
-            _patch_artifact_meta_from_marker(
-                artifact_id, review_marker, r"\[\[REVIEW_REPLY\]\]([\s\S]*?)\[\[/REVIEW_REPLY\]\]",
-            )
-        else:
-            instagram_marker = await _maybe_instagram_preview(reply)
-            if instagram_marker:
-                reply += instagram_marker
-                _patch_artifact_meta_from_marker(
-                    artifact_id, instagram_marker, r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]",
-                )
-
-    return reply
 
 
 def _patch_artifact_meta_from_marker(
@@ -1495,6 +1914,733 @@ def _patch_artifact_meta_from_marker(
         sb.table("artifacts").update({"metadata": meta}).eq("id", artifact_id).execute()
     except Exception:
         pass
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# DeepAgent 실행 인프라
+# ──────────────────────────────────────────────────────────────────────────
+
+_MARKETING_TERMINAL_REMINDER = """
+[경고] terminal tool을 호출하지 않았습니다.
+반드시 다음 중 하나를 즉시 호출하세요:
+- write_sns_post(...) — SNS 피드 게시물 저장
+- write_blog_post(...) — 블로그 포스트 저장
+- write_review_reply(...) — 리뷰 답글 저장
+- write_ad_copy(...) — 광고 카피 저장
+- write_event_plan(...) — 이벤트 기획안 저장
+- write_campaign(...) — 캠페인 기획 저장
+- write_notice(...) — 공지사항 저장
+- write_marketing_plan(...) — 마케팅 플랜 저장
+- write_product_post(...) — 상품 소개 게시글 저장
+- ask_user(...) — 사용자에게 추가 정보 요청
+
+마케팅 자료 작성 요청에서 terminal tool 미호출은 오류입니다.
+"""
+
+
+def _make_marketing_model():
+    """Marketing DeepAgent용 LLM 모델 생성."""
+    if settings.planner_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=settings.planner_claude_model,
+            temperature=0.3,
+            api_key=settings.anthropic_api_key,
+        )
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model=settings.planner_openai_model,
+        temperature=0.3,
+        api_key=settings.openai_api_key,
+    )
+
+
+@traceable(name="marketing._run_marketing_agent", run_type="chain")
+async def _run_marketing_agent(
+    account_id: str,
+    message: str,
+    history: list[dict],
+    rag_context: str,
+    long_term_context: str,
+    system_prompt: str,
+    *,
+    extra_ctx: dict | None = None,
+) -> str:
+    """Marketing DeepAgent를 실행하고 결과를 반환합니다."""
+    inject_agent_context(account_id, message, history, rag_context, long_term_context)
+    init_marketing_result_store(extra=extra_ctx)
+
+    model = _make_marketing_model()
+    messages_in = [*history[-6:], {"role": "user", "content": message}]
+
+    async def _invoke(sys: str) -> list:
+        agent = create_deep_agent(model=model, tools=MARKETING_TOOLS, system_prompt=sys)
+        result = await agent.ainvoke({"messages": messages_in})
+        return result.get("messages", [])
+
+    async def _invoke_with_retry(sys: str, max_retries: int = 3) -> list:
+        import asyncio, re as _re2
+        for attempt in range(max_retries + 1):
+            try:
+                return await _invoke(sys)
+            except Exception as exc:
+                exc_str = str(exc)
+                is_rate_limit = "429" in exc_str or "rate_limit" in exc_str.lower() or "rate limit" in exc_str.lower()
+                if not is_rate_limit or attempt >= max_retries:
+                    raise
+                # 에러 메시지에서 대기 시간 파싱 (예: "try again in 44ms", "try again in 2s")
+                wait = 5.0 * (2 ** attempt)  # 기본 지수 백오프: 5s, 10s, 20s
+                m = _re2.search(r'try again in (\d+(?:\.\d+)?)(ms|s)', exc_str, _re2.IGNORECASE)
+                if m:
+                    val, unit = float(m.group(1)), m.group(2).lower()
+                    parsed = val / 1000 if unit == "ms" else val
+                    wait = max(parsed + 0.5, wait)
+                log.warning("[marketing] rate limit hit (attempt %d/%d), waiting %.1fs", attempt + 1, max_retries, wait)
+                await asyncio.sleep(wait)
+        raise RuntimeError("재시도 횟수 초과")
+
+    try:
+        out_messages = await _invoke_with_retry(system_prompt)
+    except Exception as exc:
+        log.exception("[marketing] deepagent invoke failed")
+        return f"마케팅 처리 중 오류가 발생했습니다: {exc}"
+
+    result_data = get_marketing_result_store()
+
+    if not result_data:
+        log.info("[marketing] account=%s no terminal tool — retry", account_id)
+        try:
+            init_marketing_result_store(extra=extra_ctx)
+            out_messages = await _invoke_with_retry(system_prompt + "\n\n" + _MARKETING_TERMINAL_REMINDER)
+        except Exception as exc:
+            log.exception("[marketing] retry invoke failed")
+            return f"마케팅 처리 중 오류가 발생했습니다: {exc}"
+        result_data = get_marketing_result_store()
+
+    if not result_data:
+        from langchain_core.messages import AIMessage
+        for msg in reversed(out_messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                content = msg.content
+                if isinstance(content, list):
+                    texts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
+                    if texts:
+                        return " ".join(texts).strip()
+                elif isinstance(content, str) and content.strip():
+                    return content.strip()
+        return "처리 결과를 반환하지 못했습니다."
+
+    action = result_data.get("action")
+    if action == "write_sns_post":
+        return await _execute_write_sns_post(account_id, result_data)
+    if action == "write_blog_post":
+        return await _execute_write_blog_post(account_id, result_data)
+    if action == "write_review_reply":
+        return await _execute_write_review_reply(account_id, result_data)
+    if action == "write_ad_copy":
+        return await _execute_write_ad_copy(account_id, result_data)
+    if action == "write_event_plan":
+        return await _execute_write_event_plan(account_id, result_data)
+    if action == "write_campaign":
+        return await _execute_write_campaign(account_id, result_data)
+    if action == "write_notice":
+        return await _execute_write_notice(account_id, result_data)
+    if action == "write_marketing_plan":
+        return await _execute_write_marketing_plan(account_id, result_data)
+    if action == "write_product_post":
+        return await _execute_write_product_post(account_id, result_data)
+    if action == "ask_user":
+        return result_data.get("question", "무엇을 도와드릴까요?")
+    return "알 수 없는 action입니다."
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Execute functions (terminal tool 결과 처리 + artifact 저장)
+# ──────────────────────────────────────────────────────────────────────────
+
+async def _execute_write_sns_post(account_id: str, result_data: dict) -> str:
+    import json as _json
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "SNS 게시물"
+    caption = result_data.get("caption") or ""
+    hashtags_json = result_data.get("hashtags_json") or "[]"
+    platform = result_data.get("platform") or "instagram"
+    best_time = result_data.get("best_time") or ""
+    sub_domain = result_data.get("sub_domain") or "Social"
+
+    try:
+        hashtags = _json.loads(hashtags_json)
+        if not isinstance(hashtags, list):
+            hashtags = []
+    except Exception:
+        hashtags = []
+
+    # 저장용 content 구성
+    content_parts = [caption]
+    if hashtags:
+        content_parts.append(" ".join(f"#{t}" for t in hashtags))
+    if best_time:
+        content_parts.append(best_time)
+    content = "\n\n".join(p for p in content_parts if p)
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "sns_post",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Social"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+        try:
+            sb.table("activity_logs").insert({
+                "account_id": account_id, "type": "artifact_created",
+                "domain": "marketing", "title": title,
+                "description": f"SNS 게시물 생성 ({platform})",
+                "metadata": {"artifact_id": artifact_id},
+            }).execute()
+        except Exception:
+            pass
+    except Exception:
+        log.exception("[marketing] write_sns_post artifact insert failed")
+
+    if artifact_id:
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, "marketing", "sns_post", title, content=content[:500])
+        except Exception:
+            pass
+
+    # Instagram 카드 생성
+    instagram_marker = ""
+    _needs_instagram = "instagram" in platform.lower() or "인스타" in platform.lower()
+    if _needs_instagram:
+        image_url = await _generate_sns_image(caption, hashtags)
+        payload = {
+            "title": title,
+            "caption": caption,
+            "hashtags": hashtags,
+            "best_time": best_time,
+            "image_url": image_url,
+        }
+        instagram_marker = f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
+        if artifact_id:
+            _patch_artifact_meta_from_marker(artifact_id, instagram_marker, r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]")
+
+    # 응답 구성
+    reply = caption
+    if hashtags:
+        reply += "\n\n" + " ".join(f"#{t}" for t in hashtags)
+    if best_time:
+        reply += f"\n\n{best_time}"
+    reply += instagram_marker
+    return reply
+
+
+async def _execute_write_blog_post(account_id: str, result_data: dict) -> str:
+    import json as _json
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "블로그 포스트"
+    content = result_data.get("content") or ""
+    tags_json = result_data.get("tags_json") or "[]"
+    image_urls_json = result_data.get("image_urls_json") or "[]"
+    sub_domain = result_data.get("sub_domain") or "Blog"
+
+    extra = get_marketing_extra()
+    auto_upload: bool = bool(extra.get("allow_naver_upload") or extra.get("auto_upload"))
+
+    # image_urls 우선순위: 도구 파라미터 → extra_ctx → None
+    try:
+        tool_image_urls: list[str] = _json.loads(image_urls_json)
+        if not isinstance(tool_image_urls, list):
+            tool_image_urls = []
+    except Exception:
+        tool_image_urls = []
+    image_urls: list[str] = tool_image_urls or extra.get("image_urls") or []
+
+    try:
+        tags = _json.loads(tags_json)
+        if not isinstance(tags, list):
+            tags = []
+    except Exception:
+        tags = []
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "blog_post",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Blog"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+        try:
+            sb.table("activity_logs").insert({
+                "account_id": account_id, "type": "artifact_created",
+                "domain": "marketing", "title": title,
+                "description": "블로그 포스트 생성",
+                "metadata": {"artifact_id": artifact_id},
+            }).execute()
+        except Exception:
+            pass
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, "marketing", "blog_post", title, content=content[:500])
+        except Exception:
+            pass
+    except Exception:
+        log.exception("[marketing] write_blog_post artifact insert failed")
+
+    # 블로그 미리보기 카드
+    blog_payload = {
+        "title": title,
+        "content": content,
+        "tags": tags,
+        "image_urls": image_urls or [],
+    }
+    blog_marker = f"\n\n[[NAVER_BLOG_POST]]{_json.dumps(blog_payload, ensure_ascii=False)}[[/NAVER_BLOG_POST]]"
+
+    reply = content + blog_marker
+
+    # Naver 자동 업로드
+    if auto_upload:
+        upload_result = await _try_naver_upload(content, account_id=account_id, image_urls=image_urls)
+        reply += f"\n\n{upload_result}"
+
+    return reply
+
+
+async def _execute_write_review_reply(account_id: str, result_data: dict) -> str:
+    import json as _json
+    from app.core.supabase import get_supabase
+
+    reply_text = result_data.get("reply_text") or ""
+    star_rating = result_data.get("star_rating")
+    platform = result_data.get("platform")
+    sub_domain = result_data.get("sub_domain") or "Reviews"
+    title = f"리뷰 답글" + (f" ({star_rating}점)" if star_rating else "")
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "review_reply",
+            "title": title,
+            "content": reply_text,
+            "status": "draft",
+            "metadata": {"star_rating": star_rating, "platform": platform} if star_rating else {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Reviews"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+        try:
+            from app.memory.long_term import log_artifact_to_memory
+            await log_artifact_to_memory(account_id, "marketing", "review_reply", title, content=reply_text[:500])
+        except Exception:
+            pass
+    except Exception:
+        log.exception("[marketing] write_review_reply artifact insert failed")
+
+    payload = {
+        "reply_text": reply_text,
+        "star_rating": star_rating,
+        "char_count": len(reply_text),
+    }
+    review_marker = f"\n\n[[REVIEW_REPLY]]{_json.dumps(payload, ensure_ascii=False)}[[/REVIEW_REPLY]]"
+    if artifact_id:
+        _patch_artifact_meta_from_marker(artifact_id, review_marker, r"\[\[REVIEW_REPLY\]\]([\s\S]*?)\[\[/REVIEW_REPLY\]\]")
+
+    return reply_text + review_marker
+
+
+async def _execute_write_ad_copy(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "광고 카피"
+    content = result_data.get("content") or ""
+    channel = result_data.get("channel")
+    target = result_data.get("target")
+    sub_domain = result_data.get("sub_domain") or "Campaigns"
+
+    sb = get_supabase()
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "ad_copy",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {k: v for k, v in {"channel": channel, "target": target}.items() if v},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Campaigns"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "ad_copy", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_ad_copy artifact insert failed")
+
+    return content
+
+
+def _valid_date_or_none_mkt(s: str | None) -> str | None:
+    from datetime import date
+    s = (s or "").strip()
+    import re as _re2
+    if not _re2.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return None
+    try:
+        date.fromisoformat(s)
+        return s
+    except ValueError:
+        return None
+
+
+async def _execute_write_event_plan(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "이벤트 기획안"
+    content = result_data.get("content") or ""
+    event_type = result_data.get("event_type") or ""
+    start_date = result_data.get("start_date") or ""
+    end_date = result_data.get("end_date")
+    due_date = result_data.get("due_date")
+    sub_domain = result_data.get("sub_domain") or "Events"
+
+    metadata: dict = {}
+    for k, v in [("start_date", start_date), ("end_date", end_date), ("due_date", due_date)]:
+        vv = _valid_date_or_none_mkt(v)
+        if vv:
+            metadata[k] = vv
+    if "end_date" in metadata or "due_date" in metadata:
+        metadata["due_label"] = "이벤트 종료" if "end_date" in metadata else "이벤트 당일"
+    if event_type:
+        metadata["event_type"] = event_type
+
+    cleaned = _strip_html_blocks(content)
+
+    sb = get_supabase()
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "event_plan",
+            "title": title,
+            "content": cleaned,
+            "status": "draft",
+            "metadata": metadata,
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Events"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "event_plan", title, content=cleaned[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_event_plan artifact insert failed")
+
+    return cleaned
+
+
+async def _execute_write_campaign(account_id: str, result_data: dict) -> str:
+    import json as _json
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "캠페인 기획"
+    content = result_data.get("content") or ""
+    start_date = result_data.get("start_date") or ""
+    end_date = result_data.get("end_date") or ""
+    goal = result_data.get("goal")
+    channels_json = result_data.get("channels_json") or "[]"
+    sub_domain = result_data.get("sub_domain") or "Campaigns"
+
+    try:
+        channels = _json.loads(channels_json)
+        if not isinstance(channels, list):
+            channels = []
+    except Exception:
+        channels = []
+
+    metadata: dict = {}
+    for k, v in [("start_date", start_date), ("end_date", end_date)]:
+        vv = _valid_date_or_none_mkt(v)
+        if vv:
+            metadata[k] = vv
+    if "end_date" in metadata:
+        metadata["due_label"] = "캠페인 종료"
+    if goal:
+        metadata["goal"] = goal
+    if channels:
+        metadata["channels"] = channels
+
+    sb = get_supabase()
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "campaign",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": metadata,
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Campaigns"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "campaign", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_campaign artifact insert failed")
+
+    return content
+
+
+async def _execute_write_notice(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "공지사항"
+    content = result_data.get("content") or ""
+    notice_type = result_data.get("notice_type") or ""
+    date = result_data.get("date")
+    sub_domain = result_data.get("sub_domain") or "Social"
+
+    metadata: dict = {}
+    if notice_type:
+        metadata["notice_type"] = notice_type
+    if date:
+        metadata["date"] = date
+
+    sb = get_supabase()
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "notice",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": metadata,
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Social"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "notice", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_notice artifact insert failed")
+
+    return content
+
+
+async def _execute_write_marketing_plan(account_id: str, result_data: dict) -> str:
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "마케팅 플랜"
+    content = result_data.get("content") or ""
+    period = result_data.get("period") or "이번 달"
+    sub_domain = result_data.get("sub_domain") or "Social"
+
+    sb = get_supabase()
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "marketing_plan",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {"period": period},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Social"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "marketing_plan", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_marketing_plan artifact insert failed")
+
+    return content
+
+
+async def _execute_write_product_post(account_id: str, result_data: dict) -> str:
+    import json as _json
+    from app.core.supabase import get_supabase
+
+    title = result_data.get("title") or "상품 소개"
+    content = result_data.get("content") or ""
+    caption = result_data.get("caption") or ""
+    hashtags_json = result_data.get("hashtags_json") or "[]"
+    product = result_data.get("product") or ""
+    sub_domain = result_data.get("sub_domain") or "Social"
+
+    try:
+        hashtags = _json.loads(hashtags_json)
+        if not isinstance(hashtags, list):
+            hashtags = []
+    except Exception:
+        hashtags = []
+
+    sb = get_supabase()
+    artifact_id: str | None = None
+    try:
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "product_post",
+            "title": title,
+            "content": content,
+            "status": "draft",
+            "metadata": {"product": product} if product else {},
+        }).execute()
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            record_artifact_for_focus(artifact_id)
+            hub_id = pick_sub_hub_id(sb, account_id, "marketing", prefer_keywords=(sub_domain, "Social"))
+            if hub_id:
+                try:
+                    sb.table("artifact_edges").insert({
+                        "account_id": account_id, "parent_id": hub_id,
+                        "child_id": artifact_id, "relation": "contains",
+                    }).execute()
+                except Exception:
+                    pass
+            try:
+                from app.memory.long_term import log_artifact_to_memory
+                await log_artifact_to_memory(account_id, "marketing", "product_post", title, content=content[:500])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("[marketing] write_product_post artifact insert failed")
+
+    # Instagram 카드 (해시태그가 있으면 생성)
+    instagram_marker = ""
+    effective_caption = caption or content.split("\n\n")[0] if content else ""
+    if hashtags:
+        image_url = await _generate_sns_image(effective_caption, hashtags)
+        payload = {
+            "title": title,
+            "caption": effective_caption,
+            "hashtags": hashtags,
+            "best_time": "",
+            "image_url": image_url,
+        }
+        instagram_marker = f"\n\n[[INSTAGRAM_POST]]{_json.dumps(payload, ensure_ascii=False)}[[/INSTAGRAM_POST]]"
+        if artifact_id:
+            _patch_artifact_meta_from_marker(artifact_id, instagram_marker, r"\[\[INSTAGRAM_POST\]\]([\s\S]*?)\[\[/INSTAGRAM_POST\]\]")
+
+    return content + instagram_marker
 
 
 def _extract_blog_content(reply: str) -> tuple[str, str]:
@@ -1564,14 +2710,9 @@ async def _generate_blog_image(title: str, content_preview: str) -> str:
         return ""
 
 
-async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> str:
+async def _try_naver_upload(reply: str, account_id: str = "", image_urls: list[str] | None = None) -> str:
     """blog_post 본문을 파싱해 네이버 블로그에 업로드. 결과 문자열 반환."""
-    import os as _os
-    from app.core.config import settings
     from app.agents._artifact import _parse_block
-
-    if not settings.naver_blog_id or not settings.naver_blog_pw:
-        return "📌 네이버 블로그 자동 업로드를 사용하려면 `.env`에 `NAVER_BLOG_ID`와 `NAVER_BLOG_PW`를 설정해 주세요."
 
     # # 제목 줄 기준으로 실제 블로그 본문만 추출 (에이전트 대화 문구 제거)
     title_from_content, blog_content = _extract_blog_content(reply)
@@ -1589,13 +2730,10 @@ async def _try_naver_upload(reply: str, image_urls: list[str] | None = None) -> 
             tags = _re.findall(r"#([\w가-힣A-Za-z]+)", s)
             break
 
-    # 이미지: 사용자 첨부 이미지 URL을 그대로 전달 (다운로드 불필요)
-
     try:
         from app.services.naver_blog import upload_post
         post_url = await upload_post(
-            blog_id=settings.naver_blog_id,
-            blog_pw=settings.naver_blog_pw,
+            account_id=account_id,
             title=title,
             content=blog_content,
             tags=tags,

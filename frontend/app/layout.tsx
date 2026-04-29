@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Roboto, Roboto_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -24,12 +25,27 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   return (
     <html
       lang="ko"
       className={`${roboto.variable} ${robotoMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <Script id="ngrok-fetch-patch" strategy="beforeInteractive">{`
+(function(){
+  var base="${apiUrl}";
+  if(!base)return;
+  var orig=window.fetch;
+  window.fetch=function(url,opts){
+    if(typeof url==="string"&&url.startsWith(base)){
+      opts=Object.assign({},opts);
+      opts.headers=Object.assign({"ngrok-skip-browser-warning":"true"},opts.headers);
+    }
+    return orig.apply(this,arguments);
+  };
+})();
+`}</Script>
       <body className="min-h-full flex flex-col bg-[#f2e9d5]">
         <Providers>{children}</Providers>
       </body>

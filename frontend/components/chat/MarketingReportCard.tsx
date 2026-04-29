@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
+import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { createClient } from "@/lib/supabase/client";
 
 // ── 타입 정의 ──────────────────────────────────────────────────────────────
@@ -62,12 +63,38 @@ interface YoutubeData {
   error?: string;
 }
 
+export interface ActionItem {
+  priority: "high" | "medium" | "low";
+  category: "instagram" | "youtube" | "content" | "general";
+  title: string;
+  target: string;
+  period: string;
+  idea: string;
+  steps: string[];
+  expected: string;
+  why: string;
+}
+
 export interface MarketingReportPayload {
   period_days: number;
   instagram: InstagramData;
   youtube: YoutubeData;
   analysis: string;
+  actions?: ActionItem[];
 }
+
+type ReportTab = "overview" | "instagram" | "youtube" | "actions";
+
+const REPORT_TABS: {
+  key: ReportTab;
+  label: string;
+  activeClass: string;
+}[] = [
+  { key: "overview", label: "\uac1c\uc694", activeClass: "bg-slate-700 text-white" },
+  { key: "instagram", label: "\uc778\uc2a4\ud0c0", activeClass: "bg-pink-500 text-white" },
+  { key: "youtube", label: "\uc720\ud29c\ube0c", activeClass: "bg-red-500 text-white" },
+  { key: "actions", label: "\ud560 \uc77c", activeClass: "bg-orange-400 text-white" },
+];
 
 // ── 파서 ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +144,208 @@ function StatCell({
   );
 }
 
+// ── 액션 아이템 탭 ────────────────────────────────────────────────────────
+
+const PRIORITY_META: Record<
+  string,
+  { label: string; border: string; dot: string; text: string }
+> = {
+  high: {
+    label: "이번 주",
+    border: "border-l-orange-400",
+    dot: "bg-orange-400",
+    text: "text-orange-500",
+  },
+  medium: {
+    label: "이번 달",
+    border: "border-l-neutral-400",
+    dot: "bg-neutral-400",
+    text: "text-neutral-500",
+  },
+  low: {
+    label: "여유 있을 때",
+    border: "border-l-neutral-300",
+    dot: "bg-neutral-300",
+    text: "text-neutral-400",
+  },
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  instagram: "인스타그램",
+  youtube: "유튜브",
+  content: "콘텐츠",
+  general: "전반",
+};
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="4 6 8 10 12 6" />
+    </svg>
+  );
+}
+
+function ActionCard({ item, index }: { item: ActionItem; index: number }) {
+  const [open, setOpen] = useState(false);
+  const priority = item.priority ?? "medium";
+  const meta = PRIORITY_META[priority] ?? PRIORITY_META.medium;
+
+  return (
+    <div
+      className={`rounded-[6px] border border-neutral-200 border-l-[3px] ${meta.border} bg-white overflow-hidden`}
+    >
+      {/* 헤더 */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left flex items-start gap-3 px-3.5 py-3 hover:bg-neutral-50/70 transition-colors"
+      >
+        {/* 순서 번호 */}
+        <span className="text-[12px] font-semibold text-neutral-300 mt-px w-4 shrink-0 leading-5">
+          {index + 1}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          {/* 메타 행: 우선순위 · 카테고리 · 기간 */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className={`text-[11px] font-medium ${meta.text}`}>
+              {meta.label}
+            </span>
+            <span className="text-neutral-300 text-[10px]">·</span>
+            <span className="text-[11px] text-neutral-400">
+              {CATEGORY_LABEL[item.category] ?? item.category}
+            </span>
+            {item.period && (
+              <>
+                <span className="text-neutral-300 text-[10px]">·</span>
+                <span className="text-[11px] text-neutral-400">
+                  {item.period}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* 제목 */}
+          <p className="text-[13.5px] font-semibold text-neutral-800 leading-snug">
+            {item.title}
+          </p>
+
+          {/* 대상 */}
+          {item.target && (
+            <p className="text-[12px] text-neutral-500 mt-1 leading-relaxed">
+              대상 · {item.target}
+            </p>
+          )}
+        </div>
+
+        <ChevronIcon open={open} />
+      </button>
+
+      {/* 펼쳐지는 상세 */}
+      {open && (
+        <div className="px-3.5 pb-3.5 space-y-4 border-t border-neutral-100">
+          {/* 아이디어 */}
+          {item.idea && (
+            <div className="pt-3">
+              <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide mb-1.5">
+                아이디어
+              </p>
+              <p className="text-[13px] text-neutral-700 leading-[1.65]">
+                {item.idea}
+              </p>
+            </div>
+          )}
+
+          {/* 실행 단계 */}
+          {item.steps && item.steps.length > 0 && (
+            <div>
+              <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide mb-2">
+                실행 방법
+              </p>
+              <ol className="space-y-2">
+                {item.steps.map((step, i) => (
+                  <li key={i} className="flex items-start gap-2.5">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-neutral-100 flex items-center justify-center text-[10px] font-semibold text-neutral-500 mt-px">
+                      {i + 1}
+                    </span>
+                    <span className="text-[13px] text-neutral-700 leading-relaxed">
+                      {step.replace(/^\d+[단계:.\s]+/, "")}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* 기대 효과 */}
+          {item.expected && (
+            <div className="flex items-start gap-2.5 bg-neutral-50 rounded-[5px] px-3 py-2.5 border border-neutral-100">
+              <span className="text-[11px] font-medium text-neutral-400 shrink-0 mt-px">
+                기대효과
+              </span>
+              <span className="text-[13px] text-neutral-700">
+                {item.expected}
+              </span>
+            </div>
+          )}
+
+          {/* 근거 */}
+          {item.why && (
+            <p className="text-[12px] text-neutral-400 leading-relaxed">
+              {item.why}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionItemsTab({ actions }: { actions: ActionItem[] }) {
+  if (actions.length === 0) {
+    return (
+      <div className="py-10 text-center text-[13px] text-neutral-400">
+        성과 데이터를 수집하면 AI가 할 일을 제안합니다.
+      </div>
+    );
+  }
+
+  const highItems = actions.filter((a) => a.priority === "high");
+  const restItems = actions.filter((a) => a.priority !== "high");
+
+  return (
+    <div className="space-y-4">
+      {highItems.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+            이번 주 할 일
+          </p>
+          {highItems.map((item, i) => (
+            <ActionCard key={i} item={item} index={i} />
+          ))}
+        </div>
+      )}
+      {restItems.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">
+            {highItems.length > 0 ? "그 다음" : "할 일"}
+          </p>
+          {restItems.map((item, i) => (
+            <ActionCard key={i} item={item} index={highItems.length + i} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────
 
 export function MarketingReportCard({
@@ -125,9 +354,7 @@ export function MarketingReportCard({
   payload: MarketingReportPayload;
 }) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  const [tab, setTab] = useState<"overview" | "instagram" | "youtube">(
-    "overview",
-  );
+  const [tab, setTab] = useState<ReportTab>("overview");
   const [ytConnecting, setYtConnecting] = useState(false);
   const [ytData, setYtData] = useState<YoutubeData>(payload.youtube);
 
@@ -185,39 +412,41 @@ export function MarketingReportCard({
   }, [apiBase, getAccountId, payload.period_days]);
 
   return (
-    <div className="rounded-[5px] border border-neutral-200 bg-white overflow-hidden w-full max-w-[520px] shadow-sm">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-200">
+    <div className="w-full max-w-[520px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             Marketing Report
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
-            최근 {payload.period_days}일
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+            {"\ucd5c\uadfc "}
+            {payload.period_days}
+            {"\uc77c"}
           </span>
         </div>
         <div className="flex gap-1">
-          {(["overview", "instagram", "youtube"] as const).map((t) => (
+          {REPORT_TABS.map((item) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-[11px] px-2.5 py-1 rounded-[4px] transition-colors ${
-                tab === t
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-500 hover:bg-neutral-100"
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                tab === item.key
+                  ? item.activeClass
+                  : "text-slate-500 hover:bg-slate-100"
               }`}
             >
-              {t === "overview"
-                ? "분석"
-                : t === "instagram"
-                  ? "인스타"
-                  : "유튜브"}
+              {item.label}
             </button>
           ))}
         </div>
       </div>
 
       <div className="p-4">
+        {/* 할 일 탭 — 프로액티브 액션 아이템 */}
+        {tab === "actions" && (
+          <ActionItemsTab actions={payload.actions ?? []} />
+        )}
+
         {/* 개요 탭 — AI 분석 */}
         {tab === "overview" && (
           <div className="space-y-3">
@@ -251,8 +480,11 @@ export function MarketingReportCard({
             </div>
 
             {/* AI 분석 텍스트 */}
-            <div className="text-[13px] text-neutral-700 leading-relaxed whitespace-pre-wrap">
-              {payload.analysis}
+            <div className="[&_p]:mb-3 [&_li]:mb-1 [&_ul]:mb-2 [&_ol]:mb-2">
+              <MarkdownMessage
+                content={payload.analysis}
+                className="text-[13px] text-neutral-700"
+              />
             </div>
           </div>
         )}

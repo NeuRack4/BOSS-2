@@ -8,6 +8,8 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     # 문서 업로드 (documents 리뷰용) — contextvar 로 전달.
     upload_payload: dict[str, Any] | None = None
+    # 복수 파일용 (이력서 등)
+    upload_payloads: list[dict[str, Any]] | None = None
     # 영수증 이미지 업로드 (sales OCR 용) — storage_path/bucket/mime_type 등.
     receipt_payload: dict[str, Any] | None = None
     # SalesInputTable / CostInputTable 의 Save 버튼 — 사용자 확정 items.

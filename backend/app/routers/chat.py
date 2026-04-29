@@ -5,7 +5,10 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.agents import orchestrator
 from app.agents._artifact import get_focus_artifact_id, clear_focus_artifact_id
-from app.agents._upload_context import set_pending_upload, clear_pending_upload
+from app.agents._upload_context import (
+    set_pending_upload, clear_pending_upload,
+    set_pending_uploads, clear_pending_uploads,
+)
 from app.agents._sales_context import (
     set_pending_receipt, clear_pending_receipt,
     set_pending_save,    clear_pending_save,
@@ -95,6 +98,7 @@ async def chat(req: ChatRequest):
             req.upload_payload.get("original_name") if isinstance(req.upload_payload, dict) else "?",
         )
     set_pending_upload(req.upload_payload)
+    set_pending_uploads(req.upload_payloads)
     set_pending_receipt(req.receipt_payload)
     set_pending_save(req.save_payload)
     if req.receipt_payload:
@@ -125,6 +129,7 @@ async def chat(req: ChatRequest):
         speaker = get_speaker()
     finally:
         clear_pending_upload()
+        clear_pending_uploads()
         clear_pending_receipt()
         clear_pending_save()
         clear_speaker()

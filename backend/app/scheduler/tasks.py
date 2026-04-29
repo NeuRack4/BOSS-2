@@ -17,6 +17,10 @@ from app.core.supabase import get_supabase
 from app.scheduler.celery_app import celery_app
 from app.scheduler.log_nodes import create_log_node
 from app.scheduler.scanner import find_date_notifications, find_due_schedules
+import httpx
+import pytz
+from openai import OpenAI
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -246,3 +250,139 @@ def cleanup_old_memories() -> dict:
         return {"deleted": 0, "error": str(exc)}
     log.info("[cleanup_old_memories] deleted %d rows older than %s", deleted, cutoff)
     return {"deleted": deleted, "cutoff": cutoff}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 월정액 자동 청구 — 매일 09:00 KST, next_billing_date 도래 구독 청구
+# ──────────────────────────────────────────────────────────────────────────
+@celery_app.task(name="app.scheduler.tasks.charge_subscriptions")
+def charge_subscriptions() -> dict:
+    """next_billing_date 가 지난 active 구독 월정액 자동 청구."""
+    from app.services.payment import run_monthly_billing
+    result = asyncio.run(run_monthly_billing())
+    log.info("[charge_subscriptions] %s", result)
+    return result
+
+
+# ── Sales Slack 알림 ─────────────────────────────────────────────────────────
+
+def _send_slack_dm(bot_token: str, slack_user_id: str, text: str) -> None:
+    """봇 토큰으로 사용자에게 Slack DM 전송."""
+    with httpx.Client() as client:
+        # DM 채널 열기
+        open_resp = client.post(
+            "https://slack.com/api/conversations.open",
+            headers={"Authorization": f"Bearer {bot_token}"},
+            json={"users": slack_user_id},
+        )
+        channel_id = open_resp.json().get("channel", {}).get("id")
+        if not channel_id:
+            return
+        # 메세지 전송
+        client.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": f"Bearer {bot_token}"},
+            json={"channel": channel_id, "text": text},
+        )
+
+
+def _ai_sales_comment(today_total: int, yesterday_total: int) -> str:
+    """GPT-4o-mini로 매출 비교 한줄 코멘트 생성."""
+    diff_pct = (
+        round((today_total - yesterday_total) / yesterday_total * 100, 1)
+        if yesterday_total > 0 else 0
+    )
+    direction = "상승" if diff_pct >= 0 else "하락"
+    prompt = (
+        f"소상공인 사장님의 오늘 매출은 {today_total:,}원이고 "
+        f"어제 대비 {abs(diff_pct)}% {direction}했습니다. "
+        f"친근하고 간결하게 한 문장으로 격려 또는 조언을 해주세요."
+    )
+    ai_client = OpenAI(api_key=settings.openai_api_key)
+    resp = ai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=80,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+@celery_app.task(name="app.scheduler.tasks.sales_slack_notify")
+def sales_slack_notify() -> dict:
+    """매시 정각 실행 — 설정 시각인 유저에게 Slack DM 전송."""
+    kst = pytz.timezone("Asia/Seoul")
+    now_kst = datetime.now(timezone.utc).astimezone(kst)
+    current_hour = now_kst.hour
+    today_str = now_kst.strftime("%Y-%m-%d")
+    yesterday_str = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    sb = get_supabase()
+
+    settings_res = (
+        sb.table("notification_settings")
+        .select("account_id")
+        .eq("notify_enabled", True)
+        .eq("notify_hour", current_hour)
+        .execute()
+    )
+    account_ids = [r["account_id"] for r in (settings_res.data or [])]
+    if not account_ids:
+        return {"sent": 0, "hour": current_hour}
+
+    sent = 0
+    for account_id in account_ids:
+        slack_res = (
+            sb.table("slack_connections")
+            .select("access_token,slack_user_id")
+            .eq("account_id", account_id)
+            .limit(1)
+            .execute()
+        )
+        if not slack_res.data:
+            continue
+        bot_token = slack_res.data[0]["access_token"]
+        slack_user_id = slack_res.data[0]["slack_user_id"]
+
+        today_res = (
+            sb.table("sales_records")
+            .select("amount")
+            .eq("account_id", account_id)
+            .eq("recorded_date", today_str)
+            .execute()
+        )
+        today_entries = today_res.data or []
+
+        try:
+            if not today_entries:
+                msg = (
+                    "📊 *BOSS 알림*\n"
+                    "오늘 매출을 아직 입력하지 않으셨어요.\n"
+                    f"지금 기록해보세요 → {settings.boss_frontend_url}"
+                )
+            else:
+                today_total = sum(e["amount"] for e in today_entries)
+                yesterday_res = (
+                    sb.table("sales_records")
+                    .select("amount")
+                    .eq("account_id", account_id)
+                    .eq("recorded_date", yesterday_str)
+                    .execute()
+                )
+                yesterday_total = sum(e["amount"] for e in (yesterday_res.data or []))
+                diff_pct = (
+                    round((today_total - yesterday_total) / yesterday_total * 100, 1)
+                    if yesterday_total > 0 else 0
+                )
+                arrow = "↑" if diff_pct >= 0 else "↓"
+                ai_comment = _ai_sales_comment(today_total, yesterday_total)
+                msg = (
+                    "📈 *오늘의 매출 리포트*\n"
+                    f"오늘: {today_total:,}원 (어제 대비 {diff_pct:+.1f}% {arrow})\n"
+                    f"AI 분석: {ai_comment}"
+                )
+            _send_slack_dm(bot_token, slack_user_id, msg)
+            sent += 1
+        except Exception as e:
+            log.warning("[sales_slack_notify] account=%s error=%s", account_id, e)
+
+    return {"sent": sent, "hour": current_hour}

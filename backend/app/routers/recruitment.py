@@ -16,11 +16,13 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.agents._recruit_calc import MIN_WAGE_2026, calc_total_labor_cost
 from app.agents._recruit_templates import VALID_PLATFORMS
 from app.core.poster_gen import generate_job_posting_poster
+from app.core.supabase import get_supabase
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +59,29 @@ async def create_posting_poster(req: PostingPosterRequest):
         log.exception("posting poster generation failed")
         raise HTTPException(status_code=500, detail=f"포스터 생성 실패: {str(e)[:200]}")
     return PostingPosterResponse(data=result)
+
+
+@router.get("/posters/{artifact_id}", response_class=HTMLResponse)
+async def serve_poster_html(artifact_id: str, account_id: str):
+    """artifact.content(HTML)를 text/html로 직접 서빙 — iframe srcDoc 대용."""
+    sb = get_supabase()
+    rows = (
+        sb.table("artifacts")
+        .select("content")
+        .eq("id", artifact_id)
+        .eq("account_id", account_id)
+        .eq("type", "job_posting_poster")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="포스터를 찾을 수 없습니다.")
+    html = rows[0].get("content") or ""
+    if not html:
+        raise HTTPException(status_code=404, detail="포스터 HTML이 없습니다.")
+    return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
 
 class WageSimRequest(BaseModel):

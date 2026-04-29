@@ -55,7 +55,7 @@ export function EventPlanFormCard({
       );
     if (channels.includes("오프라인 포스터"))
       channelInstructions.push(
-        "오프라인 포스터용 문구(제목·본문·CTA)도 함께 작성해줘",
+        "이벤트 포스터 HTML도 생성해줘 (별도 포스터 생성 기능 사용)",
       );
 
     const lines: string[] = [
@@ -76,8 +76,8 @@ export function EventPlanFormCard({
 
   if (submitted) {
     return (
-      <div className="rounded-[5px] border border-neutral-200 bg-white p-4 w-full max-w-[480px]">
-        <p className="text-[13px] text-neutral-500">
+      <div className="rounded-xl border border-violet-100 bg-violet-50 p-4 w-full max-w-[480px]">
+        <p className="text-[13px] text-violet-600">
           이벤트 정보를 전달했어요. 잠시 기다려주세요...
         </p>
       </div>
@@ -85,19 +85,23 @@ export function EventPlanFormCard({
   }
 
   const inputCls =
-    "w-full rounded-[4px] border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-neutral-400 transition-colors";
-  const labelCls = "block text-[11px] font-medium text-neutral-500 mb-1";
+    "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors";
+  const labelCls =
+    "block text-[11px] font-semibold text-neutral-500 mb-1.5 uppercase tracking-wide";
 
   return (
-    <div className="rounded-[5px] border border-neutral-200 bg-white overflow-hidden w-full max-w-[480px] shadow-sm">
+    <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden w-full max-w-[480px] shadow-md">
       {/* 헤더 */}
-      <div className="px-4 py-3 bg-neutral-50 border-b border-neutral-200">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+      <div className="px-5 py-4 bg-gradient-to-r from-violet-500 to-indigo-500">
+        <span className="text-[12px] font-bold tracking-wide text-white">
           이벤트 기획
         </span>
+        <p className="text-[11px] text-white/70 mt-0.5">
+          정보를 입력하면 AI가 기획안을 바로 작성해드려요
+        </p>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-5 space-y-4">
         {/* 이벤트명 */}
         <div>
           <label className={labelCls}>
@@ -122,8 +126,8 @@ export function EventPlanFormCard({
                 onClick={() => setEventType(eventType === t ? "" : t)}
                 className={`text-[12px] px-3 py-1 rounded-full border transition-colors ${
                   eventType === t
-                    ? "bg-neutral-800 text-white border-neutral-800"
-                    : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400"
+                    ? "bg-violet-500 text-white border-violet-500"
+                    : "bg-white text-neutral-600 border-neutral-200 hover:border-violet-300 hover:text-violet-600"
                 }`}
               >
                 {t}
@@ -178,8 +182,8 @@ export function EventPlanFormCard({
                 onClick={() => toggleChannel(ch)}
                 className={`text-[12px] px-3 py-1 rounded-full border transition-colors ${
                   channels.includes(ch)
-                    ? "bg-neutral-800 text-white border-neutral-800"
-                    : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400"
+                    ? "bg-violet-500 text-white border-violet-500"
+                    : "bg-white text-neutral-600 border-neutral-200 hover:border-violet-300 hover:text-violet-600"
                 }`}
               >
                 {ch}
@@ -193,7 +197,7 @@ export function EventPlanFormCard({
               {channels.map((ch) => (
                 <div
                   key={ch}
-                  className="flex items-start gap-2 px-3 py-2 rounded-[4px] bg-neutral-50 border border-neutral-100"
+                  className="flex items-start gap-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-100"
                 >
                   <span className="text-[10px] font-semibold text-neutral-500 mt-0.5 shrink-0">
                     {CHANNEL_INFO[ch]?.label}
@@ -223,7 +227,7 @@ export function EventPlanFormCard({
         <button
           onClick={handleSubmit}
           disabled={!title.trim() || !startDate}
-          className="w-full py-2 rounded-[4px] bg-neutral-800 text-white text-[13px] font-medium hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full py-2.5 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[13px] font-semibold hover:from-violet-600 hover:to-indigo-600 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           기획 시작
         </button>

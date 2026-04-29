@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { createClient } from "@/lib/supabase/client";
+import { PricingPreviewModal } from "@/components/layout/PricingPreviewModal";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -47,6 +48,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const score = password ? scorePassword(password) : 0;
   const meterLabel = STRENGTH_LABELS[score];
@@ -98,6 +100,10 @@ export default function SignupPage() {
     <div
       className={`${interTight.variable} ${jetbrainsMono.variable} boss-signup`}
     >
+      <PricingPreviewModal
+        open={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+      />
       <style>{SIGNUP_CSS}</style>
 
       <header className="topbar">
@@ -115,7 +121,20 @@ export default function SignupPage() {
         <nav>
           <a href="#">Product</a>
           <a href="#">Agents</a>
-          <a href="#">Pricing</a>
+          <button
+            type="button"
+            onClick={() => setPricingOpen(true)}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              font: "inherit",
+              color: "var(--muted)",
+            }}
+          >
+            Pricing
+          </button>
           <a href="#">Docs</a>
           <Link href="/login" className="signin">
             Sign in →
@@ -247,88 +266,103 @@ export default function SignupPage() {
           </section>
 
           {/* HERO */}
-          <section className="tile t-hero tint-peach">
-            <div className="hero-top">
-              <span className="pill">
-                <span className="dot" />
-                Private Beta · 2,847 small businesses
-              </span>
-              <div className="glyph" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <rect
-                    x="3"
-                    y="3"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="16"
-                    y="3"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="3"
-                    y="16"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <rect
-                    x="16"
-                    y="16"
-                    width="9"
-                    height="9"
-                    rx="1.5"
-                    fill="currentColor"
-                  />
-                </svg>
+          <section className="tile t-hero t-photo">
+            <div className="photo-overlay" />
+            <div className="photo-streak" />
+            <div className="photo-content">
+              <div className="hero-top">
+                <span className="pill pill-light">
+                  <span className="dot-green" />
+                  Private Beta · 2,847 small businesses
+                </span>
+                <div className="glyph glyph-light" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <rect
+                      x="3"
+                      y="3"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="16"
+                      y="3"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="3"
+                      y="16"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      stroke="rgba(255,253,249,0.55)"
+                      strokeWidth="1.2"
+                    />
+                    <rect
+                      x="16"
+                      y="16"
+                      width="9"
+                      height="9"
+                      rx="1.5"
+                      fill="rgba(255,253,249,0.55)"
+                    />
+                  </svg>
+                </div>
               </div>
-            </div>
-            <h1 className="hero-title">
-              The operating layer
-              <br />
-              for <em>your entire</em> shop floor.
-            </h1>
-            <div className="hero-bottom">
-              <div className="hero-meta">
-                <b>BOSS</b> connects hiring, marketing, sales and paperwork
+              <h1 className="hero-title hero-title-light">
+                The operating layer
                 <br />
-                into one agentic workspace — built for owners, not enterprises.
+                for <em>your entire</em> shop floor.
+              </h1>
+              <div className="hero-bottom">
+                <div className="hero-meta hero-meta-light">
+                  <b>BOSS</b> connects hiring, marketing, sales and paperwork
+                  <br />
+                  into one agentic workspace — built for owners, not
+                  enterprises.
+                </div>
               </div>
             </div>
           </section>
 
           {/* STATS */}
-          <section className="tile t-stats tint-sage">
-            <div>
-              <div className="eyebrow">
-                <span className="dot" />
-                Throughput
-              </div>
-              <div className="stat-num">
-                14<sup>hrs/wk</sup>
-              </div>
-              <div className="stat-label">
-                median time returned to owners after the first 30 days.
-              </div>
+          <section className="tile t-stats t-terminal">
+            <div className="term-chrome" aria-hidden="true">
+              <span className="term-dot term-red" />
+              <span className="term-dot term-yellow" />
+              <span className="term-dot term-green" />
+              <span className="term-title-bar">boss — stats</span>
             </div>
-            <div className="sparkline">
-              {[20, 35, 28, 55, 42, 68, 60, 80, 72, 95, 88, 100].map((h, i) => (
-                <span
-                  key={i}
-                  style={{ height: `${h}%` }}
-                  className={h >= 75 ? "hi" : ""}
-                />
-              ))}
+            <div className="term-body">
+              <div className="term-line">
+                <span className="term-dim">$ </span>throughput --avg
+              </div>
+              <div
+                className="term-line term-g"
+                style={{
+                  fontSize: "20px",
+                  fontWeight: 400,
+                  lineHeight: 1.1,
+                  margin: "4px 0",
+                }}
+              >
+                14
+                <span style={{ fontSize: "11px", opacity: 0.65 }}> hrs/wk</span>
+              </div>
+              <div className="term-line term-dim" style={{ fontSize: "10px" }}>
+                median · 30 days
+              </div>
+              <div className="term-sparkline" aria-hidden="true">
+                {[28, 45, 58, 72, 62, 88, 78, 100].map((h, i) => (
+                  <span key={i} style={{ height: `${h}%` }} />
+                ))}
+              </div>
             </div>
           </section>
 
@@ -343,16 +377,9 @@ export default function SignupPage() {
               <br />
               not headcount.
             </h3>
-            <div className="agent-list">
-              {AGENTS.map((a) => (
-                <div className="agent-row" key={a.code}>
-                  <div className="avatar">{a.code}</div>
-                  <span className="name">{a.name}</span>
-                  <span className="role">{a.status}</span>
-                  <span
-                    className={`status ${a.status === "live" ? "" : "idle"}`}
-                  />
-                </div>
+            <div className="agent-bars" aria-hidden="true">
+              {[55, 75, 62, 88, 70, 92, 80, 100].map((h, i) => (
+                <span key={i} style={{ height: `${h}%` }} />
               ))}
             </div>
           </section>
@@ -402,13 +429,6 @@ const SOCIAL_BUTTONS = [
       </svg>
     ),
   },
-];
-
-const AGENTS = [
-  { code: "RC", name: "Recruitment", status: "live" },
-  { code: "MK", name: "Marketing", status: "live" },
-  { code: "SL", name: "Sales", status: "live" },
-  { code: "DC", name: "Documents", status: "idle" },
 ];
 
 const SIGNUP_CSS = `
@@ -537,8 +557,6 @@ const SIGNUP_CSS = `
 .boss-signup .tile.tint-butter   .eyebrow, .boss-signup .tile.tint-butter   h3 { color: var(--tint-butter-ink); }
 
 .boss-signup .tile[class*="tint-"] p { color: color-mix(in oklab, currentColor 65%, transparent); }
-.boss-signup .tile[class*="tint-"] .stat-num,
-.boss-signup .tile[class*="tint-"] .stat-label { color: inherit; }
 .boss-signup .tile[class*="tint-"] .eyebrow { color: color-mix(in oklab, currentColor 70%, transparent); }
 
 .boss-signup .tile .eyebrow {
@@ -556,16 +574,7 @@ const SIGNUP_CSS = `
   background: currentColor;
   opacity: .7;
 }
-.boss-signup .tile[class*="tint-"] .agent-row {
-  background: color-mix(in oklab, #fff 35%, transparent);
-  border-color: color-mix(in oklab, currentColor 15%, transparent);
-}
-.boss-signup .tile[class*="tint-"] .agent-row .name { color: inherit; }
-.boss-signup .tile[class*="tint-"] .agent-row .avatar { background: currentColor; color: var(--bg-tile); }
-.boss-signup .tile[class*="tint-"] .agent-row .status { background: currentColor; }
-.boss-signup .tile[class*="tint-"] .agent-row .status.idle { background: color-mix(in oklab, currentColor 40%, transparent); }
-.boss-signup .tile[class*="tint-"] .sparkline span { background: color-mix(in oklab, currentColor 25%, transparent); }
-.boss-signup .tile[class*="tint-"] .sparkline span.hi { background: currentColor; }
+
 .boss-signup .tile[class*="tint-"] .pill { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
 .boss-signup .tile[class*="tint-"] .pill .dot { background: currentColor; }
 .boss-signup .tile[class*="tint-"] .glyph { border-color: color-mix(in oklab, currentColor 25%, transparent); color: inherit; }
@@ -595,7 +604,7 @@ const SIGNUP_CSS = `
 .boss-signup .t-form     { grid-column: span 5; grid-row: span 6; padding: 32px; display: flex; flex-direction: column; }
 .boss-signup .t-hero     { grid-column: span 7; grid-row: span 3; }
 .boss-signup .t-stats    { grid-column: span 3; grid-row: span 3; }
-.boss-signup .t-agents   { grid-column: span 4; grid-row: span 3; }
+.boss-signup .t-agents   { grid-column: span 4; grid-row: span 3; display: flex; flex-direction: column; }
 
 .boss-signup .form-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
@@ -867,96 +876,6 @@ const SIGNUP_CSS = `
   color: var(--ink);
 }
 
-.boss-signup .t-stats {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-.boss-signup .stat-num {
-  font-size: 56px;
-  letter-spacing: -0.04em;
-  font-weight: 400;
-  line-height: 1;
-  margin: 20px 0 0;
-}
-.boss-signup .stat-num sup {
-  font-size: 18px;
-  letter-spacing: 0;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-weight: 400;
-  vertical-align: super;
-  margin-left: 6px;
-}
-.boss-signup .stat-label {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.45;
-  max-width: 200px;
-}
-.boss-signup .sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 28px;
-  margin-top: 12px;
-}
-.boss-signup .sparkline span {
-  flex: 1;
-  background: var(--line-strong);
-  border-radius: 2px;
-}
-.boss-signup .sparkline span.hi { background: var(--ink); }
-
-.boss-signup .agent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-}
-.boss-signup .agent-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  background: var(--bg-tile-2);
-  border-radius: 10px;
-  font-size: 12.5px;
-}
-.boss-signup .agent-row .avatar {
-  width: 20px; height: 20px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--bg);
-  display: grid; place-items: center;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.boss-signup .agent-row .name { font-weight: 500; color: var(--ink); }
-.boss-signup .agent-row .role { color: var(--muted); margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; }
-.boss-signup .agent-row .status {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--ink);
-  margin-left: 6px;
-}
-.boss-signup .agent-row .status.idle { background: var(--muted-2); }
-
-.boss-signup .pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  letter-spacing: 0.04em;
-}
-.boss-signup .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
-
 @media (max-width: 1200px) {
   .boss-signup .bento { grid-template-columns: repeat(6, 1fr); grid-auto-rows: 120px; }
   .boss-signup .t-form { grid-column: span 6; grid-row: span 6; }
@@ -975,5 +894,119 @@ const SIGNUP_CSS = `
   .boss-signup .t-agents { grid-column: span 2; }
   .boss-signup .form-title { font-size: 26px; }
   .boss-signup .hero-title { font-size: 32px; }
+}
+
+/* Photo background tile */
+.boss-signup .t-photo {
+  background: radial-gradient(ellipse at 75% 35%, #5a4030 0%, #3a2818 40%, #1c1008 100%);
+  border-color: transparent;
+  padding: 0;
+  display: block;
+}
+.boss-signup .t-photo::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(190,140,85,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(230,180,100,0.12) 0%, transparent 45%);
+  pointer-events: none;
+}
+.boss-signup .photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, rgba(16,10,6,0.75) 0%, rgba(16,10,6,0.35) 55%, rgba(16,10,6,0.08) 100%);
+  z-index: 0;
+}
+.boss-signup .photo-streak {
+  position: absolute; top: -30%; right: 18%;
+  width: 160px; height: 200%;
+  background: linear-gradient(168deg, rgba(255,200,100,0.07) 0%, transparent 55%);
+  transform: rotate(12deg);
+  pointer-events: none; z-index: 0;
+}
+.boss-signup .photo-content {
+  position: relative; z-index: 1;
+  padding: 24px; height: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.boss-signup .pill-light {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: rgba(255,253,249,0.65);
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px; letter-spacing: 0.04em;
+}
+.boss-signup .dot-green {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #28c840; flex-shrink: 0;
+}
+.boss-signup .glyph-light { border-color: rgba(255,255,255,0.15); }
+.boss-signup .hero-title-light { color: #fffdf9; }
+.boss-signup .hero-title-light em {
+  color: rgba(255,218,150,0.88);
+  font-style: italic;
+}
+.boss-signup .hero-meta-light { color: rgba(255,253,249,0.42); }
+.boss-signup .hero-meta-light b { color: rgba(255,253,249,0.6); }
+
+/* Terminal tile */
+.boss-signup .t-terminal {
+  background: #1a1816;
+  border-color: transparent;
+  padding: 0;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.boss-signup .term-chrome {
+  background: #2a2724;
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.boss-signup .term-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.boss-signup .term-red    { background: #ff5f57; }
+.boss-signup .term-yellow { background: #febc2e; }
+.boss-signup .term-green  { background: #28c840; }
+.boss-signup .term-title-bar {
+  font-family: var(--font-mono); font-size: 10px;
+  color: rgba(255,253,249,0.28); margin-left: 6px;
+}
+.boss-signup .term-body {
+  padding: 12px 14px; flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  line-height: 1.85;
+}
+.boss-signup .term-line {
+  font-family: var(--font-mono); font-size: 11px;
+  color: rgba(255,253,249,0.8);
+}
+.boss-signup .term-g   { color: #28c840; }
+.boss-signup .term-y   { color: #febc2e; }
+.boss-signup .term-m   { color: rgba(255,253,249,0.42); }
+.boss-signup .term-dim { color: rgba(255,253,249,0.3); }
+.boss-signup .term-sparkline {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 22px; margin-top: 8px;
+}
+.boss-signup .term-sparkline span {
+  flex: 1; border-radius: 1px;
+  background: rgba(40, 200, 64, 0.28);
+}
+.boss-signup .term-sparkline span:last-child {
+  background: rgba(40, 200, 64, 0.6);
+}
+
+/* Agents tile bar chart */
+.boss-signup .agent-bars {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 28px; margin-top: auto; padding-top: 10px;
+}
+.boss-signup .agent-bars span {
+  flex: 1; border-radius: 1px 1px 0 0;
+  background: rgba(138, 78, 73, 0.25);
+}
+.boss-signup .agent-bars span:last-child {
+  background: rgba(138, 78, 73, 0.52);
 }
 `;

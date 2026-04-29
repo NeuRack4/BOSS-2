@@ -60,6 +60,9 @@ models_cache/
 *.bin
 *.safetensors
 
+# --- Docs (internal) ---
+docs/superpowers/
+
 # --- Supabase ---
 supabase/.branches/
 supabase/.temp/

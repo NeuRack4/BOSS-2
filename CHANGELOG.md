@@ -5,6 +5,436 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-04-29
+
+### Added — Deployment: Vercel 프론트엔드 배포 + ngrok 백엔드 공개 연결
+
+- **Vercel 프로덕션 배포** — 프론트엔드(`frontend/`)를 Vercel에 배포. 고정 URL: `https://boss-2.vercel.app`
+- **ngrok 고정 도메인 연결** — 로컬 FastAPI(port 8000)를 ngrok 고정 도메인(`https://loyd-extemporaneous-annalise.ngrok-free.dev`)으로 공개. Celery Worker·Beat는 Upstash Redis 아웃바운드 연결만 사용하므로 ngrok 불필요.
+- **ngrok 인터스티셜 우회 패치** (`frontend/app/layout.tsx`) — `next/script`의 `beforeInteractive` 전략으로 `window.fetch` 전역 패치. ngrok API URL 호출 시 `ngrok-skip-browser-warning: true` 헤더 자동 삽입.
+- **백엔드 CORS 및 콜백 URL 갱신** (`backend/.env`) — `CORS_ORIGINS`에 `https://boss-2.vercel.app` 추가, `BOSS_FRONTEND_URL`·`SLACK_REDIRECT_URI`·`YOUTUBE_REDIRECT_URI` 실서비스 URL로 업데이트.
+
+### Fixed — TypeScript 빌드 오류 6건 수정 (Vercel 빌드 통과)
+
+- **`frontend/app/admin/page.tsx`** — `StatsTab`에 존재하지 않는 `accountId` prop 전달 제거.
+- **`frontend/components/chat/InlineChat.tsx`** — `NaverBlogPostCard`의 `accountId` 타입 불일치 수정 (`string | null` → `string | undefined`, `?? undefined` 추가).
+- **`frontend/components/layout/IntegrationsModal.tsx`** — `ytStatus.expires_at`(`unknown`) JSX 조건 렌더 타입 오류 수정 (`!!` 변환으로 boolean 강제).
+- **`frontend/components/layout/PaymentModal.tsx`** — PortOne `requestPayment` 유니온 타입 불일치(`alipayPlus` 누락) 해결. 함수 타입 캐스트로 빌드 오류 우회.
+- **`frontend/components/sales/RevenueStatsPanel.tsx`** — 미정의 `YoyTip` 컴포넌트 참조 제거, dead code 블록 내 `insight`·`monthly_prediction`·`prediction_basis` null assertion(`!`) 추가.
+
+---
+
+## [3.11.1] — 2026-04-29
+
+### Fixed — Sales: 알림 설정 토글 UI 수정
+
+- **`NotificationTab.tsx`** — 알림 받기 토글의 원(circle)이 컨테이너 밖으로 벗어나던 문제 수정. 토글 크기(`h-6 w-11`)·원 크기(`h-5 w-5`) 및 이동값(`translate-x-5`) 조정.
+
+## [3.11.0] — 2026-04-29
+
+### Added — Sales: Slack 알림 기능
+
+- **DB** (`supabase/migrations/043_slack_notification.sql`) — `slack_connections`, `notification_settings` 테이블 신규 추가.
+- **`backend/app/routers/slack.py`** — Slack OAuth 연동 라우터. `GET /api/slack/oauth/url`, `GET /api/slack/oauth/callback`, `GET /api/slack/status`, `DELETE /api/slack/disconnect` 4개 엔드포인트. 봇 토큰 방식으로 DM 전송.
+- **`backend/app/routers/notifications.py`** — 알림 설정 라우터. `GET/POST /api/notifications/settings` (시간·ON/OFF upsert).
+- **`backend/app/scheduler/tasks.py`** — `sales_slack_notify` Celery 태스크 추가. 매시 정각 실행, 오늘 매출 입력 여부 확인 후 미입력 시 독려 DM / 입력 시 GPT-4o-mini AI 분석 리포트 DM 전송.
+- **`backend/app/scheduler/celery_app.py`** — `sales-slack-notify` beat_schedule 등록 (매시 정각).
+- **`frontend/components/layout/slack/SlackTab.tsx`** — Connect 모달 Slack 탭. 연결 전/후 UI, 새 탭 OAuth 방식(모달 유지), localStorage 신호로 연결 완료 자동 감지.
+- **`frontend/app/slack-success/page.tsx`** — OAuth 완료 후 새 탭 자동 닫기 + 원본 탭 신호 전달 페이지.
+- **`frontend/components/sales/dashboard/tabs/NotificationTab.tsx`** — Sales 대시보드 알림 설정 탭. ON/OFF 토글, 0~23시 전체 시간 드롭다운, 저장.
+- **`frontend/components/layout/IntegrationsModal.tsx`** — Connect 모달에 Slack 탭 추가.
+- **`frontend/components/sales/dashboard/SalesDashboard.tsx`** — 대시보드 탭5 알림 설정 추가, Slack 연동 상태 실시간 조회.
+- **`frontend/components/layout/Header.tsx`** — OAuth 완료 후 `slack_connected` 감지 → Connect 모달 Slack 탭 자동 오픈.
+
+## [3.10.0] — 2026-04-29
+
+### Fixed — Planner: Anthropic KV 캐시 복구
+
+- **`_planner.py` `_build_system()`** — 반환 타입을 `str`에서 `SystemMessage`(content block 리스트)로 변경. `_PLANNER_SYSTEM`(정적, ~3000토큰)을 첫 번째 블록으로, `nick_ctx`·`extra`(동적, 사용자별)를 두 번째 블록으로 분리. 정적 블록에 `cache_control: {type: "ephemeral"}` 직접 부착.
+- **날짜를 시스템 프롬프트 밖으로 이동** — `date.today().isoformat()`을 system에서 제거하고 `plan()` 호출 시 user 메시지 앞에 `[오늘 날짜] YYYY-MM-DD` 형식으로 주입. system prefix가 매일 변경되어 캐시 미스가 100%이던 문제 해결.
+- **retry 경로 수정** — terminal tool 미호출 재시도 시 `system + string` 연산 대신 `system.content`에 reminder 블록을 append하는 방식으로 변경.
+- **`llm.py` `_planner_anthropic()`** — `system` 파라미터를 단일 문자열 대신 content block 리스트로 구성. 첫 블록에 `cache_control` 부착. tool 정의에도 `cache_control` 추가.
+- **근본 원인** — deepagents SDK가 내부적으로 `AnthropicPromptCachingMiddleware`를 자동 적용하고 있었으나, system prompt에 `date.today()`가 포함돼 매 요청마다 prefix가 달라져 cache hit율 0%였음.
+
+---
+
+## [3.9.0] — 2026-04-29
+
+### Added — Marketing: Notice 알림 기능
+
+- **`marketing_action_notices` 테이블** (`supabase/migrations/041_marketing_action_notices.sql`, `042_marketing_action_notices_detail.sql`) — 마케팅 할 일 알림 저장. `(account_id, title, due_date)` 유니크 제약, RLS 적용. 상세 컬럼(`target`, `idea`, `steps`, `expected`, `why`) 포함.
+- **`GET /api/marketing/notices`** (`backend/app/routers/marketing.py`) — `due_date = 내일`인 항목 조회. 마감 하루 전 알림 데이터 반환.
+- **`due_date` 필드 자동 생성** — `GET /api/marketing/dashboard/actions` 엔드포인트의 AI 프롬프트에 `due_date(YYYY-MM-DD)` 포함 지시 추가. 액션 생성 시 `marketing_action_notices`에 자동 upsert.
+- **`NoticeModal` 컴포넌트** (`frontend/components/layout/NoticeModal.tsx`) — D-day 배지(`D-1`, `D-2`…) + 실제 날짜 표시. 카드 접기/펼치기로 아이디어·실행방법·기대효과 상세 확인. 인스타그램 카테고리 항목에 **인스타그램 예시보기** 버튼 → `InstagramPostCard` 인라인 렌더.
+- **`ActionItem` 타입에 `due_date` 추가** (`frontend/components/marketing/types.ts`).
+
+### Changed — Header: Comments·DM 버튼 제거 및 Notice 버튼 추가
+
+- **`Header.tsx`** — Comments, DM 버튼 및 관련 state·이벤트 리스너 제거. Notice 버튼 추가(`boss:open-notice-modal` CustomEvent 지원).
+
+---
+
+## [3.8.0] — 2026-04-29
+
+### Fixed — Sales: 메뉴 원가 인라인 입력 저장 및 대시보드·모달 연동 개선
+
+- **원가 인라인 저장 오류 수정** (`MenuProfitTab.tsx`) — PATCH 요청에 `account_id` 누락으로 저장되지 않던 문제 수정. API 실패 시 에러 메시지 표시 추가.
+- **마진율 즉시 반영** (`MenuProfitTab.tsx`) — 원가 저장 성공 직후 `localCost` 로컬 상태 업데이트로 마진율(%) 및 마진 바 즉시 반영. 서버 re-fetch 전에도 정확한 값 표시.
+- **원가 금액 표시 추가** (`MenuListPanel.tsx`) — 메뉴판 모달에서 마진율 바 옆에 원가 금액(`원가 X,XXX원`) 표시.
+- **모달 메뉴 개수 동적 표시** (`MenuListPanel.tsx`, `NodeDetailModal.tsx`) — artifact title의 고정 개수 대신 실시간 메뉴 수로 제목 자동 갱신 (`onTotalChange` 콜백 연동).
+- **이벤트 이중 fetch 제거** (`useDashboardData.ts`, `MenuListPanel.tsx`) — 대시보드 fetch 완료마다 `menu-data-updated` 중복 dispatch하던 문제 제거. `MenuListPanel`에 `sales-data-saved` 리스너 추가로 챗봇 메뉴 변경 시 동기화 유지.
+- **메뉴판 artifact content 단순화** (`_menu_manager.py`) — 메뉴 전체 목록 나열 대신 총 개수·업데이트 날짜 한 줄 요약으로 변경.
+- **`MenuListPanel` 콜백 ref 패턴 적용** (`MenuListPanel.tsx`) — `onTotalChange`를 useCallback 의존성에서 제외해 불필요한 re-fetch 방지.
+
+## [3.7.0] — 2026-04-28
+
+### Added — Admin: 어드민 페이지 (`/admin`)
+
+- **`profiles.is_admin` 컬럼** (`supabase/migrations/040_admin_flag.sql`) — `profiles` 테이블에 `is_admin boolean default false` 추가. DB에서 직접 `UPDATE`로 권한 부여.
+- **`/api/admin/*` 라우터** (`backend/app/routers/admin.py`) — `require_admin` FastAPI 의존성으로 is_admin 검증. service_role key로 전 계정 데이터 조회.
+  - `GET /api/admin/users` — 전체 가입자 목록 + 계정별 활성 스케줄 수.
+  - `GET /api/admin/stats` — 플랫폼 전체 artifact 수·도메인별 breakdown·매출/비용 합계.
+  - `GET /api/admin/costs` — Langsmith API 연동 계정별 LLM 토큰 사용량·비용 집계.
+  - `GET /api/admin/payments` — 전체 구독 플랜·결제 내역 조회.
+- **`useIsAdmin` 훅** (`frontend/hooks/useIsAdmin.ts`) — Supabase에서 `is_admin` 필드를 조회해 boolean 반환.
+- **`AdminFab` 컴포넌트** (`frontend/components/layout/AdminFab.tsx`) — `isAdmin=true` 계정 로그인 시 우하단 FAB 버튼 렌더링, `/admin` 페이지로 이동.
+- **`providers.tsx` 마운트** — `AdminFab`을 앱 전역에 한 번 마운트.
+- **어드민 메인 페이지** (`frontend/app/admin/page.tsx`) — 헤더 + stat 카드(총 유저·활성 구독·이번 달 결제·LLM 비용) + 탭 4개(Users / Payments / Stats / LLM Costs).
+
+### Fixed — Admin: 버그 수정 및 스타일 개선
+
+- **`list_users` 응답 타입 수정** — 헤더 스타일 사용자 페이지 통일.
+- **React Fragment key 오류 수정** — StatsTab `key` prop 누락 해결.
+- **stats kind filter 수정** — 도메인별 artifact 집계 필터 로직 수정.
+- **StatsTab unused prop 제거** — TypeScript 경고 해결.
+- **Langsmith `start_time` datetime 객체 전달** — 문자열 대신 `datetime` 타입으로 수정해 SDK 호환성 확보.
+
+### Style — Admin: 디자인 시스템
+
+- **Roboto 폰트 적용** — Google Fonts CDN으로 Roboto 300/400/500/700 로드, 어드민 전체 적용.
+- **영문 UI 텍스트** — 레이블·헤더·버튼 전체 영문 통일.
+- **테두리 제거·대형 폰트·border-radius 5px** — 어드민 전용 디자인 토큰 적용.
+
+---
+
+## [3.6.0] — 2026-04-28
+
+### Added — Marketing: 마케팅 상세 페이지 (`/marketing`)
+
+- **마케팅 전용 상세 페이지** (`frontend/app/marketing/page.tsx`) — 기존 도메인 페이지를 `MarketingPageLayout`으로 교체. 마케팅 대시보드를 전체 페이지로 확장.
+- **`MarketingDashboard` 컴포넌트** (`frontend/components/marketing/MarketingDashboard.tsx`) — 4개 탭(개요·인스타·유튜브·할 일) 전환 UI. 탭별 고유 색상 적용(개요=slate, 인스타=pink, 유튜브=red, 할 일=orange). 접힌 상태 미니바(팔로워·도달수·구독자 순증 요약) 지원.
+- **`OverviewTab`** — Instagram(pink)·YouTube(red) 플랫폼 칩 색상 분리. KPI 카드 그리드(팔로워·도달·인상·참여 / 조회·시청·구독·좋아요). "AI 성과 분석 보기" 버튼 → 인라인 분석 패널 전환.
+- **`AnalysisPanel`** — LLM 분석 텍스트(violet 카드) + YouTube 일별 조회수·시청시간 표 + Instagram 일별 도달수 표. 전일 대비 ↑↓ 증감·백분율 표시.
+- **`InstagramTab`** — 계정 KPI + 상위 게시물 목록.
+- **`YoutubeTab`** — 채널 KPI + 상위 동영상 목록. YouTube 미연결 시 OAuth 연결 안내.
+- **`ActionsTab`** — lazy 로딩 액션 아이템 목록(이미 구현된 `MarketingReportCard`와 동일 포맷).
+- **`useMarketingData` 훅** (`frontend/components/marketing/hooks/useMarketingData.ts`) — dashboard·actions·analysis 3개 엔드포인트 lazy fetch 상태 관리.
+- **공유 타입** (`frontend/components/marketing/types.ts`) — `DailyYoutubeData`, `DailyInstagramData`, `MarketingAnalysis`, `MarketingDashboardState` 등 인터페이스 정의.
+
+### Added — Marketing Backend: 대시보드 API 엔드포인트
+
+- **`GET /api/marketing/dashboard`** — Instagram + YouTube 데이터를 병렬(`asyncio.gather`) 조회해 LLM 없이 즉시 반환.
+- **`GET /api/marketing/dashboard/actions`** — lazy 호출 시 GPT-4o로 액션 아이템 JSON 생성 후 반환.
+- **`GET /api/marketing/dashboard/analysis`** — YouTube 일별(`dimensions=day`) + Instagram 일별 도달 데이터를 병렬 조회 후 GPT-4o 분석 텍스트 생성 반환.
+- **`get_daily_analytics()`** (`backend/app/services/youtube_analytics.py`) — YouTube Analytics API `dimensions=day` 파라미터로 일별 조회수·시청시간 배열 반환.
+- **`get_daily_reach()`** (`backend/app/services/instagram_insights.py`) — 기존 `period=day` API 응답에서 일별 도달수 배열 추출.
+
+---
+
+## [3.5.0] — 2026-04-28
+
+### Added — Marketing: 성과 리포트 프로액티브 할 일 탭
+
+- **할 일 탭 신설** (`frontend/components/chat/MarketingReportCard.tsx`) — 마케팅 성과 리포트 카드에 "할 일" 탭 추가. 사용자가 묻기 전에 AI가 먼저 우선순위별 실행 아이템을 제안.
+- **구조화된 액션 아이템** — 각 할 일은 타겟층·실행 기간·구체적 아이디어·단계별 실행 방법·기대 효과·데이터 기반 이유 7개 필드로 구성. 클릭 시 상세 내용 펼침.
+- **기념일 연계 이벤트 자동 제안** (`backend/app/agents/marketing.py`) — `_get_upcoming_holidays()` 헬퍼 추가. 오늘 기준 60일 이내 기념일(어린이날·어버이날·추석·설날·크리스마스 등 14종)을 자동 계산해 프롬프트에 주입. 기념일이 있으면 해당 날짜 맞춤 이벤트를 우선 제안.
+- **우선순위 그룹 분리** — 이번 주(high) / 그 다음(medium·low) 섹션으로 분리 표시. 왼쪽 accent border 색상으로 우선순위 시각화.
+- **할 일 탭 기본 선택** — 리포트 카드 오픈 시 할 일 탭이 첫 번째로 표시.
+
+### Improved — Marketing: 성과 리포트 AI 분석 품질 향상
+
+- **액션 아이템 LLM 병렬 생성** — 분석 텍스트와 액션 아이템을 `asyncio.gather`로 동시에 생성해 응답 지연 최소화.
+- **JSON 파싱 강화** — 정규식 기반 코드 블록 추출 + 배열 직접 추출 fallback 추가. 파싱 실패 시 상세 로그 출력.
+- **플랫폼 미연결 시에도 액션 생성** — Instagram·YouTube 미연결 상태에서도 콘텐츠 전략·이벤트 기획 등 일반 마케팅 액션 3개 이상 보장.
+
+### Fixed — Instagram Insights: Graph API v18+ 호환성
+
+- **계정 인사이트 0 반환 수정** (`backend/app/services/instagram_insights.py`) — Graph API v18+ 이후 `values[]` 배열 → `total_value.value` 단일 값으로 응답 포맷 변경에 대응. 두 포맷 모두 처리.
+- **engagement 지표 deprecated 대응** — v18+에서 deprecated된 `engagement` 지표를 `likes + comments + shares + saved` 합산으로 대체.
+- **Reels(VIDEO) 인사이트 오류 수정** — Reels는 `impressions` 지표 미지원으로 API 오류 발생. 미디어 타입별 요청 지표 분리 처리.
+- **에러 로깅 추가** — API 에러·파싱 오류를 `[instagram_insights]` 로거로 출력해 디버깅 가시성 확보.
+
+### Improved — Marketing: 할 일 탭 UI/UX
+
+- **컬러 배지 → 왼쪽 accent border** — 눈에 부담 없는 오렌지(이번 주)·회색(이번 달·여유) border로 우선순위 표시.
+- **SVG chevron 펼침 버튼** — ▲▼ 문자 → SVG chevron (회전 애니메이션 포함) 교체.
+- **단계 번호 원형 배지** — 실행 단계 번호를 `bg-neutral-100` 원형 배지로 표시해 가독성 개선.
+- **텍스트 크기 및 간격 정비** — 10px 남용 제거, 본문 13px·line-height 1.65, 섹션 간격 space-y-4.
+
+## [3.4.0] — 2026-04-28
+
+### Added — Marketing: 네이버 블로그 자동 업로드
+
+- **NaverBlogPostCard 게시 버튼 활성화** (`frontend/components/chat/NaverBlogPostCard.tsx`) — AI 미리보기 카드에 "네이버 블로그에 게시하기" 버튼 연결. `POST /api/marketing/blog/upload` 호출, 업로드 중 스피너·완료 링크·에러 메시지 표시.
+- **쿠키 오류 시 IntegrationsModal 바로가기** — 업로드 오류 메시지에 "쿠키"가 포함되면 "플랫폼 연결 설정 열기 →" 버튼 노출, `boss:open-integrations-modal` CustomEvent로 네이버 탭 직접 열기.
+- **IntegrationsModal `initialTab` 지원** (`frontend/components/layout/IntegrationsModal.tsx`) — `initialTab` prop 추가. `boss:open-integrations-modal` 이벤트의 `detail.tab` 값으로 특정 탭 자동 선택.
+- **Header 이벤트 구독 추가** (`frontend/components/layout/Header.tsx`) — `boss:open-integrations-modal` 이벤트 수신 후 `integrationsInitialTab` 상태로 모달에 전달.
+- **이미지 지원 (미리보기 + 실제 업로드)** — `write_blog_post` 도구에 `image_urls_json` 파라미터 추가(`_marketing_tools.py`). 메시지 내 이미지 URL 파싱 fallback 추가(`marketing.py`). `NaverBlogUploadRequest`에 `image_urls` 필드 추가(`routers/marketing.py`). 프론트 카드에서 `payload.image_urls` 업로드 요청에 포함.
+- **Playwright 네이버 자동 업로드** (`backend/app/services/naver_blog_runner.py`) — Smart Editor(SE One) Playwright 자동화. `playwright>=1.40.0` 의존성 추가(`requirements.txt`).
+- **ctypes 클립보드 직접 쓰기** — PowerShell 서브프로세스 대신 `ctypes.windll.user32/kernel32` 로 클립보드 직접 작성. 포커스 탈취 없이 전체 본문 정상 입력. PowerShell은 fallback으로만 유지.
+
+### Added — Marketing: 즉시 응답 pre-routing
+
+- **블로그 포스트 즉시 폼 표시** (`marketing.py`) — "블로그 포스트 작성해줘" 류 메시지 감지 시 질문 없이 `run_blog_post_form()` 바로 실행. `_BLOG_FORM_TRIGGER_RE` / `_BLOG_TOPIC_PRESENT_RE` 정규식으로 주제 포함 여부 판별.
+- **성과 리포트 즉시 실행** (`marketing.py`) — "인스타그램/유튜브 성과 리포트" 류 메시지 감지 시 질문 없이 `run_marketing_report()` 바로 실행.
+- **Planner 규칙 강화** (`_planner.py`) — "폼 우선 규칙"에 `mkt_blog_post_form`, `mkt_marketing_report` ask_user 금지 케이스 명시. 두 capability는 항상 즉시 dispatch.
+
+### Added — Marketing: 칸반 탭 정리
+
+- **마케팅 칸반 4개 탭으로 재편** (`KanbanBoard.tsx`) — 인스타그램 / 네이버 Blog / 유튜브 Shorts / 성과 분析 순 고정. Campaigns·Events·Reviews 컬럼 숨김(기존 아티팩트 보존). 각 컬럼에 한국어 표시명 적용(`MARKETING_DISPLAY_NAMES`).
+- **DB 마이그레이션 `039_marketing_subhubs_v2`** — 모든 계정에 "YouTube Shorts", "성과 분析" 서브허브 추가. `ensure_standard_sub_hubs` 함수를 새 표준 4개 서브허브로 갱신.
+
+### Fixed — Marketing Agent
+
+- **OpenAI 429 rate limit 지수 백오프** (`marketing.py`) — `_invoke_with_retry()` 추가. 429 오류 시 최대 3회 재시도, 대기 시간은 5s→10s→20s 또는 오류 메시지의 `try again in Xs` 파싱값 사용.
+- **네이버 블로그 본문 순서 뒤섞임 수정** (`naver_blog_runner.py`) — 세그먼트 루프 내 `focus_body_area()` + `Control+End` 제거. 자연 커서 흐름 유지로 내용 순서 정상화.
+
+---
+
+## [3.2.0] — 2026-04-27
+
+### Added — Sales UI
+
+- **PriceStrategyView 컴포넌트** (`frontend/components/sales/PriceStrategyView.tsx`) — 가격 전략 artifact 모달 전용 렌더러. 현재 가격 분석·시장 포지셔닝·추천 가격대·실행 방안 4섹션을 컬러 라벨 배지 + 번호 원형 + 여백 스타일로 가독성 개선.
+- **NodeDetailModal price_strategy 전용 렌더링 연결** — `artifact.type === "price_strategy"` 조건 추가, `PriceStrategyView` 적용.
+
+### Changed — Sales Kanban
+
+- **Sales 칸반 서브허브 순서 고정** (`KanbanBoard.tsx`) — Revenue → Costs → Pricing → Reports 순서로 정렬. Customers 서브허브 숨김 처리.
+
+### Fixed — Sales Agent (DeepAgent 호환)
+
+- **`_run_sales_agent` tool 범위 최적화** — capability별 필요한 tool만 전달하는 `tools` 파라미터 추가. `run_price_strategy` 는 `write_price_strategy` + `ask_user` 2개만 사용해 gpt-4o-mini tool 선택 정확도 향상.
+- **`_run_sales_agent` fallback 품질 개선** — terminal tool 미호출 시 `fallback_result_data` 기반 artifact 강제 저장. AI 텍스트 200자 미만이면 `chat_completion` 재생성 후 저장. 응답에 포함된 tool 지시문 자동 제거.
+- **`run_price_strategy` 응답 개선** — 저장 후 챗봇에는 짧은 확인 메시지만 반환, 상세 내용은 칸반 카드에서 확인하도록 분리.
+- **`_insights.py` 모델 변경** — 4섹션 분석 LLM `gpt-4o` → `gpt-4o-mini`로 변경해 Rate limit 429 방지.
+- **`_ocr.py` 모델 변경** — 영수증·메뉴판 Vision 모델 `gpt-4o` → `gpt-4o-mini`로 변경.
+
+### Fixed — Orchestrator (공용)
+
+- **receipt_payload 강제 override 추가** (`orchestrator.py`) — 영수증/CSV/Excel 업로드 시 Planner가 ask/chitchat으로 오라우팅해도 `sales_parse_receipt` 또는 `sales_parse_csv`로 강제 dispatch.
+- **solo_cap override 추가** (`orchestrator.py`) — `sales_parse_receipt`, `sales_parse_csv`, `sales_menu_ocr`는 항상 단독 실행 강제. Planner가 다른 capability와 함께 dispatch해도 upload 관련 capability만 남기고 나머지 제거.
+- **Planner opening 원칙 추가** (`_planner_tools.py`) — `dispatch` tool의 `opening` 파라미터 설명에 미래형 작성 원칙 추가. 과거형("됐습니다", "저장되었습니다") 사용 금지 명시.
+
+---
+
+## [3.1.0] — 2026-04-27
+
+### Changed — Memory (refactor)
+
+- **장기기억 저장 구조 전면 개편 (v2.0)** — 도메인×날짜 단일 blob append 방식에서 artifact별 개별 markdown row 방식으로 전환. 신규 artifact 생성 시 전체 재임베딩 없이 단순 insert 1회로 저장.
+- **저장 포맷 구조화** — `## [domain] artifact_type — YYYY-MM-DD HH:MM` 헤더 + 제목 + gpt-4o-mini 요약 2~3문장의 markdown 형식으로 RAG recall 품질 개선.
+- **자동 컨텍스트 압축** — 도메인별 비압축 row 20개 초과 시 오래된 기록을 gpt-4o-mini로 자동 압축·병합하여 1개 row로 대체. 압축 row는 7일 TTL 미적용으로 장기 recall 보장.
+- **DB 마이그레이션 `038_memory_long_v2`** — `artifact_type`, `event_time`, `is_compressed` 컬럼 추가. digest 기반 unique index·`upsert_memory_long` RPC 제거. FTS 자동 업데이트 트리거 추가. `memory_search` RPC 압축 row TTL 예외 처리.
+- **에이전트 코드 무수정** — `log_artifact_to_memory()` 시그니처 동일 유지, recruitment·marketing·sales·documents 에이전트 파일 변경 없음.
+
+---
+
+## [3.0.0] — 2026-04-26
+
+### Changed — UI / Chat (refactor)
+
+- **초기 화면 퀵액션 버튼 전면 개편** — 도메인별 버튼 수 축소 (Sales 3 · Recruitment 3 · Marketing 4 · Documents 4). 레이아웃을 기존 가로 나열에서 2×2 도메인 그리드(1행: Sales·Recruitment / 2행: Marketing·Documents)로 변경. 각 도메인 내 버튼은 세로 정렬. 전체 그리드를 채팅 영역 정중앙에 플로팅 배치.
+- **ASK THE CHATBOT 텍스트 개선** — 글씨 크기 확대(`text-3xl`), 마침표 제거, 버튼 그리드와 간격 확대(`gap-12`).
+- **버튼·도메인 레이블 가운데 정렬** — 버튼 텍스트 `justify-center`, 도메인 레이블 `self-center` 적용.
+- **LAST SPEAKER 배지 제거** — `ChatCenterCard` 헤더에서 `SpeakerBadge` 컴포넌트 제거.
+
+### Fixed — Sales (refactor)
+
+- **SalesInputTable 저장 버그 완전 수정** — Save 클릭 후 "확인한 매출 N건 저장해줘." 메시지를 보내면 Planner가 `mode="ask"`로 응답해 항목 정보를 재요청하던 버그 수정. `orchestrator.py`에 `pending_save` 강제 override 블록 추가 — Planner 모드와 무관하게 `pending_save.items`가 존재하면 `sales_save_revenue` / `sales_save_costs`로 강제 dispatch. 기존 `upload_hint` override 패턴과 동일 구조 적용.
+- **run_revenue_entry pending_save 가드** — `pending_save.kind=="revenue"`이고 items가 있을 때 `run_save_revenue`로 즉시 위임 (orchestrator override의 보조 안전망).
+
+---
+
+## [2.10.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales_bugfix)
+
+- **benchmark-insight 이중 호출 버그 수정** — `fetchBenchmarkData` useCallback 재생성 시 effect 중복 실행 문제. ref 분리로 해결.
+- **LLM raw 로그 debug 레벨로 변경** — 시연·운영 환경에서 불필요한 JSON 로그 미출력.
+
+---
+
+## [2.10.0] — 2026-04-24
+
+### Added — Marketing (feature-marketing)
+
+- **이벤트 포스터 HTML 생성** (`mkt_event_poster`) — GPT-4o로 A4 standalone HTML 이벤트 포스터 자동 생성. Supabase Storage `event-posters` 버킷 업로드 후 `[[EVENT_POSTER]]` 마커로 채팅에 iframe 미리보기 카드 렌더링. artifact(type=event_poster) 저장 및 NodeDetailModal 내 HTML iframe 표시 지원.
+- **이벤트 기획 + 포스터 연계 dispatch** — 플래너가 이벤트 기획 메시지에서 포스터 키워드 감지 시 `mkt_event_poster(depends_on: mkt_event_plan)` 자동 추가. 기획안 텍스트를 event_content로 포스터 생성에 활용.
+- **자동화 스케줄 설정 폼** (`mkt_schedule_form`, `ScheduleFormCard`) — "자동화 스케줄" 버튼 클릭 시 폼 UI 표시. 작업 종류 칩·세부 지시사항·실행 주기(매일/매주/격주/매월)·요일·날짜·시간 선택 → cron 5-field 표현식 자동 생성 후 `mkt_schedule_post` dispatch.
+- **리뷰 답글 폼 이미지 업로드** — `ReviewReplyFormCard`에 리뷰 캡처 이미지 드래그앤드롭 / 클릭 업로드 추가. `/api/marketing/review/analyze` 엔드포인트 호출로 리뷰 원문·별점·플랫폼 자동 입력.
+- **이벤트 기획 폼 디자인 개선** — `EventPlanFormCard`: violet 그라데이션 헤더, 채널·이벤트 종류 선택 칩 violet 강조, "기획 시작" 버튼 그라데이션 + disabled 처리 개선.
+- **Pricing 미리보기 모달** (`PricingPreviewModal`) — 로그인·회원가입 페이지 상단 네비게이션 "Pricing" 버튼에서 요금제 미리보기 모달 오픈.
+
+### Fixed — Marketing (feature-marketing)
+
+- **이벤트 기획 응답 HTML 직접 출력 차단** — `run_event_plan` LLM 응답에서 `<!DOCTYPE…</html>` 블록 강제 제거(`_strip_html_blocks`). `run()` LLM 응답에도 동일 안전망 적용. 이벤트 기획 메시지 전달 전 포스터 HTML 요청 지시문 필터링(`_strip_poster_instructions`).
+- **Instagram 인사이트 계정별 토큰 조회** — `collect_report_data`가 환경변수 대신 `platform_credentials` DB에서 계정별 `meta_access_token` / `instagram_user_id` 우선 조회, env fallback 유지. 미연결 안내 메시지 개선.
+- **Shorts 자막 생성 MIME 타입 자동 감지** — PNG·WebP·GIF 이미지를 `image/jpeg`로 오인식하던 문제 수정(`_detect_mime`). `asyncio.to_thread` → 네이티브 async 호출로 변경.
+- **NodeDetailModal 계정 전환 동기화** — `accountId`를 마운트 시 1회만 조회하던 방식을 `onAuthStateChange` 구독으로 교체, 계정 전환 시 stale account_id → 403 발생 문제 해소.
+- **MarketingReportCard AI 분석 마크다운 렌더링** — 분석 텍스트를 `whitespace-pre-wrap` 단순 출력에서 `MarkdownMessage` 컴포넌트로 교체.
+- **PaymentModal 플랜 명칭** — Business → Enterprise로 변경.
+
+---
+
+## [2.9.1] — 2026-04-24
+
+### Changed — Sales (feature/sales_shortmenu)
+
+- **Sales 숏메뉴 정비** — 미구현 항목(비용 분석) 제거, 메뉴 관리·메뉴 수익성 분석·고객 분석 추가.
+
+---
+
+## [2.9.0] — 2026-04-24
+
+### Added — Recruitment (feature-rec)
+
+- **면접 평가표 capability** (`recruit_interview_evaluation`) — 이력서 기반 맞춤 면접 평가표 생성. 종합 점수표(배점·채점란) + 역량별 평가 기준·체크포인트·코멘트란 혼합 형식. 배점 비율 커스터마이징 지원. `Interviews` 서브허브 자동 분류.
+- **면접 평가표 DOCX 내보내기 capability** (`recruit_evaluation_export_docx`) — 캔버스에서 검토·수정 후 요청 시 DOCX 파일로 변환, Supabase Storage 업로드 후 7일 유효 다운로드 URL 반환.
+- **면접 질문 서브허브 변경** — `recruit_interview`, `recruit_resume_interview` artifact `sub_domain: Job_posting` → `Interviews`.
+
+### Changed — Recruitment (feature-rec)
+
+- **채팅 사전 질문 버튼 개편** — 면접 질문·온보딩 체크리스트·채용 가이드·인건비 계산·이력서 분석 & 면접 질문 제거, 이력서 분석·면접 질문지 신규 추가.
+- **면접 평가표 생성·내보내기 분리** — 생성(마크다운 캔버스 표시)과 DOCX 내보내기를 별도 capability로 분리.
+
+### Fixed — Recruitment (feature-rec)
+
+- **평가표 전문 채팅 미표시** — 면접 평가표 생성 시 전체 내용이 채팅 응답에 포함되도록 수정.
+- **Storage 한글 키 오류** — DOCX 업로드 시 한글 파일명이 Supabase Storage `InvalidKey` 에러를 유발, storage path를 ASCII 고정(`evaluation.docx`)으로 변경.
+
+---
+
+## [2.8.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales-phase2)
+
+- **메뉴 수익성 분석 서브허브 오배치** — `run_menu_analysis` artifact `sub_domain: Reports` → `Pricing` 수정.
+
+---
+
+## [2.8.0] — 2026-04-24
+
+### Added — Marketing / Integrations (feature-marketing)
+
+- **Business 플랜 결제 플로우** — 요금제 모달에서 Business 플랜 "Business 시작하기" 버튼 클릭 시 PortOne `requestPayment` 결제창 실행 (기존 mailto 방식 제거). 결제 금액 99,900원, 주문명 "BOSS2 Business 구독 (1개월)" 자동 적용.
+- **플랜별 동적 결제 정보** — `PaymentMethodModal`에 `plan` prop 전달, `PLAN_INFO` 맵으로 Pro/Business 금액·라벨 동적 표시.
+- **현재 사용 중인 플랜 강조** — 구독 중인 플랜 카드에 검은색 테두리 적용 + "사용 중" 배지 (기존 "추천" 배지 대체).
+- **IntegrationsModal API URL 수정** — 모든 fetch 호출에 `NEXT_PUBLIC_API_URL` 적용, 포트 3000→8000 프록시 오류 해소. `safeJson` 래퍼로 플랫폼별 독립 에러 처리 (Promise.all 실패 전파 방지).
+- **연결된 플랫폼 상세 UI** — YouTube·Instagram·Naver 블로그 연결 완료 시 정보 카드 표시:
+  - YouTube: 연결 방식(Google OAuth 2.0), 토큰 만료일, 활성 기능 목록, 연결 해제 버튼.
+  - Instagram: 계정 ID, 마지막 업데이트, 60일 만료 경고, 토큰 갱신 폼, 연결 해제 버튼.
+  - Naver 블로그: 블로그 ID, 쿠키 D-day (7일 이하 빨간색 강조), 쿠키 갱신 폼, 연결 해제 버튼.
+
+### Changed — Marketing (feature-marketing)
+
+- **`backend/app/services/payment.py`** — `BUSINESS_AMOUNT = 99_900`, `PLAN_AMOUNTS` 맵 추가.
+- **`backend/app/routers/payment.py`** — `SubscribeRequest.plan` 필드 추가, 결제 금액을 `PLAN_AMOUNTS[req.plan]` 으로 검증 및 적용.
+- **`backend/app/services/naver_blog.py`** — DB 자격증명 부재 시 `naver_cookies.json` 로컬 파일 + `settings.naver_blog_id` fallback 추가.
+
+### Fixed — Marketing (feature-marketing)
+
+- **IntegrationsModal 404 오류** — 모든 API 호출이 Next.js 포트(3000)로 향하던 문제 수정. `const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"` 적용.
+- **신규 계정 플랫폼 자동 연결 오류** — integrations 상태 조회 엔드포인트의 env fallback 제거, DB 전용 조회로 복원해 계정 격리 보장.
+
+---
+
+## [2.7.0] — 2026-04-24
+
+### Added — Recruitment (feature-recruit)
+
+- **이력서 파싱 파이프라인** — PDF/이미지 이력서 업로드 시 GPT-4o로 구조화 파싱 (resumes 테이블 저장, migration 035)
+- **면접 질문 자동 생성** — 파싱 완료 직후 "면접/질문/인터뷰" 키워드 감지 시 지원자별 맞춤 면접 질문 artifact 자동 생성
+- **장기기억 연동** — 이력서 파싱·면접 질문 생성 결과를 pgvector 장기기억에 저장 (재방문 시 맥락 유지)
+- **파싱 결과 UI** — 경력·프로젝트·교육수료 분리 마크다운 표 + 면접 질문 상세모달에 이력서 파싱 결과 토글 추가
+- **복수 이력서 동시 업로드** — `upload_payloads` 리스트로 여러 이력서 한 번에 처리
+- **LangSmith 트레이싱** — documents·recruitment agent 전 capability 함수에 `@traceable` 추가 (플래너 경로 누락 해소)
+
+### Fixed — Recruitment
+
+- **플래너 오분류 강제 override** — 파일 업로드 시 planner LLM이 chitchat/ask/refuse로 잘못 분류해도 코드레벨에서 `recruit_resume_parse` 강제 dispatch
+- **중복 면접 질문 방지** — 2분 이내 동일 resume_id artifact 재사용, planner 1-shot 규칙 명시
+- **이력서 업로드 무한 루프 수정** — upload_payloads contextvar 전달 누락 + 재업로드 루프 수정
+- **resumes 테이블 RLS 활성화** + account_id FK 제약 추가
+
+---
+
+## [2.6.1] — 2026-04-24
+
+### Fixed — Sales (feature/sales_agent_test)
+
+- **run_cost_entry raw_text 파라미터 오류** — 플래너가 `raw_text` 인자를 전달할 때 `unexpected keyword argument` 에러 발생. 함수 시그니처에 `raw_text: str | None = None` 추가해 수정.
+
+---
+
+## [2.6.0] — 2026-04-24
+
+### Added — Sales (feature/sales-rag-agentic-loop)
+
+- **Sales RAG Retriever** (`backend/app/agents/_sales/_retriever.py` 신규)
+  - `retrieve_sales_context()` — BAAI/bge-m3 1024차원 임베딩으로 질문 벡터화
+  - Supabase `match_sales_embeddings` RPC 호출 → `source_type='sales'` 임베딩 유사도 검색
+  - LangSmith `@traceable` 추적 포함
+- **Sales Agentic Loop** (`backend/app/agents/_sales/_graph.py` 신규)
+  - LangGraph `StateGraph` 기반 4노드 파이프라인:
+    - `fetch_data` — sales_records·cost_records DB 수집
+    - `check_data` — LLM 없이 Python 조건(≥3건)으로 데이터 충분 여부 판단 (비용 0)
+    - `retrieve_more` — 데이터 부족 시 RAG로 과거 유사 데이터 보강
+    - `generate` — generate_sales_insight() 호출
+  - 무한 루프 방지: iteration ≥ 2이면 강제 generate
+  - 각 노드 LangSmith `@traceable` 추적
+- **Supabase 함수** (`035_match_sales_embeddings.sql`)
+  - `match_sales_embeddings(vector(1024), uuid, int)` — 코사인 유사도 기반 검색
+  - `source_type = 'sales'` 필터 적용 (328건 인덱싱 확인)
+
+### Changed
+
+- `run_sales_report()` — LangGraph `ainvoke` 방식으로 전환. artifact 저장·Kanban·NodeDetailModal metadata 로직 완전 보존
+- `run()` — 오케스트레이터가 rag_context 미전달 시 `retrieve_sales_context()` 자동 호출
+
+---
+
+## [2.5.0] — 2026-04-24
+
+### Added — Sales (feature/sales-stats-enhancement)
+
+- **카테고리별 매출 비중** — `GET /api/stats/category-breakdown` 신규. 이번달 카테고리별 금액·비중(%) 집계. RevenueStatsPanel에 가로 바 차트로 표시.
+- **시간대별 매출** — `GET /api/stats/hourly` 신규. `created_at` KST 변환 후 0~23시별 합산, 피크 시간대 표시. 새벽·오전·점심·오후·저녁·심야 6구간 색상 구분 차트.
+- **요일별 매출 패턴** — 최근 8주 요일별 평균 수평 바 차트. 최고 요일 주황 강조 + "최근 8주 기준" 명시. 시간대별 매출 하단 독립 섹션으로 배치.
+- **나 vs 과거의 나 — AI 벤치마킹 전면 개편**
+  - `GET /api/stats/available-compare-periods` 신규 — 보유 데이터 기간 기반 비교 가능 기간 목록 (실제 연월 표시, 데이터 부족 ⚠️ 경고 포함)
+  - `GET /api/stats/personal-benchmark` 개편 — `compare_months_ago` 파라미터로 비교 기간 선택, 요일 패턴 집계 윈도우 adaptive 처리
+  - `GET /api/stats/benchmark-insight` 고도화 — 매출·비용·순이익·메뉴 TOP3·카테고리·목표 달성률 종합 데이터를 GPT-4o-mini에 전달, JSON 구조화 분석 출력 (`summary` / `highlights` 3항목 / `action`)
+  - 비교 기간 드롭박스 — 선택 시 비교 카드·AI 분석 즉시 재조회
+  - AI 인사이트 카드 — ✅ 잘 된 점 / ⚠️ 주의할 점 / 💡 발견한 패턴 타입별 소제목 + 배경색 구분
+  - 성장 단계 배지 — 🌱 창업 초기 / 📈 성장 중 / 💪 안정 운영 (데이터 보유 기간 기준)
+  - 평가 단계 기준 안내 — 접기/펼치기 토글, 현재 단계 강조 표시
+  - 전년 동월 비교 안내 팁 — 계절 요인 설명 + 1년치 미보유 시 활성화 안내
+- **통계 섹션 순서 재구성** — 이번달 목표 → 일별 매출 → 카테고리 비중 → 시간대별 → 요일 패턴 → 나 vs 과거의 나
+
+### Changed
+
+- `GET /api/stats/personal-benchmark` — 응답 포맷 변경 (`vs_last_month`/`vs_last_year` → `vs_compare` 단일 비교, `dow_reliable` 추가)
+- LangSmith `@traceable` 데코레이터 — `stats.benchmark_insight.llm` run 추적 추가
+- AI 분석 모델 — GPT-4o → **GPT-4o-mini** 변경 (비용 절감)
+
+### Fixed
+
+- 비교 기간 드롭박스 변경 시 재조회 미동작 버그 수정 (`prevPeriodRef` 방식으로 교체)
+- `personal-benchmark` 에러 시 `raise HTTPException` 대신 빈 데이터 반환으로 graceful 처리
+
+---
+
 ## [2.4.0] — 2026-04-24
 
 ### Added

@@ -38,6 +38,7 @@ import {
 } from "@/components/chat/MenuAnalysisCard";
 import { RevenueStatsPanel } from "@/components/sales/RevenueStatsPanel";
 import MenuListPanel from "@/components/sales/MenuListPanel";
+import { PriceStrategyView } from "@/components/sales/PriceStrategyView";
 import {
   SalesInsightCard,
   type SalesInsightPayload,
@@ -188,6 +189,7 @@ const MARKETING_RICH_TYPES = new Set([
   "shorts_video",
   "job_posting_set",
   "job_posting_poster",
+  "event_poster",
 ]);
 
 const HASHTAG_LINE_RE = /^(#[\w가-힣A-Za-z]+\s*)+$/;
@@ -732,6 +734,287 @@ const Toggle = ({
   </button>
 );
 
+type ApplicantData = {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  age?: number | null;
+  address?: string | null;
+  desired_position?: string | null;
+  desired_salary?: string | null;
+  introduction?: string | null;
+  education?: {
+    school?: string;
+    major?: string;
+    degree?: string;
+    year?: string;
+  }[];
+  experience?: {
+    company?: string;
+    role?: string;
+    period?: string;
+    description?: string;
+  }[];
+  projects?: {
+    name?: string;
+    role?: string;
+    period?: string;
+    tech_stack?: string;
+    description?: string;
+  }[];
+  training?: {
+    institution?: string;
+    course?: string;
+    period?: string;
+    description?: string;
+  }[];
+  skills?: string[];
+  certifications?: string[];
+};
+
+const InterviewQuestionsPanel = ({
+  content,
+  resumeId,
+  accountId,
+}: {
+  content: string;
+  resumeId?: string;
+  accountId: string | null;
+}) => {
+  const [view, setView] = useState<"questions" | "resume">("questions");
+  const [applicant, setApplicant] = useState<ApplicantData | null>(null);
+  const [fileName, setFileName] = useState<string>("");
+  const [loadingResume, setLoadingResume] = useState(false);
+
+  useEffect(() => {
+    if (!resumeId || !accountId) return;
+    setLoadingResume(true);
+    const sb = createClient();
+    sb.from("resumes")
+      .select("file_name, applicant")
+      .eq("id", resumeId)
+      .eq("account_id", accountId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setApplicant(data.applicant as ApplicantData);
+          setFileName(data.file_name ?? "");
+        }
+        setLoadingResume(false);
+      });
+  }, [resumeId, accountId]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {resumeId && (
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setView("questions")}
+            className={cn(
+              "rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors",
+              view === "questions"
+                ? "bg-[#030303] text-white"
+                : "border border-[#030303]/20 text-[#030303]/60 hover:border-[#030303]/40",
+            )}
+          >
+            질문 보기
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("resume")}
+            className={cn(
+              "rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors",
+              view === "resume"
+                ? "bg-[#030303] text-white"
+                : "border border-[#030303]/20 text-[#030303]/60 hover:border-[#030303]/40",
+            )}
+          >
+            이력서 파싱결과
+          </button>
+        </div>
+      )}
+
+      {view === "questions" ? (
+        <MarkdownMessage
+          content={content}
+          className="text-[13px] text-[#030303]"
+        />
+      ) : loadingResume ? (
+        <p className="text-[12px] text-[#030303]/40">불러오는 중…</p>
+      ) : !applicant ? (
+        <p className="text-[12px] text-[#030303]/40">
+          이력서 데이터를 찾을 수 없습니다.
+        </p>
+      ) : (
+        <ResumeDataTable applicant={applicant} fileName={fileName} />
+      )}
+    </div>
+  );
+};
+
+const ResumeDataTable = ({
+  applicant: a,
+  fileName,
+}: {
+  applicant: ApplicantData;
+  fileName: string;
+}) => {
+  const basicRows: { label: string; value: string }[] = [
+    { label: "이름", value: a.name ?? "" },
+    { label: "연락처", value: a.phone ?? "" },
+    { label: "이메일", value: a.email ?? "" },
+    { label: "나이", value: a.age != null ? String(a.age) : "" },
+    { label: "주소", value: a.address ?? "" },
+    { label: "희망직종", value: a.desired_position ?? "" },
+    { label: "희망급여", value: a.desired_salary ?? "" },
+    {
+      label: "학력",
+      value: (a.education ?? [])
+        .map((e) =>
+          [e.school, e.major, e.degree, e.year].filter(Boolean).join(" "),
+        )
+        .join(" / "),
+    },
+    { label: "기술스택", value: (a.skills ?? []).join(", ") },
+    { label: "자격증", value: (a.certifications ?? []).join(", ") },
+  ].filter((r) => r.value);
+
+  const intro = (a.introduction ?? "").trim();
+  const exp = a.experience ?? [];
+  const projects = a.projects ?? [];
+  const training = a.training ?? [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {fileName && <p className="text-[11px] text-[#030303]/40">{fileName}</p>}
+      <table className="w-full border-collapse text-[12.5px]">
+        <tbody>
+          {basicRows.map((r) => (
+            <tr key={r.label} className="border-b border-[#030303]/8">
+              <td className="w-24 py-1.5 pr-3 font-medium text-[#030303]/50">
+                {r.label}
+              </td>
+              <td className="py-1.5 text-[#030303]">{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {intro && (
+        <div>
+          <p className="mb-1 text-[11.5px] font-semibold text-[#030303]/60">
+            자기소개
+          </p>
+          <p className="text-[12.5px] leading-relaxed text-[#030303]/80">
+            {intro}
+          </p>
+        </div>
+      )}
+
+      {exp.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11.5px] font-semibold text-[#030303]/60">
+            경력
+          </p>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-[#030303]/15 text-left text-[11px] text-[#030303]/50">
+                <th className="pb-1 pr-3 font-medium">회사</th>
+                <th className="pb-1 pr-3 font-medium">직무</th>
+                <th className="pb-1 pr-3 font-medium">기간</th>
+                <th className="pb-1 font-medium">주요 업무</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exp.map((e, i) => (
+                <tr key={i} className="border-b border-[#030303]/8">
+                  <td className="py-1.5 pr-3 font-medium text-[#030303]">
+                    {e.company}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/70">{e.role}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-[#030303]/50">
+                    {e.period}
+                  </td>
+                  <td className="py-1.5 text-[#030303]/70">{e.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11.5px] font-semibold text-[#030303]/60">
+            프로젝트
+          </p>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-[#030303]/15 text-left text-[11px] text-[#030303]/50">
+                <th className="pb-1 pr-3 font-medium">프로젝트명</th>
+                <th className="pb-1 pr-3 font-medium">역할</th>
+                <th className="pb-1 pr-3 font-medium">기간</th>
+                <th className="pb-1 pr-3 font-medium">기술스택</th>
+                <th className="pb-1 font-medium">내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p, i) => (
+                <tr key={i} className="border-b border-[#030303]/8">
+                  <td className="py-1.5 pr-3 font-medium text-[#030303]">
+                    {p.name}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/70">{p.role}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-[#030303]/50">
+                    {p.period}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/50">
+                    {p.tech_stack}
+                  </td>
+                  <td className="py-1.5 text-[#030303]/70">{p.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {training.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11.5px] font-semibold text-[#030303]/60">
+            교육수료
+          </p>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-[#030303]/15 text-left text-[11px] text-[#030303]/50">
+                <th className="pb-1 pr-3 font-medium">기관</th>
+                <th className="pb-1 pr-3 font-medium">과정</th>
+                <th className="pb-1 pr-3 font-medium">기간</th>
+                <th className="pb-1 font-medium">내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {training.map((t, i) => (
+                <tr key={i} className="border-b border-[#030303]/8">
+                  <td className="py-1.5 pr-3 font-medium text-[#030303]">
+                    {t.institution}
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#030303]/70">{t.course}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-[#030303]/50">
+                    {t.period}
+                  </td>
+                  <td className="py-1.5 text-[#030303]/70">{t.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const NodeDetailModal = () => {
   const { currentId, employeeCtx, closeDetail, openDetail } = useNodeDetail();
   const open = currentId !== null;
@@ -795,16 +1078,18 @@ export const NodeDetailModal = () => {
   const [savingRecord, setSavingRecord] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
-  // Auth hydration (once)
+  // Auth hydration — 모달이 열릴 때마다 재확인 (계정 전환 시 stale 방지)
   useEffect(() => {
-    const run = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setAccountId(user?.id ?? null);
-    };
-    run();
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setAccountId(data.user?.id ?? null);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => {
+      setAccountId(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const reload = useCallback(async () => {
@@ -907,6 +1192,10 @@ export const NodeDetailModal = () => {
   }, [artifact]);
 
   const [downloading, setDownloading] = useState(false);
+  const [menuTotal, setMenuTotal] = useState<number | null>(null);
+
+  // artifact 바뀔 때 menuTotal 초기화 (이전 모달 값 잔류 방지)
+  useEffect(() => { setMenuTotal(null); }, [artifact?.id]);
   const downloadAttachment = useCallback(async () => {
     if (!attachment) return;
     setDownloading(true);
@@ -1191,7 +1480,7 @@ export const NodeDetailModal = () => {
     <Modal
       open={open}
       onClose={closeDetail}
-      title={artifact?.title ?? "Loading..."}
+      title={artifact?.type === "menu_list" && menuTotal !== null ? `메뉴판(${menuTotal}개)` : (artifact?.title ?? "Loading...")}
       widthClass="w-[min(1120px,95vw)]"
       variant="dashboard"
     >
@@ -1292,7 +1581,7 @@ export const NodeDetailModal = () => {
                 {/* MENU LIST 패널 — menu_list artifact 카드 클릭 시 표시 */}
                 {artifact.type === "menu_list" && accountId && (
                   <Section>
-                    <MenuListPanel accountId={accountId} />
+                    <MenuListPanel accountId={accountId} onTotalChange={setMenuTotal} />
                   </Section>
                 )}
 
@@ -1389,6 +1678,28 @@ export const NodeDetailModal = () => {
                                 meta={meta}
                               />
                             );
+                          if (t === "event_poster") {
+                            const publicUrl =
+                              typeof meta?.public_url === "string"
+                                ? meta.public_url
+                                : "";
+                            return publicUrl ? (
+                              <iframe
+                                src={publicUrl}
+                                title="이벤트 포스터 미리보기"
+                                className="w-full rounded border border-[#030303]/10 bg-white"
+                                style={{ height: "600px" }}
+                              />
+                            ) : (
+                              <iframe
+                                srcDoc={raw}
+                                title="이벤트 포스터 미리보기"
+                                className="w-full rounded border border-[#030303]/10 bg-white"
+                                style={{ height: "600px" }}
+                                sandbox="allow-same-origin"
+                              />
+                            );
+                          }
                           return null;
                         })()
                       ) : artifact.type === "sales_report" &&
@@ -1397,6 +1708,18 @@ export const NodeDetailModal = () => {
                           payload={
                             artifact.metadata.menu_chart as MenuAnalysisPayload
                           }
+                        />
+                      ) : artifact.type === "price_strategy" ? (
+                        <PriceStrategyView content={artifact.content ?? ""} />
+                      ) : artifact.type === "interview_questions" ? (
+                        <InterviewQuestionsPanel
+                          content={artifact.content ?? ""}
+                          resumeId={
+                            typeof meta?.resume_id === "string"
+                              ? meta.resume_id
+                              : undefined
+                          }
+                          accountId={accountId}
                         />
                       ) : artifact.content ? (
                         <MarkdownMessage

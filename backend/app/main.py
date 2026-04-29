@@ -27,6 +27,7 @@ for _noisy in ("httpx", "httpcore", "huggingface_hub", "sentence_transformers",
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 from app.routers import (
     activity,
+    admin,
     artifacts,
     auth,
     chat,
@@ -36,16 +37,20 @@ from app.routers import (
     dm_campaigns,
     docx,
     evaluations,
+    integrations,
     kanban,
     marketing,
     memory,
     menus,
     memos,
+    notifications,
+    payment,
     pos,
     recruitment,
     reviews,
     sales,
     schedules,
+    slack,
     stats,
     search,
     subsidies,
@@ -66,6 +71,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(integrations.router)
+app.include_router(payment.router)
 app.include_router(comments.router)
 app.include_router(dm_campaigns.router)
 app.include_router(activity.router)
@@ -91,6 +98,9 @@ app.include_router(stats.router)
 app.include_router(employees_router)
 app.include_router(work_records_router)
 app.include_router(docx.router)
+app.include_router(admin.router)
+app.include_router(slack.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")
