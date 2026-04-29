@@ -807,17 +807,23 @@ async def run_parse_receipt(
     """
     log.info("[SALES] run_parse_receipt 진입 | account=%s", account_id)
     from app.agents._sales_context import get_pending_receipt
-    from app.agents._sales._ocr import parse_receipt_from_storage
+    from app.agents._sales._ocr_receipt_graph import run_receipt_ocr_graph
+    from app.core.supabase import get_supabase as _get_sb_receipt
 
     pending = get_pending_receipt()
     if not pending or not pending.get("storage_path"):
         return "영수증 이미지가 아직 도착하지 않았어요. 다시 업로드해 주시겠어요?"
 
-    parsed = await parse_receipt_from_storage(
-        storage_path=pending["storage_path"],
-        bucket=pending.get("bucket") or "documents-uploads",
-        mime_type=pending.get("mime_type") or "image/jpeg",
-    )
+    _sb_r = _get_sb_receipt()
+    _mime_r = pending.get("mime_type") or "image/jpeg"
+    _bucket_r = pending.get("bucket") or "documents-uploads"
+    _path_r = pending["storage_path"]
+    try:
+        _dl_r = _sb_r.storage.from_(_bucket_r).download(_path_r)
+        _file_bytes_r = bytes(_dl_r) if isinstance(_dl_r, (bytes, bytearray)) else bytes(getattr(_dl_r, "data", b""))
+    except Exception:
+        return "영수증 이미지를 불러오지 못했어요. 다시 업로드해서 시도해주세요."
+    parsed = await run_receipt_ocr_graph(_file_bytes_r, _mime_r)
     items = parsed.get("items") or []
     kind = parsed.get("type") or "sales"
     today = date.today().isoformat()
@@ -1101,7 +1107,7 @@ async def run_menu_ocr(
 ) -> str:
     from app.agents._sales_context import get_pending_receipt
     from app.agents._upload_context import get_pending_upload
-    from app.agents._sales._ocr import parse_menu_from_bytes
+    from app.agents._sales._ocr_menu_graph import run_menu_ocr_graph
     from app.agents._sales._menu_manager import upsert_menu, upsert_menu_list_artifact, list_menus_with_profit
     from app.core.supabase import get_supabase
 
@@ -1144,7 +1150,7 @@ async def run_menu_ocr(
         return "이미지를 불러오지 못했어요. 다시 업로드해서 시도해주세요."
 
     # GPT-4o Vision으로 메뉴 추출
-    menus = await parse_menu_from_bytes(file_bytes, mime_type=mime)
+    menus = await run_menu_ocr_graph(file_bytes, mime_type=mime)
     if not menus:
         return (
             "메뉴판에서 메뉴를 인식하지 못했어요.\n"
