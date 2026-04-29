@@ -1192,6 +1192,10 @@ export const NodeDetailModal = () => {
   }, [artifact]);
 
   const [downloading, setDownloading] = useState(false);
+  const [menuTotal, setMenuTotal] = useState<number | null>(null);
+
+  // artifact 바뀔 때 menuTotal 초기화 (이전 모달 값 잔류 방지)
+  useEffect(() => { setMenuTotal(null); }, [artifact?.id]);
   const downloadAttachment = useCallback(async () => {
     if (!attachment) return;
     setDownloading(true);
@@ -1476,7 +1480,7 @@ export const NodeDetailModal = () => {
     <Modal
       open={open}
       onClose={closeDetail}
-      title={artifact?.title ?? "Loading..."}
+      title={artifact?.type === "menu_list" && menuTotal !== null ? `메뉴판(${menuTotal}개)` : (artifact?.title ?? "Loading...")}
       widthClass="w-[min(1120px,95vw)]"
       variant="dashboard"
     >
@@ -1577,7 +1581,7 @@ export const NodeDetailModal = () => {
                 {/* MENU LIST 패널 — menu_list artifact 카드 클릭 시 표시 */}
                 {artifact.type === "menu_list" && accountId && (
                   <Section>
-                    <MenuListPanel accountId={accountId} />
+                    <MenuListPanel accountId={accountId} onTotalChange={setMenuTotal} />
                   </Section>
                 )}
 

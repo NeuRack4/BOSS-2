@@ -5,6 +5,8 @@ list_menus_with_profit : 메뉴 목록 + 마진율 계산
 """
 from __future__ import annotations
 
+from datetime import date
+
 from app.core.supabase import get_supabase
 
 # ── 카테고리 자동 분류 키워드 ──────────────────────────────────────────────────
@@ -177,20 +179,10 @@ async def upsert_menu_list_artifact(account_id: str, menus: list[dict]) -> str |
         log.warning("[_menu_manager] Pricing 허브 조회 실패: %s", e)
         return None
 
-    # artifact content 구성 (마크다운)
+    # artifact content 구성 — 한 줄 요약 (상세는 MenuListPanel에서 실시간 표시)
     total = len(menus)
-    lines = [f"## 📋 메뉴판 ({total}개)\n"]
-    by_cat: dict[str, list] = {}
-    for m in menus:
-        by_cat.setdefault(m["category"], []).append(m)
-    for cat, items in by_cat.items():
-        lines.append(f"\n**{cat}**")
-        for m in items:
-            margin = (
-                f" — 마진 {m['margin_rate']}%" if m.get("margin_rate") is not None else ""
-            )
-            lines.append(f"- {m['name']}: {m['price']:,}원{margin}")
-    content = "\n".join(lines)
+    today = date.today().strftime("%Y-%m-%d")
+    content = f"📋 총 {total}개 메뉴 등록됨 · 마지막 업데이트: {today}"
     title = f"메뉴판 ({total}개)"
 
     # 기존 menu_list artifact 확인 (upsert)

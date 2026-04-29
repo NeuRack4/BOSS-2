@@ -178,26 +178,33 @@ export function CostTab({ overview, onChatMessage }: Props) {
         costsTotal={overview.costs.total}
       />
 
-      {/* 비용 전월 비교 */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
-        <CompareBar
-          label="비용"
-          current={overview.costs.total}
-          prev={overview.costs.prev_total}
-          higherIsBetter={false}
-        />
-        {overview.costs.total > 0 && overview.profit.total !== undefined && (
-          <>
-            <div className="border-t border-slate-100" />
-            <CompareBar
-              label="순이익"
-              current={overview.profit.total}
-              prev={overview.profit.prev_total}
-              higherIsBetter={true}
+      {/* 비용 전월 비교 — 전월 데이터 없으면 안내 메시지 */}
+      {overview.costs.prev_total > 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+          <CompareBar
+            label="비용"
+            current={overview.costs.total}
+            prev={overview.costs.prev_total}
+            higherIsBetter={false}
+          />
+          {overview.costs.total > 0 && overview.profit.total !== undefined && (
+            <>
+              <div className="border-t border-slate-100" />
+              <CompareBar
+                label="순이익"
+                current={overview.profit.total}
+                prev={overview.profit.prev_total}
+                higherIsBetter={true}
             />
           </>
         )}
-      </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+          <p className="text-sm text-slate-500">📅 전월 비교 데이터가 없어요</p>
+          <p className="mt-1 text-xs text-slate-400">비용을 기록하면 다음달부터 전월 비교가 가능해요</p>
+        </div>
+      )}
 
       {/* 챗 CTA */}
       <button
