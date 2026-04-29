@@ -61,7 +61,9 @@ export function ReviewReplyFormCard({
         }
       }
     } catch {
-      setAnalyzeError("이미지 분석에 실패했어요. 리뷰 내용을 직접 입력해주세요.");
+      setAnalyzeError(
+        "이미지 분석에 실패했어요. 리뷰 내용을 직접 입력해주세요.",
+      );
     } finally {
       setAnalyzing(false);
     }

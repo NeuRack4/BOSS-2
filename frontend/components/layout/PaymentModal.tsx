@@ -70,10 +70,13 @@ const PLANS = [
 ] as const;
 
 /* ── 채널 키 (정적 접근 필수 — Next.js 브라우저에서 동적 process.env[key] 불가) */
-const CARD_CHANNEL_KEY     = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD     ?? "";
-const KAKAOPAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY ?? "";
-const TOSSPAY_CHANNEL_KEY  = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_TOSSPAY  ?? "";
-const PAYCO_CHANNEL_KEY    = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_PAYCO    ?? "";
+const CARD_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD ?? "";
+const KAKAOPAY_CHANNEL_KEY =
+  process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY ?? "";
+const TOSSPAY_CHANNEL_KEY =
+  process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_TOSSPAY ?? "";
+const PAYCO_CHANNEL_KEY =
+  process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_PAYCO ?? "";
 
 /* ── 결제 수단 (일반결제 requestPayment — 자동결제 아님) ─────────────────── */
 const PAYMENT_METHODS = [

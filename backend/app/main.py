@@ -27,6 +27,7 @@ for _noisy in ("httpx", "httpcore", "huggingface_hub", "sentence_transformers",
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 from app.routers import (
     activity,
+    admin,
     artifacts,
     auth,
     chat,
@@ -95,6 +96,7 @@ app.include_router(stats.router)
 app.include_router(employees_router)
 app.include_router(work_records_router)
 app.include_router(docx.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

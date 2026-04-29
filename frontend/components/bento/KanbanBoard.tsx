@@ -206,7 +206,12 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
           )}
           {(domain === "sales"
             ? (() => {
-                const SALES_HUB_ORDER = ["Revenue", "Costs", "Pricing", "Reports"];
+                const SALES_HUB_ORDER = [
+                  "Revenue",
+                  "Costs",
+                  "Pricing",
+                  "Reports",
+                ];
                 return [...board.sub_hubs]
                   .filter((h) => SALES_HUB_ORDER.includes(h.title))
                   .sort(
@@ -216,17 +221,22 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
                   );
               })()
             : domain === "marketing"
-            ? (() => {
-                const MARKETING_HUB_ORDER = ["Social", "Blog", "YouTube Shorts", "성과 분석"];
-                return [...board.sub_hubs]
-                  .filter((h) => MARKETING_HUB_ORDER.includes(h.title))
-                  .sort(
-                    (a, b) =>
-                      MARKETING_HUB_ORDER.indexOf(a.title) -
-                      MARKETING_HUB_ORDER.indexOf(b.title),
-                  );
-              })()
-            : board.sub_hubs
+              ? (() => {
+                  const MARKETING_HUB_ORDER = [
+                    "Social",
+                    "Blog",
+                    "YouTube Shorts",
+                    "성과 분석",
+                  ];
+                  return [...board.sub_hubs]
+                    .filter((h) => MARKETING_HUB_ORDER.includes(h.title))
+                    .sort(
+                      (a, b) =>
+                        MARKETING_HUB_ORDER.indexOf(a.title) -
+                        MARKETING_HUB_ORDER.indexOf(b.title),
+                    );
+                })()
+              : board.sub_hubs
           ).map((h) =>
             domain === "recruitment" && h.title === "Managing" ? (
               <div

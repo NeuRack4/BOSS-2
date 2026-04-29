@@ -1,8 +1,12 @@
 # BOSS-2
 
-![version](https://img.shields.io/badge/version-3.0.0-blue)
+![version](https://img.shields.io/badge/version-3.7.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 채팅 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
+
+![Architecture](docs/architectures.png)
+![Dashboard](docs/dashboard-layout-1.png)
+![Domain Layout](docs/domain-layout.png)
 
 ## Overview
 
@@ -82,6 +86,16 @@ Celery Beat (60s tick) → 자율 실행 / D-7·D-3·D-1·D-0 알림
 - **행정 신청서** — 행정 처리 서류 자동 초안
 - **문서 타입 11종** — contract · estimate · proposal · notice · checklist · guide · subsidy_application · admin_application · hr_evaluation · payroll_doc · tax_calendar
 
+### 어드민 (Admin)
+
+- **`is_admin` 접근 제어** — `profiles.is_admin = true` 계정에만 `/admin` 페이지 접근 허용. `require_admin` FastAPI 의존성으로 서버 측 가드.
+- **전역 AdminFab** — 어드민 계정 로그인 시 우하단에 FAB 버튼 노출, `/admin`으로 이동.
+- **유저 탭** — 전체 가입자 목록 + 계정별 활성 스케줄 수 조회.
+- **결제 탭** — 구독 플랜·결제 내역 전체 조회.
+- **통계 탭** — 플랫폼 전체 artifact 수·도메인별 breakdown·매출/비용 합계.
+- **LLM 코스트 탭** — Langsmith API 연동, 계정별 토큰 사용량·비용 집계.
+- **Roboto 폰트 + 전용 디자인 시스템** — 어드민 전용 typography, border-radius 5px, 대형 폰트.
+
 ### 메모리 & RAG
 
 - **단기 메모리** — Upstash Redis, 20턴 초과 시 GPT-4o-mini 자동 압축
@@ -118,14 +132,15 @@ BOSS-2/
 │   │   ├── marketing/               # 마케팅 Kanban
 │   │   ├── sales/                   # 매출 Kanban
 │   │   ├── documents/               # 서류 Kanban
-│   │   └── providers.tsx            # ChatProvider + NodeDetailProvider
+│   │   ├── admin/                   # 어드민 페이지 (탭 4개)
+│   │   └── providers.tsx            # ChatProvider + NodeDetailProvider + AdminFab
 │   ├── components/
 │   │   ├── bento/                   # BentoGrid · ChatCenterCard · DomainCard
 │   │   │                            # KanbanBoard · ProfileMemorySidebar · ScheduleCard
 │   │   ├── chat/                    # InlineChat · ChatContext · 카드 렌더러 20+종
 │   │   ├── detail/                  # NodeDetailContext + NodeDetailModal
 │   │   ├── employees/               # 직원 관리 UI
-│   │   ├── layout/                  # Header + 모달 6종
+│   │   ├── layout/                  # Header + 모달 6종 + AdminFab
 │   │   ├── sales/                   # 매출 전용 컴포넌트
 │   │   ├── search/                  # SearchPalette (⌘K)
 │   │   └── ui/                      # shadcn/ui + Modal

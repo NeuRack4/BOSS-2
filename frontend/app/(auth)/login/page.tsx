@@ -93,7 +93,10 @@ export default function LoginPage() {
     <div
       className={`${interTight.variable} ${jetbrainsMono.variable} boss-signin`}
     >
-      <PricingPreviewModal open={pricingOpen} onClose={() => setPricingOpen(false)} />
+      <PricingPreviewModal
+        open={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+      />
       <style>{SIGNIN_CSS}</style>
 
       <header className="topbar">
@@ -111,7 +114,20 @@ export default function LoginPage() {
         <nav>
           <a href="#">Docs</a>
           <a href="#">Status</a>
-          <button type="button" onClick={() => setPricingOpen(true)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "var(--muted)" }}>Pricing</button>
+          <button
+            type="button"
+            onClick={() => setPricingOpen(true)}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              font: "inherit",
+              color: "var(--muted)",
+            }}
+          >
+            Pricing
+          </button>
           <a href="#">Contact</a>
           <Link href="/signup" className="signup">
             Create account →

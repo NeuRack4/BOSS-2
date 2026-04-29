@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] — 2026-04-28
+
+### Added — Admin: 어드민 페이지 (`/admin`)
+
+- **`profiles.is_admin` 컬럼** (`supabase/migrations/040_admin_flag.sql`) — `profiles` 테이블에 `is_admin boolean default false` 추가. DB에서 직접 `UPDATE`로 권한 부여.
+- **`/api/admin/*` 라우터** (`backend/app/routers/admin.py`) — `require_admin` FastAPI 의존성으로 is_admin 검증. service_role key로 전 계정 데이터 조회.
+  - `GET /api/admin/users` — 전체 가입자 목록 + 계정별 활성 스케줄 수.
+  - `GET /api/admin/stats` — 플랫폼 전체 artifact 수·도메인별 breakdown·매출/비용 합계.
+  - `GET /api/admin/costs` — Langsmith API 연동 계정별 LLM 토큰 사용량·비용 집계.
+  - `GET /api/admin/payments` — 전체 구독 플랜·결제 내역 조회.
+- **`useIsAdmin` 훅** (`frontend/hooks/useIsAdmin.ts`) — Supabase에서 `is_admin` 필드를 조회해 boolean 반환.
+- **`AdminFab` 컴포넌트** (`frontend/components/layout/AdminFab.tsx`) — `isAdmin=true` 계정 로그인 시 우하단 FAB 버튼 렌더링, `/admin` 페이지로 이동.
+- **`providers.tsx` 마운트** — `AdminFab`을 앱 전역에 한 번 마운트.
+- **어드민 메인 페이지** (`frontend/app/admin/page.tsx`) — 헤더 + stat 카드(총 유저·활성 구독·이번 달 결제·LLM 비용) + 탭 4개(Users / Payments / Stats / LLM Costs).
+
+### Fixed — Admin: 버그 수정 및 스타일 개선
+
+- **`list_users` 응답 타입 수정** — 헤더 스타일 사용자 페이지 통일.
+- **React Fragment key 오류 수정** — StatsTab `key` prop 누락 해결.
+- **stats kind filter 수정** — 도메인별 artifact 집계 필터 로직 수정.
+- **StatsTab unused prop 제거** — TypeScript 경고 해결.
+- **Langsmith `start_time` datetime 객체 전달** — 문자열 대신 `datetime` 타입으로 수정해 SDK 호환성 확보.
+
+### Style — Admin: 디자인 시스템
+
+- **Roboto 폰트 적용** — Google Fonts CDN으로 Roboto 300/400/500/700 로드, 어드민 전체 적용.
+- **영문 UI 텍스트** — 레이블·헤더·버튼 전체 영문 통일.
+- **테두리 제거·대형 폰트·border-radius 5px** — 어드민 전용 디자인 토큰 적용.
+
+---
+
+## [3.6.0] — 2026-04-28
+
+### Added — Marketing: 마케팅 상세 페이지 (`/marketing`)
+
+- **마케팅 전용 상세 페이지** (`frontend/app/marketing/page.tsx`) — 기존 도메인 페이지를 `MarketingPageLayout`으로 교체. 마케팅 대시보드를 전체 페이지로 확장.
+- **`MarketingDashboard` 컴포넌트** (`frontend/components/marketing/MarketingDashboard.tsx`) — 4개 탭(개요·인스타·유튜브·할 일) 전환 UI. 탭별 고유 색상 적용(개요=slate, 인스타=pink, 유튜브=red, 할 일=orange). 접힌 상태 미니바(팔로워·도달수·구독자 순증 요약) 지원.
+- **`OverviewTab`** — Instagram(pink)·YouTube(red) 플랫폼 칩 색상 분리. KPI 카드 그리드(팔로워·도달·인상·참여 / 조회·시청·구독·좋아요). "AI 성과 분석 보기" 버튼 → 인라인 분석 패널 전환.
+- **`AnalysisPanel`** — LLM 분석 텍스트(violet 카드) + YouTube 일별 조회수·시청시간 표 + Instagram 일별 도달수 표. 전일 대비 ↑↓ 증감·백분율 표시.
+- **`InstagramTab`** — 계정 KPI + 상위 게시물 목록.
+- **`YoutubeTab`** — 채널 KPI + 상위 동영상 목록. YouTube 미연결 시 OAuth 연결 안내.
+- **`ActionsTab`** — lazy 로딩 액션 아이템 목록(이미 구현된 `MarketingReportCard`와 동일 포맷).
+- **`useMarketingData` 훅** (`frontend/components/marketing/hooks/useMarketingData.ts`) — dashboard·actions·analysis 3개 엔드포인트 lazy fetch 상태 관리.
+- **공유 타입** (`frontend/components/marketing/types.ts`) — `DailyYoutubeData`, `DailyInstagramData`, `MarketingAnalysis`, `MarketingDashboardState` 등 인터페이스 정의.
+
+### Added — Marketing Backend: 대시보드 API 엔드포인트
+
+- **`GET /api/marketing/dashboard`** — Instagram + YouTube 데이터를 병렬(`asyncio.gather`) 조회해 LLM 없이 즉시 반환.
+- **`GET /api/marketing/dashboard/actions`** — lazy 호출 시 GPT-4o로 액션 아이템 JSON 생성 후 반환.
+- **`GET /api/marketing/dashboard/analysis`** — YouTube 일별(`dimensions=day`) + Instagram 일별 도달 데이터를 병렬 조회 후 GPT-4o 분석 텍스트 생성 반환.
+- **`get_daily_analytics()`** (`backend/app/services/youtube_analytics.py`) — YouTube Analytics API `dimensions=day` 파라미터로 일별 조회수·시청시간 배열 반환.
+- **`get_daily_reach()`** (`backend/app/services/instagram_insights.py`) — 기존 `period=day` API 응답에서 일별 도달수 배열 추출.
+
+---
+
+## [3.5.0] — 2026-04-28
+
+### Added — Marketing: 성과 리포트 프로액티브 할 일 탭
+
+- **할 일 탭 신설** (`frontend/components/chat/MarketingReportCard.tsx`) — 마케팅 성과 리포트 카드에 "할 일" 탭 추가. 사용자가 묻기 전에 AI가 먼저 우선순위별 실행 아이템을 제안.
+- **구조화된 액션 아이템** — 각 할 일은 타겟층·실행 기간·구체적 아이디어·단계별 실행 방법·기대 효과·데이터 기반 이유 7개 필드로 구성. 클릭 시 상세 내용 펼침.
+- **기념일 연계 이벤트 자동 제안** (`backend/app/agents/marketing.py`) — `_get_upcoming_holidays()` 헬퍼 추가. 오늘 기준 60일 이내 기념일(어린이날·어버이날·추석·설날·크리스마스 등 14종)을 자동 계산해 프롬프트에 주입. 기념일이 있으면 해당 날짜 맞춤 이벤트를 우선 제안.
+- **우선순위 그룹 분리** — 이번 주(high) / 그 다음(medium·low) 섹션으로 분리 표시. 왼쪽 accent border 색상으로 우선순위 시각화.
+- **할 일 탭 기본 선택** — 리포트 카드 오픈 시 할 일 탭이 첫 번째로 표시.
+
+### Improved — Marketing: 성과 리포트 AI 분석 품질 향상
+
+- **액션 아이템 LLM 병렬 생성** — 분석 텍스트와 액션 아이템을 `asyncio.gather`로 동시에 생성해 응답 지연 최소화.
+- **JSON 파싱 강화** — 정규식 기반 코드 블록 추출 + 배열 직접 추출 fallback 추가. 파싱 실패 시 상세 로그 출력.
+- **플랫폼 미연결 시에도 액션 생성** — Instagram·YouTube 미연결 상태에서도 콘텐츠 전략·이벤트 기획 등 일반 마케팅 액션 3개 이상 보장.
+
+### Fixed — Instagram Insights: Graph API v18+ 호환성
+
+- **계정 인사이트 0 반환 수정** (`backend/app/services/instagram_insights.py`) — Graph API v18+ 이후 `values[]` 배열 → `total_value.value` 단일 값으로 응답 포맷 변경에 대응. 두 포맷 모두 처리.
+- **engagement 지표 deprecated 대응** — v18+에서 deprecated된 `engagement` 지표를 `likes + comments + shares + saved` 합산으로 대체.
+- **Reels(VIDEO) 인사이트 오류 수정** — Reels는 `impressions` 지표 미지원으로 API 오류 발생. 미디어 타입별 요청 지표 분리 처리.
+- **에러 로깅 추가** — API 에러·파싱 오류를 `[instagram_insights]` 로거로 출력해 디버깅 가시성 확보.
+
+### Improved — Marketing: 할 일 탭 UI/UX
+
+- **컬러 배지 → 왼쪽 accent border** — 눈에 부담 없는 오렌지(이번 주)·회색(이번 달·여유) border로 우선순위 표시.
+- **SVG chevron 펼침 버튼** — ▲▼ 문자 → SVG chevron (회전 애니메이션 포함) 교체.
+- **단계 번호 원형 배지** — 실행 단계 번호를 `bg-neutral-100` 원형 배지로 표시해 가독성 개선.
+- **텍스트 크기 및 간격 정비** — 10px 남용 제거, 본문 13px·line-height 1.65, 섹션 간격 space-y-4.
+
 ## [3.4.0] — 2026-04-28
 
 ### Added — Marketing: 네이버 블로그 자동 업로드

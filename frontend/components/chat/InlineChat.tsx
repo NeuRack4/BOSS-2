@@ -1790,7 +1790,10 @@ export const InlineChat = () => {
                   )}
                   {naverBlogPayload && msg.role === "assistant" && (
                     <div className="flex justify-center w-full py-1">
-                      <NaverBlogPostCard payload={naverBlogPayload} accountId={userId} />
+                      <NaverBlogPostCard
+                        payload={naverBlogPayload}
+                        accountId={userId}
+                      />
                     </div>
                   )}
                   {reviewReplyPayload && msg.role === "assistant" && (
