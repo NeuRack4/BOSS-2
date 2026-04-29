@@ -32,7 +32,8 @@ export default function RootLayout({
       className={`${roboto.variable} ${robotoMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <Script id="ngrok-fetch-patch" strategy="beforeInteractive">{`
+      <body className="min-h-full flex flex-col bg-[#f2e9d5]">
+        <Script id="ngrok-fetch-patch" strategy="afterInteractive">{`
 (function(){
   var base="${apiUrl}";
   if(!base)return;
@@ -47,7 +48,6 @@ export default function RootLayout({
   };
 })();
 `}</Script>
-      <body className="min-h-full flex flex-col bg-[#f2e9d5]">
         <Providers>{children}</Providers>
       </body>
     </html>
