@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] — 2026-04-29
+
+### Fixed — Sales: 메뉴 원가 인라인 입력 저장 및 대시보드·모달 연동 개선
+
+- **원가 인라인 저장 오류 수정** (`MenuProfitTab.tsx`) — PATCH 요청에 `account_id` 누락으로 저장되지 않던 문제 수정. API 실패 시 에러 메시지 표시 추가.
+- **마진율 즉시 반영** (`MenuProfitTab.tsx`) — 원가 저장 성공 직후 `localCost` 로컬 상태 업데이트로 마진율(%) 및 마진 바 즉시 반영. 서버 re-fetch 전에도 정확한 값 표시.
+- **원가 금액 표시 추가** (`MenuListPanel.tsx`) — 메뉴판 모달에서 마진율 바 옆에 원가 금액(`원가 X,XXX원`) 표시.
+- **모달 메뉴 개수 동적 표시** (`MenuListPanel.tsx`, `NodeDetailModal.tsx`) — artifact title의 고정 개수 대신 실시간 메뉴 수로 제목 자동 갱신 (`onTotalChange` 콜백 연동).
+- **이벤트 이중 fetch 제거** (`useDashboardData.ts`, `MenuListPanel.tsx`) — 대시보드 fetch 완료마다 `menu-data-updated` 중복 dispatch하던 문제 제거. `MenuListPanel`에 `sales-data-saved` 리스너 추가로 챗봇 메뉴 변경 시 동기화 유지.
+- **메뉴판 artifact content 단순화** (`_menu_manager.py`) — 메뉴 전체 목록 나열 대신 총 개수·업데이트 날짜 한 줄 요약으로 변경.
+- **`MenuListPanel` 콜백 ref 패턴 적용** (`MenuListPanel.tsx`) — `onTotalChange`를 useCallback 의존성에서 제외해 불필요한 re-fetch 방지.
+
 ## [3.7.0] — 2026-04-28
 
 ### Added — Admin: 어드민 페이지 (`/admin`)
