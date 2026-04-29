@@ -33,30 +33,43 @@ function buildCategoryColorMap(menus: MenuItem[]): Record<string, string> {
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 // ── 메뉴 마진 행 (원가 인라인 입력 포함) ──────────────────────────────────────
-function MenuRow({ menu, maxMargin, categoryColorMap }: {
-  menu: MenuItem; maxMargin: number; categoryColorMap: Record<string, string>
+function MenuRow({ menu, maxMargin, categoryColorMap, accountId }: {
+  menu: MenuItem; maxMargin: number; categoryColorMap: Record<string, string>; accountId: string
 }) {
-  const rate = menu.margin_rate ?? 0
+  const [localCost, setLocalCost] = useState<number | null>(null)
+  const cost = localCost ?? menu.cost_price
+  const rate = cost > 0 && menu.price > 0
+    ? parseFloat(((menu.price - cost) / menu.price * 100).toFixed(1))
+    : (menu.margin_rate ?? 0)
+  const hasCost = cost > 0
   const color = MARGIN_COLOR(rate)
   const barPct = maxMargin > 0 ? (rate / maxMargin) * 100 : 0
-  const hasCost = menu.cost_price > 0
   const [editing, setEditing] = useState(false)
   const [costInput, setCostInput] = useState("")
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
 
   const saveCost = async () => {
     const val = parseInt(costInput.replace(/,/g, ""), 10)
     if (!val || val <= 0) return
     setSaving(true)
-    await fetch(`${API}/api/menus/${menu.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cost_price: val }),
-    })
-    window.dispatchEvent(new CustomEvent("menu-data-updated"))  // MenuListPanel 갱신
-    window.dispatchEvent(new CustomEvent("menu-cost-saved"))    // 대시보드 갱신
-    setSaving(false)
-    setEditing(false)
+    setSaveError(false)
+    try {
+      const res = await fetch(`${API}/api/menus/${menu.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, cost_price: val }),
+      })
+      if (!res.ok) throw new Error()
+      setLocalCost(val)  // 즉시 로컬 반영
+      window.dispatchEvent(new CustomEvent("menu-data-updated"))  // MenuListPanel 갱신
+      window.dispatchEvent(new CustomEvent("menu-cost-saved"))    // 대시보드 갱신
+      setEditing(false)
+    } catch {
+      setSaveError(true)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -91,28 +104,31 @@ function MenuRow({ menu, maxMargin, categoryColorMap }: {
         <span className="text-slate-200">|</span>
         {hasCost && !editing ? (
           <button
-            onClick={() => { setEditing(true); setCostInput(String(menu.cost_price)) }}
+            onClick={() => { setEditing(true); setCostInput(String(cost)) }}
             className="text-slate-400 hover:text-blue-500 transition"
           >
-            {fmt(menu.cost_price)}원
+            {fmt(cost)}원
           </button>
         ) : editing ? (
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              value={costInput}
-              onChange={e => setCostInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && saveCost()}
-              className="w-16 rounded border border-blue-300 px-1 py-0.5 text-[10px] outline-none focus:border-blue-500"
-              placeholder="원가"
-              autoFocus
-            />
-            <button onClick={saveCost} disabled={saving}
-              className="rounded bg-blue-500 px-1.5 py-0.5 text-[9px] text-white hover:bg-blue-600">
-              {saving ? "…" : "저장"}
-            </button>
-            <button onClick={() => setEditing(false)}
-              className="text-[9px] text-slate-400 hover:text-slate-600">취소</button>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={costInput}
+                onChange={e => { setCostInput(e.target.value); setSaveError(false) }}
+                onKeyDown={e => e.key === "Enter" && saveCost()}
+                className="w-16 rounded border border-blue-300 px-1 py-0.5 text-[10px] outline-none focus:border-blue-500"
+                placeholder="원가"
+                autoFocus
+              />
+              <button onClick={saveCost} disabled={saving}
+                className="rounded bg-blue-500 px-1.5 py-0.5 text-[9px] text-white hover:bg-blue-600">
+                {saving ? "…" : "저장"}
+              </button>
+              <button onClick={() => { setEditing(false); setSaveError(false) }}
+                className="text-[9px] text-slate-400 hover:text-slate-600">취소</button>
+            </div>
+            {saveError && <span className="text-[9px] text-red-500">저장 실패. 다시 시도해주세요.</span>}
           </div>
         ) : (
           <button
@@ -182,10 +198,11 @@ function QuadrantBadge({ menu, avgPrice, avgMargin }: {
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────────
 type Props = {
   menus: MenuItem[]
+  accountId: string
   onChatMessage?: (msg: string) => void
 }
 
-export function MenuProfitTab({ menus, onChatMessage }: Props) {
+export function MenuProfitTab({ menus, accountId, onChatMessage }: Props) {
   const [copied, setCopied] = useState(false)
   const [view, setView] = useState<"margin" | "quadrant">("margin")
 
@@ -288,7 +305,7 @@ export function MenuProfitTab({ menus, onChatMessage }: Props) {
           {/* 메뉴 목록 */}
           <div className="divide-y divide-slate-50">
             {sorted.map(menu => (
-              <MenuRow key={menu.id} menu={menu} maxMargin={maxMargin} categoryColorMap={categoryColorMap} />
+              <MenuRow key={menu.id} menu={menu} maxMargin={maxMargin} categoryColorMap={categoryColorMap} accountId={accountId} />
             ))}
             {menusWithMargin.length === 0 && (
               <div className="py-6 text-center text-xs text-slate-400">

@@ -18,6 +18,7 @@ interface Menu {
 
 interface MenuListPanelProps {
   accountId: string;
+  onTotalChange?: (total: number) => void;
 }
 
 const CATEGORY_COLORS: Record<string, { badge: string }> = {
@@ -218,8 +219,11 @@ function MenuRow({
       </div>
 
       {!noCost && m.margin_rate !== null ? (
-        <div className="mt-1.5">
+        <div className="mt-1.5 flex items-center justify-between">
           <MarginBar rate={m.margin_rate} />
+          <span className="font-mono text-[11px] text-[#999]">
+            원가 {m.cost_price.toLocaleString()}원
+          </span>
         </div>
       ) : (
         <NoCostSection menu={m} accountId={accountId} onSaved={onCostSaved} />
@@ -230,18 +234,24 @@ function MenuRow({
 
 // ── 메인 패널 ─────────────────────────────────────────────────────────────
 
-export default function MenuListPanel({ accountId }: MenuListPanelProps) {
+export default function MenuListPanel({ accountId, onTotalChange }: MenuListPanelProps) {
   const [byCategory, setByCategory] = useState<Record<string, Menu[]>>({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // ref로 콜백 관리 — fetchMenus 의존성 배열에서 제외해 불필요한 재fetch 방지
+  const onTotalChangeRef = useRef(onTotalChange);
+  useEffect(() => { onTotalChangeRef.current = onTotalChange; }, [onTotalChange]);
 
   const fetchMenus = useCallback(() => {
     if (!accountId) return;
     fetch(`${API}/api/menus?account_id=${accountId}&active_only=true`)
       .then((r) => r.json())
       .then((res) => {
+        const newTotal = res.data?.total ?? 0;
         setByCategory(res.data?.by_category ?? {});
-        setTotal(res.data?.total ?? 0);
+        setTotal(newTotal);
+        onTotalChangeRef.current?.(newTotal);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -250,11 +260,15 @@ export default function MenuListPanel({ accountId }: MenuListPanelProps) {
   // 초기 로딩
   useEffect(() => { fetchMenus(); }, [fetchMenus]);
 
-  // 챗봇으로 메뉴 추가/변경 시 자동 재fetch
+  // 메뉴 데이터 변경 시 자동 재fetch (원가 저장, 챗봇 메뉴 변경)
   useEffect(() => {
     const handler = () => fetchMenus();
     window.addEventListener("menu-data-updated", handler);
-    return () => window.removeEventListener("menu-data-updated", handler);
+    window.addEventListener("sales-data-saved", handler);
+    return () => {
+      window.removeEventListener("menu-data-updated", handler);
+      window.removeEventListener("sales-data-saved", handler);
+    };
   }, [fetchMenus]);
 
   // 원가 저장 후 로컬 상태 즉시 반영 (API 재호출 없이)
