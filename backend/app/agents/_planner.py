@@ -13,6 +13,8 @@ import logging
 from datetime import date
 from typing import Any, TypedDict
 
+from langchain_core.messages import SystemMessage
+
 from langsmith import traceable
 
 from app.core.config import settings
@@ -201,15 +203,23 @@ def _extract_direct_reply(messages: list) -> str | None:
 # 시스템 프롬프트 조립
 # ──────────────────────────────────────────────────────────────────────────
 
-def _build_system(nick_ctx: str, extra: str = "") -> str:
-    parts = [
-        _PLANNER_SYSTEM,
-        f"[오늘 날짜] {date.today().isoformat()}",
-        nick_ctx,
+def _build_system(nick_ctx: str, extra: str = "") -> SystemMessage:
+    """정적 블록(캐시 가능) + 동적 블록(nick_ctx·extra)을 분리한 SystemMessage 반환.
+
+    deepagents의 AnthropicPromptCachingMiddleware가 정적 블록 끝에
+    cache_control을 자동 부착하여 _PLANNER_SYSTEM을 KV 캐시한다.
+    날짜는 시스템에서 제거 — plan()이 user 메시지 앞에 주입.
+    """
+    dynamic_parts = [p for p in [nick_ctx, extra] if p and p.strip()]
+    dynamic_text = "\n\n".join(dynamic_parts)
+
+    content: list[dict] = [
+        {"type": "text", "text": _PLANNER_SYSTEM, "cache_control": {"type": "ephemeral"}},
     ]
-    if extra:
-        parts.append(extra)
-    return "\n\n".join(p for p in parts if p.strip())
+    if dynamic_text:
+        content.append({"type": "text", "text": dynamic_text})
+
+    return SystemMessage(content=content)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -255,9 +265,11 @@ async def plan(
 
     system = _build_system(nick_ctx, "\n\n".join(extra_parts))
     model = _make_model()
-    messages_in = [*history[-8:], {"role": "user", "content": message}]
+    # 날짜는 캐시 경계 밖(user 메시지)에 주입 — system prefix를 안정적으로 유지
+    dated_message = f"[오늘 날짜] {date.today().isoformat()}\n\n{message}"
+    messages_in = [*history[-8:], {"role": "user", "content": dated_message}]
 
-    async def _invoke(sys: str) -> list:
+    async def _invoke(sys: SystemMessage) -> list:
         agent = create_deep_agent(model=model, tools=PLANNER_TOOLS, system_prompt=sys)
         result = await agent.ainvoke({"messages": messages_in})
         return result.get("messages", [])
@@ -274,7 +286,8 @@ async def plan(
     if not result_data:
         log.info("[planner] account=%s no terminal tool called — retry with reminder", account_id)
         try:
-            out_messages = await _invoke(system + "\n\n" + _TERMINAL_REMINDER)
+            reminder_content = [*system.content, {"type": "text", "text": _TERMINAL_REMINDER}]
+            out_messages = await _invoke(SystemMessage(content=reminder_content))
         except Exception as exc:
             log.exception("[planner] retry invoke failed")
             return {"mode": "error", "reason": f"retry invoke: {exc}"}

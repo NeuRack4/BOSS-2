@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] — 2026-04-29
+
+### Fixed — Planner: Anthropic KV 캐시 복구
+
+- **`_planner.py` `_build_system()`** — 반환 타입을 `str`에서 `SystemMessage`(content block 리스트)로 변경. `_PLANNER_SYSTEM`(정적, ~3000토큰)을 첫 번째 블록으로, `nick_ctx`·`extra`(동적, 사용자별)를 두 번째 블록으로 분리. 정적 블록에 `cache_control: {type: "ephemeral"}` 직접 부착.
+- **날짜를 시스템 프롬프트 밖으로 이동** — `date.today().isoformat()`을 system에서 제거하고 `plan()` 호출 시 user 메시지 앞에 `[오늘 날짜] YYYY-MM-DD` 형식으로 주입. system prefix가 매일 변경되어 캐시 미스가 100%이던 문제 해결.
+- **retry 경로 수정** — terminal tool 미호출 재시도 시 `system + string` 연산 대신 `system.content`에 reminder 블록을 append하는 방식으로 변경.
+- **`llm.py` `_planner_anthropic()`** — `system` 파라미터를 단일 문자열 대신 content block 리스트로 구성. 첫 블록에 `cache_control` 부착. tool 정의에도 `cache_control` 추가.
+- **근본 원인** — deepagents SDK가 내부적으로 `AnthropicPromptCachingMiddleware`를 자동 적용하고 있었으나, system prompt에 `date.today()`가 포함돼 매 요청마다 prefix가 달라져 cache hit율 0%였음.
+
+---
+
 ## [3.9.0] — 2026-04-29
 
 ### Added — Marketing: Notice 알림 기능
