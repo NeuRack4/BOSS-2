@@ -39,10 +39,11 @@ export default function RootLayout({
   var orig=window.fetch;
   window.fetch=function(url,opts){
     if(typeof url==="string"&&url.startsWith(base)){
-      opts=Object.assign({},opts);
-      opts.headers=Object.assign({"ngrok-skip-browser-warning":"true"},opts.headers);
+      var h=new Headers(opts&&opts.headers||{});
+      h.set("ngrok-skip-browser-warning","true");
+      opts=Object.assign({},opts,{headers:h});
     }
-    return orig.apply(this,arguments);
+    return orig.call(this,url,opts);
   };
 })();
 `}</Script>
