@@ -1792,7 +1792,7 @@ export const InlineChat = () => {
                     <div className="flex justify-center w-full py-1">
                       <NaverBlogPostCard
                         payload={naverBlogPayload}
-                        accountId={userId}
+                        accountId={userId ?? undefined}
                       />
                     </div>
                   )}

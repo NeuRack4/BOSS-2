@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-04-29
+
+### Added — Deployment: Vercel 프론트엔드 배포 + ngrok 백엔드 공개 연결
+
+- **Vercel 프로덕션 배포** — 프론트엔드(`frontend/`)를 Vercel에 배포. 고정 URL: `https://boss-2.vercel.app`
+- **ngrok 고정 도메인 연결** — 로컬 FastAPI(port 8000)를 ngrok 고정 도메인(`https://loyd-extemporaneous-annalise.ngrok-free.dev`)으로 공개. Celery Worker·Beat는 Upstash Redis 아웃바운드 연결만 사용하므로 ngrok 불필요.
+- **ngrok 인터스티셜 우회 패치** (`frontend/app/layout.tsx`) — `next/script`의 `beforeInteractive` 전략으로 `window.fetch` 전역 패치. ngrok API URL 호출 시 `ngrok-skip-browser-warning: true` 헤더 자동 삽입.
+- **백엔드 CORS 및 콜백 URL 갱신** (`backend/.env`) — `CORS_ORIGINS`에 `https://boss-2.vercel.app` 추가, `BOSS_FRONTEND_URL`·`SLACK_REDIRECT_URI`·`YOUTUBE_REDIRECT_URI` 실서비스 URL로 업데이트.
+
+### Fixed — TypeScript 빌드 오류 6건 수정 (Vercel 빌드 통과)
+
+- **`frontend/app/admin/page.tsx`** — `StatsTab`에 존재하지 않는 `accountId` prop 전달 제거.
+- **`frontend/components/chat/InlineChat.tsx`** — `NaverBlogPostCard`의 `accountId` 타입 불일치 수정 (`string | null` → `string | undefined`, `?? undefined` 추가).
+- **`frontend/components/layout/IntegrationsModal.tsx`** — `ytStatus.expires_at`(`unknown`) JSX 조건 렌더 타입 오류 수정 (`!!` 변환으로 boolean 강제).
+- **`frontend/components/layout/PaymentModal.tsx`** — PortOne `requestPayment` 유니온 타입 불일치(`alipayPlus` 누락) 해결. 함수 타입 캐스트로 빌드 오류 우회.
+- **`frontend/components/sales/RevenueStatsPanel.tsx`** — 미정의 `YoyTip` 컴포넌트 참조 제거, dead code 블록 내 `insight`·`monthly_prediction`·`prediction_basis` null assertion(`!`) 추가.
+
+---
+
 ## [3.11.1] — 2026-04-29
 
 ### Fixed — Sales: 알림 설정 토글 UI 수정

@@ -916,7 +916,6 @@ function BenchmarkSection({
             성장 흐름을 분석해드려요.
           </p>
         </div>
-        <YoyTip hasYearData={false} />
       </div>
     );
   }
@@ -999,23 +998,23 @@ function BenchmarkSection({
       {/* 예상 월매출 — 알고리즘 개선 후 별도 브랜치에서 활성화 예정 */}
       {false &&
         insight?.monthly_prediction &&
-        insight.monthly_prediction > 0 &&
-        insight.prediction_basis && (
+        insight!.monthly_prediction! > 0 &&
+        insight!.prediction_basis && (
           <div className="rounded-[5px] bg-[#f0f4e8] px-3 py-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-[#4a5c28]">
                 이번달 예상 매출
               </span>
               <span className="font-mono text-[14px] font-bold text-[#4a5c28]">
-                약 {fmt(insight.monthly_prediction)}원
+                약 {fmt(insight!.monthly_prediction!)}원
               </span>
             </div>
             <div className="mt-1.5 rounded-[4px] bg-[#e4edcc] px-2.5 py-1.5">
               <p className="text-[10px] text-[#5a6e30]">
                 📐 <strong>계산 근거</strong> —{" "}
-                {insight.prediction_basis.elapsed_days}일 경과 · 일평균{" "}
-                {fmt(insight.prediction_basis.daily_avg)}원 ×{" "}
-                {insight.prediction_basis.total_days}일
+                {insight!.prediction_basis!.elapsed_days}일 경과 · 일평균{" "}
+                {fmt(insight!.prediction_basis!.daily_avg)}원 ×{" "}
+                {insight!.prediction_basis!.total_days}일
               </p>
               <p className="mt-1 text-[10px] text-[#7a8a50]">
                 ⚠️ 단순 일평균 비례 추산이에요. 주말·행사·계절 요인은 반영되지

@@ -209,7 +209,8 @@ const PaymentMethodModal = ({
 
       const paymentId = `boss2-${accountId.slice(0, 8)}-${Date.now()}`;
 
-      const result = await requestPayment({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (requestPayment as (req: unknown) => Promise<unknown>)({
         storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
         channelKey: method.channelKey,
         paymentId,
@@ -227,7 +228,7 @@ const PaymentMethodModal = ({
         },
       });
 
-      if (!result || "code" in result) {
+      if (!result || (typeof result === "object" && "code" in result)) {
         setError(
           (result as { message?: string })?.message ?? "결제가 취소되었습니다.",
         );
