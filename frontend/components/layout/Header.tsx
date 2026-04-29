@@ -12,8 +12,7 @@ import { ChatHistoryModal } from "@/components/layout/ChatHistoryModal";
 import { ProfileModal } from "@/components/layout/ProfileModal";
 import { LongTermMemoryModal } from "@/components/layout/LongTermMemoryModal";
 import { MemosModal } from "@/components/layout/MemosModal";
-import { CommentManagerModal } from "@/components/layout/CommentManagerModal";
-import { DMCampaignModal } from "@/components/layout/DMCampaignModal";
+import { NoticeModal } from "@/components/layout/NoticeModal";
 import { SubsidyModal } from "@/components/layout/SubsidyModal";
 import { IntegrationsModal } from "@/components/layout/IntegrationsModal";
 import { PaymentModal } from "@/components/layout/PaymentModal";
@@ -34,8 +33,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [longMemOpen, setLongMemOpen] = useState(false);
   const [memosOpen, setMemosOpen] = useState(false);
-  const [commentOpen, setCommentOpen] = useState(false);
-  const [dmCampaignOpen, setDmCampaignOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const [subsidyOpen, setSubsidyOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
@@ -63,8 +61,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     const onOpenProfile = () => setProfileOpen(true);
     const onOpenLongMem = () => setLongMemOpen(true);
     const onOpenMemos = () => setMemosOpen(true);
-    const onOpenComment = () => setCommentOpen(true);
-    const onOpenDmCampaign = () => setDmCampaignOpen(true);
+    const onOpenNotice = () => setNoticeOpen(true);
     const onOpenSubsidy = () => setSubsidyOpen(true);
     const onOpenIntegrations = (e: Event) => {
       const tab = (e as CustomEvent).detail?.tab as
@@ -81,8 +78,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
     window.addEventListener("boss:open-profile-modal", onOpenProfile);
     window.addEventListener("boss:open-longmem-modal", onOpenLongMem);
     window.addEventListener("boss:open-memos-modal", onOpenMemos);
-    window.addEventListener("boss:open-comment-modal", onOpenComment);
-    window.addEventListener("boss:open-dm-campaign-modal", onOpenDmCampaign);
+    window.addEventListener("boss:open-notice-modal", onOpenNotice);
     window.addEventListener("boss:open-subsidy-modal", onOpenSubsidy);
     window.addEventListener("boss:open-integrations-modal", onOpenIntegrations);
     return () => {
@@ -95,11 +91,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
       window.removeEventListener("boss:open-profile-modal", onOpenProfile);
       window.removeEventListener("boss:open-longmem-modal", onOpenLongMem);
       window.removeEventListener("boss:open-memos-modal", onOpenMemos);
-      window.removeEventListener("boss:open-comment-modal", onOpenComment);
-      window.removeEventListener(
-        "boss:open-dm-campaign-modal",
-        onOpenDmCampaign,
-      );
+      window.removeEventListener("boss:open-notice-modal", onOpenNotice);
       window.removeEventListener("boss:open-subsidy-modal", onOpenSubsidy);
       window.removeEventListener(
         "boss:open-integrations-modal",
@@ -291,20 +283,11 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setCommentOpen(true)}
-                  title="Comments"
+                  onClick={() => setNoticeOpen(true)}
+                  title="Notice"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
-                  Comments
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDmCampaignOpen(true)}
-                  title="DM Campaigns"
-                  className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
-                >
-                  DM
+                  Notice
                 </Button>
                 <Button
                   variant="ghost"
@@ -338,14 +321,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
         onClose={() => setLongMemOpen(false)}
       />
       <MemosModal open={memosOpen} onClose={() => setMemosOpen(false)} />
-      <CommentManagerModal
-        open={commentOpen}
-        onClose={() => setCommentOpen(false)}
-      />
-      <DMCampaignModal
-        open={dmCampaignOpen}
-        onClose={() => setDmCampaignOpen(false)}
-      />
+      <NoticeModal open={noticeOpen} onClose={() => setNoticeOpen(false)} />
       <SubsidyModal open={subsidyOpen} onClose={() => setSubsidyOpen(false)} />
       <IntegrationsModal
         open={integrationsOpen}

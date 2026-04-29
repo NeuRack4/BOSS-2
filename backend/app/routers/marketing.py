@@ -45,6 +45,21 @@ class ImageResponse(BaseModel):
     revised_prompt: str
 
 
+class InstagramActionExampleRequest(BaseModel):
+    account_id: str
+    title: str
+    target: str = ""
+    idea: str = ""
+    steps: list[str] = []
+    expected: str = ""
+    period: str = ""
+
+
+class InstagramActionExampleResponse(BaseModel):
+    data: dict
+    error: str | None = None
+
+
 @router.post("/image", response_model=ImageResponse)
 async def generate_image(req: ImageRequest):
     """
@@ -82,6 +97,98 @@ async def generate_image(req: ImageRequest):
         url=img.url or "",
         revised_prompt=img.revised_prompt or full_prompt,
     )
+
+
+@router.post("/instagram/example", response_model=InstagramActionExampleResponse)
+async def generate_instagram_action_example(req: InstagramActionExampleRequest):
+    """Create an Instagram preview payload from a marketing action item."""
+    from app.core.llm import chat_completion
+    from app.agents.marketing import _generate_sns_image
+
+    source = "\n".join(
+        [
+            f"이벤트 이름: {req.title}",
+            f"대상: {req.target}",
+            f"아이디어: {req.idea}",
+            f"실행 방법: {' / '.join(req.steps)}",
+            f"기대효과: {req.expected}",
+            f"기간: {req.period}",
+        ]
+    )
+    prompt = (
+        "아래 마케팅 할 일 정보를 바탕으로 실제 인스타그램 피드 예시를 만들어주세요.\n"
+        "응답은 JSON 객체만 반환하세요. 마크다운 코드블록은 쓰지 마세요.\n"
+        "스키마: {"
+        '"title": "짧은 게시물 제목", '
+        '"caption": "인스타그램 본문 캡션. 안내문 없이 실제 게시글처럼 작성", '
+        '"hashtags": ["해시태그", "..."], '
+        '"best_time": "게시 추천 시간 한 줄", '
+        '"image_prompt": "정사각형 인스타그램 피드 이미지 생성용 영어 프롬프트"'
+        "}\n\n"
+        f"{source}"
+    )
+
+    fallback_title = req.title or "Instagram post"
+    fallback_caption = "\n".join(
+        p
+        for p in [
+            req.idea or fallback_title,
+            req.target and f"대상: {req.target}",
+            req.steps and "실행 방법: " + " / ".join(req.steps[:3]),
+        ]
+        if p
+    )
+    payload = {
+        "title": fallback_title,
+        "caption": fallback_caption,
+        "hashtags": ["마케팅", "이벤트", "소상공인"],
+        "best_time": req.period or "오늘 저녁 피드 업로드 추천",
+        "image_prompt": f"Instagram square feed image for {fallback_title}, Korean small business marketing, warm realistic photo",
+    }
+
+    try:
+        resp = await chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model="gpt-4o",
+            temperature=0.5,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            raw = raw.removeprefix("json").strip()
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            payload.update(
+                {
+                    "title": str(parsed.get("title") or payload["title"]),
+                    "caption": str(parsed.get("caption") or payload["caption"]),
+                    "hashtags": parsed.get("hashtags") if isinstance(parsed.get("hashtags"), list) else payload["hashtags"],
+                    "best_time": str(parsed.get("best_time") or payload["best_time"]),
+                    "image_prompt": str(parsed.get("image_prompt") or payload["image_prompt"]),
+                }
+            )
+    except Exception:
+        log.exception("generate_instagram_action_example LLM call failed")
+
+    hashtags = [
+        str(tag).lstrip("#").strip()
+        for tag in (payload.get("hashtags") or [])
+        if str(tag).strip()
+    ][:20]
+    caption = str(payload.get("caption") or "")
+    image_context = f"{payload.get('image_prompt')}\n\nCaption context: {caption}"
+    image_url = await _generate_sns_image(image_context, hashtags)
+
+    return {
+        "data": {
+            "title": str(payload.get("title") or fallback_title),
+            "caption": caption,
+            "hashtags": hashtags,
+            "best_time": str(payload.get("best_time") or ""),
+            "image_url": image_url,
+        },
+        "error": None,
+    }
 
 
 # ── 네이버 블로그 자동 업로드 ────────────────────────────────────────────────
@@ -863,11 +970,13 @@ async def get_marketing_dashboard_actions(
         "아래 JSON 배열 형식으로만 응답하세요 (다른 텍스트 없이):\n"
         '[{"priority":"high","category":"instagram","title":"액션 제목 (20자 이내)",'
         '"target":"타겟층","period":"실행 기간",'
+        '"due_date":"YYYY-MM-DD (마감일 — high는 7일 이내, medium은 30일 이내, low는 60일 이내)",'
         '"idea":"구체적인 이벤트·콘텐츠 아이디어 (2~3문장)",'
         '"steps":["단계1","단계2","단계3"],'
         '"expected":"기대 효과","why":"이 액션이 필요한 이유"}]\n\n'
         f'priority: "high"(이번 주), "medium"(이번 달), "low"(여유 있을 때)\n'
         f'category 허용값: {available_str}\n'
+        f'due_date는 오늘({_today.isoformat()}) 기준 ISO 8601 날짜(YYYY-MM-DD)로 반드시 포함하세요.\n'
         'steps는 2~4개. JSON 외 텍스트 절대 포함하지 마세요.'
     )
 
@@ -892,7 +1001,57 @@ async def get_marketing_dashboard_actions(
         log.exception("get_marketing_dashboard_actions failed")
         actions = []
 
+    # due_date가 있는 항목을 DB에 upsert
+    if actions:
+        from app.core.supabase import get_supabase
+        try:
+            rows = [
+                {
+                    "account_id": account_id,
+                    "title": a.get("title", "")[:200],
+                    "category": a.get("category", "general"),
+                    "priority": a.get("priority", "medium"),
+                    "period": a.get("period"),
+                    "due_date": a.get("due_date"),
+                    "target": a.get("target"),
+                    "idea": a.get("idea"),
+                    "steps": a.get("steps"),
+                    "expected": a.get("expected"),
+                    "why": a.get("why"),
+                }
+                for a in actions
+                if a.get("title") and a.get("due_date")
+            ]
+            if rows:
+                supabase = get_supabase()
+                supabase.table("marketing_action_notices").upsert(
+                    rows, on_conflict="account_id,title,due_date"
+                ).execute()
+        except Exception:
+            log.exception("marketing_action_notices upsert failed")
+
     return {"data": actions, "error": None}
+
+
+@router.get("/notices")
+async def get_marketing_notices(
+    account_id: str = Query(...),
+):
+    """내일 마감인 마케팅 할 일 알림 목록."""
+    from datetime import date, timedelta
+    from app.core.supabase import get_supabase
+
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    supabase = get_supabase()
+    result = (
+        supabase.table("marketing_action_notices")
+        .select("id,title,category,priority,period,due_date,target,idea,steps,expected,why,created_at")
+        .eq("account_id", account_id)
+        .eq("due_date", tomorrow)
+        .order("priority")
+        .execute()
+    )
+    return {"data": result.data or [], "error": None}
 
 
 # ── 지원사업 목록 ─────────────────────────────────────────────────────────────

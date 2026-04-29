@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] — 2026-04-29
+
+### Added — Marketing: Notice 알림 기능
+
+- **`marketing_action_notices` 테이블** (`supabase/migrations/041_marketing_action_notices.sql`, `042_marketing_action_notices_detail.sql`) — 마케팅 할 일 알림 저장. `(account_id, title, due_date)` 유니크 제약, RLS 적용. 상세 컬럼(`target`, `idea`, `steps`, `expected`, `why`) 포함.
+- **`GET /api/marketing/notices`** (`backend/app/routers/marketing.py`) — `due_date = 내일`인 항목 조회. 마감 하루 전 알림 데이터 반환.
+- **`due_date` 필드 자동 생성** — `GET /api/marketing/dashboard/actions` 엔드포인트의 AI 프롬프트에 `due_date(YYYY-MM-DD)` 포함 지시 추가. 액션 생성 시 `marketing_action_notices`에 자동 upsert.
+- **`NoticeModal` 컴포넌트** (`frontend/components/layout/NoticeModal.tsx`) — D-day 배지(`D-1`, `D-2`…) + 실제 날짜 표시. 카드 접기/펼치기로 아이디어·실행방법·기대효과 상세 확인. 인스타그램 카테고리 항목에 **인스타그램 예시보기** 버튼 → `InstagramPostCard` 인라인 렌더.
+- **`ActionItem` 타입에 `due_date` 추가** (`frontend/components/marketing/types.ts`).
+
+### Changed — Header: Comments·DM 버튼 제거 및 Notice 버튼 추가
+
+- **`Header.tsx`** — Comments, DM 버튼 및 관련 state·이벤트 리스너 제거. Notice 버튼 추가(`boss:open-notice-modal` CustomEvent 지원).
+
+---
+
 ## [3.7.0] — 2026-04-28
 
 ### Added — Admin: 어드민 페이지 (`/admin`)
