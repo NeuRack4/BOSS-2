@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2] — 2026-04-29
+
+### Fixed — Chatbot: 챗봇 응답 UX 개선
+
+- **`documents.py`** — artifact id UUID 사용자 노출 제거 (3곳). `캔버스에서 확인하실 수 있어요. (artifact id: ...)` → `📋 칸반 보드에서 확인하실 수 있어요.`로 변경.
+- **`sales.py`** — `sales_checklist` Capability description 확장. 재료비 절감·원가 관리 등 영업 운영 전반 포함하도록 수정해 플래너 라우팅 정확도 향상.
+
 ## [4.1.1] — 2026-04-29
 
 ### Fixed — layout: ngrok Script 위치 및 strategy 수정
