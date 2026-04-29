@@ -517,7 +517,7 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
                       Google OAuth 2.0
                     </span>
                   </div>
-                  {ytStatus.expires_at && (
+                  {!!ytStatus.expires_at && (
                     <div className="flex items-center gap-3 text-[13px]">
                       <span className="w-24 shrink-0 text-[#9ca3af]">
                         토큰 만료일
