@@ -167,8 +167,8 @@ class YouTubeCredentials(BaseModel):
 
 @router.put("/youtube")
 async def save_youtube(req: YouTubeCredentials):
-    if not req.youtube_client_id.strip() or not req.youtube_client_secret.strip() or not req.youtube_redirect_uri.strip():
-        raise HTTPException(status_code=400, detail="YouTube Client ID, Client Secret, Redirect URI are required.")
+    if not req.youtube_client_id.strip() or not req.youtube_client_secret.strip():
+        raise HTTPException(status_code=400, detail="YouTube Client ID and Client Secret are required.")
     _upsert_credentials(req.account_id, "youtube", {
         "youtube_client_id": req.youtube_client_id.strip(),
         "youtube_client_secret": req.youtube_client_secret.strip(),
