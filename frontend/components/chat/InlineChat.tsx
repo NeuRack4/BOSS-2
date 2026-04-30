@@ -611,11 +611,8 @@ export const InlineChat = () => {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
-    const viewport = scrollViewportRef.current;
-    if (viewport) {
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-    }
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, loading]);
 
   useEffect(() => {
     if (pendingBriefing) {

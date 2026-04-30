@@ -527,9 +527,9 @@ def _profile_context(account_id: str) -> str:
     for k in CORE_PROFILE_KEYS:
         v = p.get(k)
         if isinstance(v, str) and v.strip():
-            lines.append(f"- {PROFILE_LABELS[k]}: {v.strip()}")
+            lines.append(f"- {PROFILE_LABELS[k]}({k}): {v.strip()}")
         else:
-            lines.append(f"- {PROFILE_LABELS[k]}: (비어있음)")
+            lines.append(f"- {PROFILE_LABELS[k]}({k}): (비어있음)")
     meta = p.get("profile_meta") or {}
     if isinstance(meta, dict):
         for mk, mv in meta.items():
