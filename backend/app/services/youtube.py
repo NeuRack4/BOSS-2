@@ -28,14 +28,32 @@ _SCOPES           = " ".join([
 
 # ── OAuth URL 생성 ────────────────────────────────────────────────────────────
 
+def _oauth_settings() -> tuple[str, str, str]:
+    from app.core.config import settings
+
+    client_id = (settings.youtube_client_id or "").strip()
+    client_secret = (settings.youtube_client_secret or "").strip()
+    redirect_uri = (settings.youtube_redirect_uri or "").strip()
+    missing = []
+    if not client_id:
+        missing.append("YOUTUBE_CLIENT_ID")
+    if not client_secret:
+        missing.append("YOUTUBE_CLIENT_SECRET")
+    if not redirect_uri:
+        missing.append("YOUTUBE_REDIRECT_URI")
+    if missing:
+        raise RuntimeError(f"Missing YouTube OAuth settings: {', '.join(missing)}")
+    return client_id, client_secret, redirect_uri
+
+
 def get_oauth_url(account_id: str) -> str:
     """Google OAuth 2.0 인가 URL 반환. state = account_id."""
-    from app.core.config import settings
     import urllib.parse
+    client_id, _, redirect_uri = _oauth_settings()
 
     params = {
-        "client_id":     settings.youtube_client_id,
-        "redirect_uri":  settings.youtube_redirect_uri,
+        "client_id":     client_id,
+        "redirect_uri":  redirect_uri,
         "response_type": "code",
         "scope":         _SCOPES,
         "access_type":   "offline",
@@ -49,15 +67,15 @@ def get_oauth_url(account_id: str) -> str:
 
 async def exchange_code_for_tokens(code: str, account_id: str) -> dict:
     """Authorization code → access/refresh token 교환 후 DB upsert."""
-    from app.core.config import settings
     from app.core.supabase import get_supabase
+    client_id, client_secret, redirect_uri = _oauth_settings()
 
     async with httpx.AsyncClient() as client:
         r = await client.post(_GOOGLE_TOKEN_URL, data={
             "code":          code,
-            "client_id":     settings.youtube_client_id,
-            "client_secret": settings.youtube_client_secret,
-            "redirect_uri":  settings.youtube_redirect_uri,
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "redirect_uri":  redirect_uri,
             "grant_type":    "authorization_code",
         })
         data = r.json()
@@ -84,13 +102,13 @@ async def exchange_code_for_tokens(code: str, account_id: str) -> dict:
 
 async def _refresh_token(account_id: str, refresh_token: str) -> str:
     """refresh_token으로 새 access_token 획득 후 DB 업데이트."""
-    from app.core.config import settings
     from app.core.supabase import get_supabase
+    client_id, client_secret, _ = _oauth_settings()
 
     async with httpx.AsyncClient() as client:
         r = await client.post(_GOOGLE_TOKEN_URL, data={
-            "client_id":     settings.youtube_client_id,
-            "client_secret": settings.youtube_client_secret,
+            "client_id":     client_id,
+            "client_secret": client_secret,
             "refresh_token": refresh_token,
             "grant_type":    "refresh_token",
         })
