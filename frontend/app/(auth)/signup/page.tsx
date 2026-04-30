@@ -43,7 +43,9 @@ export default function SignupPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [terms, setTerms] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +62,10 @@ export default function SignupPage() {
 
     if (!email.trim() || !password) {
       setError("Enter an email and password to continue.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
     if (!terms) {
@@ -94,7 +100,7 @@ export default function SignupPage() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email, password, terms]);
+  }, [email, password, confirmPassword, terms]);
 
   return (
     <div
@@ -229,6 +235,35 @@ export default function SignupPage() {
                   <span>STRENGTH — {meterLabel}</span>
                   <span>10+ CHARS · SYMBOL · NUMBER</span>
                 </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="confirm-password">Confirm password</label>
+                <div className="input-wrap">
+                  <input
+                    id="confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <span
+                    className="trailing"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ")
+                        setShowConfirmPassword((v) => !v);
+                    }}
+                  >
+                    {showConfirmPassword ? "hide" : "show"}
+                  </span>
+                </div>
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="field-mismatch">Passwords do not match</p>
+                )}
               </div>
 
               <label className="check">
@@ -781,6 +816,14 @@ const SIGNUP_CSS = `
   color: var(--ink);
   text-decoration: none;
   border-bottom: 1px solid var(--line-strong);
+}
+
+.boss-signup .field-mismatch {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  color: #b04a3f;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
 .boss-signup .form-error {
