@@ -28,17 +28,22 @@ function StatCell({
 export function InstagramTab({
   ig,
   periodDays,
+  onConnect,
 }: {
   ig: InstagramData;
   periodDays: number;
+  onConnect?: () => void;
 }) {
   if (ig.error) {
     return (
-      <div className="flex flex-col items-center gap-2 py-12 text-center">
+      <div className="flex flex-col items-center gap-3 py-12 text-center">
         <p className="text-sm text-slate-400">{ig.error}</p>
-        <p className="text-xs text-slate-300">
-          관리자 설정에서 Meta 액세스 토큰을 등록하면 연결됩니다.
-        </p>
+        <button
+          onClick={onConnect}
+          className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-4 py-1.5 text-xs font-medium text-pink-600 transition hover:bg-pink-100"
+        >
+          Instagram 연결하기
+        </button>
       </div>
     );
   }

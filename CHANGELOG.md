@@ -16,7 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`CostTab.tsx`** — 빈 상태 문구 통일. `비용 데이터가 없어요` → `이번달 비용 기록이 없어요` + 카드 테두리 추가. `전월 비교 데이터가 없어요` → `아직 전월 비교를 할 수 없어요`.
 - **`SalesDashboard.tsx`** — `Connect에서 Slack 연결하기` 버튼 클릭해도 아무 일도 없던 버그 수정. `connectOpen` 상태는 존재했으나 `IntegrationsModal` 렌더링 코드 누락. `initialTab="slack"`으로 모달 추가.
 
----
+### Fixed — 마케팅: Instagram 연결 버튼 동작 + 계정별 자격증명 격리
+
+- **`MarketingDashboard.tsx`** — Instagram 미연결 버튼 클릭 시 `boss:open-integrations-modal` 이벤트를 `instagram` 탭으로 dispatch. 기존엔 `onConnect` 핸들러가 없어 클릭해도 아무 동작 없던 버그 수정.
+- **`OverviewTab.tsx`** — `onConnectInstagram` prop 추가, Instagram `PlatformChip`에 연결.
+- **`InstagramTab.tsx`** — 미연결 에러 화면에 "Instagram 연결하기" 버튼 추가. 클릭 시 IntegrationsModal Instagram 탭 오픈.
+- **`MarketingReportCard.tsx`** — 채팅 마케팅 리포트 카드의 "Instagram 미연결" span을 클릭 가능한 버튼으로 변경. Instagram 탭 미연결 화면에도 연결 버튼 추가.
+- **`instagram_insights.py`** — `account_id`가 있을 때 per-account 자격증명이 없어도 글로벌 `settings.meta_access_token`으로 폴백하던 버그 수정. 신규 계정에 다른 계정의 Instagram 데이터가 공유되던 문제 해소.
+- **`instagram.py`** — `_get_instagram_credentials`: DB에 자격증명이 없으면 글로벌 settings 반환 대신 빈 dict 반환. 계정 간 자격증명 격리.
+- **`marketing.py` (router)** — dashboard/analysis 엔드포인트의 글로벌 settings Instagram 폴백 제거. `/instagram/publish`의 불필요한 글로벌 토큰 유효성 검사 제거.
 
 ## [4.1.7] — 2026-04-30
 

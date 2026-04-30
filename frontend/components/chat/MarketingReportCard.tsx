@@ -457,12 +457,18 @@ export function MarketingReportCard({
                   ● Instagram 연결됨
                 </span>
               ) : (
-                <span
-                  className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-300 bg-white text-neutral-500"
-                  title="관리자 설정에서 Meta 액세스 토큰을 등록하면 연결됩니다"
+                <button
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent("boss:open-integrations-modal", {
+                        detail: { tab: "instagram" },
+                      }),
+                    )
+                  }
+                  className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-300 bg-white text-neutral-500 hover:border-pink-300 hover:text-pink-500 hover:bg-pink-50 transition-colors"
                 >
-                  ○ Instagram 미연결
-                </span>
+                  ○ Instagram 연결하기
+                </button>
               )}
               {ytOk ? (
                 <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600">
@@ -497,11 +503,18 @@ export function MarketingReportCard({
                 <p className="text-[13px] text-neutral-500 text-center">
                   {ig?.error || "Instagram 데이터를 불러올 수 없습니다."}
                 </p>
-                <p className="text-[11px] text-neutral-400 text-center">
-                  Instagram 연결은 Meta 비즈니스 계정의 액세스 토큰을
-                  <br />
-                  관리자 설정에서 등록하면 자동으로 활성화됩니다.
-                </p>
+                <button
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent("boss:open-integrations-modal", {
+                        detail: { tab: "instagram" },
+                      }),
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-4 py-1.5 text-xs font-medium text-pink-600 transition hover:bg-pink-100"
+                >
+                  Instagram 연결하기
+                </button>
               </div>
             ) : (
               <>
