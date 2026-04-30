@@ -144,6 +144,10 @@ export const KanbanBoard = ({ accountId, domain }: Props) => {
     (toSubHubId: string) => {
       const d = draggingRef.current;
       if (!d) return;
+      // 낙관적 업데이트로 원본 DOM이 언마운트되면 dragend가 유실되므로
+      // drop 시점에 draggingId를 직접 초기화
+      draggingRef.current = null;
+      setDraggingId(null);
       moveCard(d.id, d.from, toSubHubId);
     },
     [moveCard],

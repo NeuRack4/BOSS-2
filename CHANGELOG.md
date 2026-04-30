@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.12] — 2026-04-30
+
+### Fixed — 칸반: 카드 이동 후 글자 투명 현상 수정
+
+- **`KanbanBoard.tsx`** — `onCardDrop` 에서 낙관적 업데이트 전 `draggingId`를 즉시 초기화. 기존에는 낙관적 업데이트로 원본 카드 DOM이 언마운트되면 `dragend` 이벤트가 유실되어 이동된 카드에 `opacity-40`이 지속 적용되는 버그 수정.
+
 ## [4.1.11] — 2026-04-30
 
 ### Fixed — 마케팅: YouTube 연결 설정에서 Redirect URI 입력 제거
