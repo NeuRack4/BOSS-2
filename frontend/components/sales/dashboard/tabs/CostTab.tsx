@@ -158,13 +158,13 @@ export function CostTab({ overview, onChatMessage }: Props) {
 
   if (!overview) {
     return (
-      <div className="p-8 text-center">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
         <p className="text-2xl">💰</p>
         <p className="mt-2 text-sm font-medium text-slate-600">
-          비용 데이터가 없어요
+          이번달 비용 기록이 없어요
         </p>
         <p className="mt-1 text-xs text-slate-400">
-          챗봇으로 원자재·인건비 등을 기록하면 수익률 분석이 가능해요
+          원자재·인건비 등을 기록하면 수익률 분석이 시작돼요
         </p>
       </div>
     );
@@ -201,8 +201,8 @@ export function CostTab({ overview, onChatMessage }: Props) {
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-          <p className="text-sm text-slate-500">📅 전월 비교 데이터가 없어요</p>
-          <p className="mt-1 text-xs text-slate-400">비용을 기록하면 다음달부터 전월 비교가 가능해요</p>
+          <p className="text-sm font-medium text-slate-600">📅 아직 전월 비교를 할 수 없어요</p>
+          <p className="mt-1 text-xs text-slate-400">비용을 꾸준히 기록하면 다음달부터 비교할 수 있어요</p>
         </div>
       )}
 

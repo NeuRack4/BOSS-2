@@ -221,9 +221,14 @@ export function MenuProfitTab({ menus, accountId, onChatMessage }: Props) {
           <p className="mt-1 text-xs text-slate-400">메뉴와 원가를 입력하면 수익성 분석이 가능해요</p>
           <button
             onClick={() => handleCTA("메뉴와 원가를 등록하고 싶어요")}
-            className="mt-4 rounded-lg bg-green-500 px-4 py-2 text-sm text-white transition hover:bg-green-600"
+            className={`mt-4 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              copied
+                ? "bg-green-500 text-white"
+                : "border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+            }`}
           >
-            메뉴 등록하러 가기
+            <MessageCircle className="mr-1.5 inline h-3.5 w-3.5" />
+            {copied ? "✓ 복사됐어요! 대시보드 채팅창에 붙여넣기 하세요" : "챗봇에 물어보기"}
           </button>
         </div>
       </div>
