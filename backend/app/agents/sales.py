@@ -688,6 +688,13 @@ async def run_promotion(
     return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
 
 
+_LABOR_KEYWORDS: tuple[str, ...] = (
+    "근로계약", "근로계약서", "노무", "노동", "취업규칙", "임금대장",
+    "급여명세서", "해고", "퇴직금", "4대보험", "산재", "고용보험",
+    "최저임금", "연차", "퇴직", "근로기준",
+)
+
+
 @_traceable(name="sales.run_sales_checklist", run_type="chain")
 async def run_sales_checklist(
     *,
@@ -699,6 +706,16 @@ async def run_sales_checklist(
     topic: str,
 ) -> str:
     log.info("[SALES] run_sales_checklist 진입 | account=%s topic=%s", account_id, topic)
+
+    # 근로계약·노무 관련 토픽이 sales 메모리 슬롯에 저장되지 않도록 차단
+    topic_lower = topic.lower()
+    if any(kw in topic_lower for kw in _LABOR_KEYWORDS):
+        log.warning("[SALES] 노무/근로계약 토픽을 sales에서 처리 거부: topic=%r", topic)
+        return (
+            f"'{topic}'은 근로·노무 영역으로, 저는 매출·운영 전문 에이전트라 직접 처리가 어렵습니다. "
+            "문서 에이전트에게 전달해 드릴게요. '근로계약서 작성해줘' 또는 '노무 체크리스트 만들어줘'처럼 다시 요청해 주시면 정확히 안내해 드릴 수 있어요."
+        )
+
     system = _build_sales_agent_system(account_id, rag_context, long_term_context)
     system += (
         "\n\n[체크리스트 작성 요청 — 정보 확정]\n"
