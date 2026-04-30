@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`CostTab.tsx`** — 빈 상태 문구 통일. `비용 데이터가 없어요` → `이번달 비용 기록이 없어요` + 카드 테두리 추가. `전월 비교 데이터가 없어요` → `아직 전월 비교를 할 수 없어요`.
 - **`SalesDashboard.tsx`** — `Connect에서 Slack 연결하기` 버튼 클릭해도 아무 일도 없던 버그 수정. `connectOpen` 상태는 존재했으나 `IntegrationsModal` 렌더링 코드 누락. `initialTab="slack"`으로 모달 추가.
 
+### Fixed — 마케팅: 데이터 품질 가드 + YouTube OAuth 설정 검증 + .env 경로 수정
+
+- **`marketing_data_quality.py`** (신규) — 실제 게시물 성과 데이터가 없을 때 리포트 생성을 차단하는 가드 함수 모음. `has_instagram_performance`, `has_youtube_performance`, `has_any_marketing_performance`, `mark_empty_*` 유틸 제공.
+- **`marketing.py` (agent)** — `run_marketing_report`에서 성과 데이터가 전혀 없을 경우 조기 반환. 빈 데이터를 보고서로 생성하던 문제 해소.
+- **`youtube.py`** — `_oauth_settings()` 헬퍼 추가. `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REDIRECT_URI` 미설정 시 명확한 에러 메시지 반환. 누락 설정값으로 OAuth가 조용히 실패하던 문제 해소.
+- **`config.py`** — `.env` 경로를 `BACKEND_DIR / ".env"` 절대경로로 고정. 실행 디렉토리에 따라 환경변수가 로드되지 않던 문제 해소.
+
 ### Fixed — 마케팅: Instagram 연결 버튼 동작 + 계정별 자격증명 격리
 
 - **`MarketingDashboard.tsx`** — Instagram 미연결 버튼 클릭 시 `boss:open-integrations-modal` 이벤트를 `instagram` 탭으로 dispatch. 기존엔 `onConnect` 핸들러가 없어 클릭해도 아무 동작 없던 버그 수정.
