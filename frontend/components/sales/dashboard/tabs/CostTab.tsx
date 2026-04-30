@@ -195,9 +195,9 @@ export function CostTab({ overview, onChatMessage }: Props) {
                 current={overview.profit.total}
                 prev={overview.profit.prev_total}
                 higherIsBetter={true}
-            />
-          </>
-        )}
+              />
+            </>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">

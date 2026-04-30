@@ -8,10 +8,13 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => {
   const label =
-    h === 0 ? "오전 12시" :
-    h < 12  ? `오전 ${h}시` :
-    h === 12 ? "오후 12시" :
-               `오후 ${h - 12}시`;
+    h === 0
+      ? "오전 12시"
+      : h < 12
+        ? `오전 ${h}시`
+        : h === 12
+          ? "오후 12시"
+          : `오후 ${h - 12}시`;
   return { value: h, label };
 });
 
@@ -21,7 +24,11 @@ type Props = {
   onOpenConnect: () => void;
 };
 
-export function NotificationTab({ accountId, slackConnected, onOpenConnect }: Props) {
+export function NotificationTab({
+  accountId,
+  slackConnected,
+  onOpenConnect,
+}: Props) {
   const [enabled, setEnabled] = useState(true);
   const [hour, setHour] = useState(21);
   const [saving, setSaving] = useState(false);
@@ -76,7 +83,9 @@ export function NotificationTab({ accountId, slackConnected, onOpenConnect }: Pr
         <div className="flex items-center">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-slate-400" />
-            <span className="text-[13px] font-medium text-slate-700">알림 받기</span>
+            <span className="text-[13px] font-medium text-slate-700">
+              알림 받기
+            </span>
           </div>
           <div className="w-[30px]" />
           <button
@@ -98,7 +107,9 @@ export function NotificationTab({ accountId, slackConnected, onOpenConnect }: Pr
           <div className="flex items-center">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-slate-400" />
-              <span className="text-[13px] font-medium text-slate-700">알림 시간</span>
+              <span className="text-[13px] font-medium text-slate-700">
+                알림 시간
+              </span>
             </div>
             <div className="w-[30px]" />
             <select

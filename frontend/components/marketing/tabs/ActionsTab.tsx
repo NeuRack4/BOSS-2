@@ -128,7 +128,9 @@ function ActionCard({
       }
       setPreview(json.data as InstagramPayload);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "인스타그램 예시 생성에 실패했습니다.");
+      setError(
+        e instanceof Error ? e.message : "인스타그램 예시 생성에 실패했습니다.",
+      );
     } finally {
       setGenerating(false);
     }
@@ -168,7 +170,9 @@ function ActionCard({
           </p>
           {item.target && (
             <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-              <span className="font-semibold text-slate-600">{"\ub300\uc0c1"}</span>
+              <span className="font-semibold text-slate-600">
+                {"\ub300\uc0c1"}
+              </span>
               <span className="px-1 text-slate-300">/</span>
               {item.target}
             </p>

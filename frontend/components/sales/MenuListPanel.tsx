@@ -234,14 +234,19 @@ function MenuRow({
 
 // ── 메인 패널 ─────────────────────────────────────────────────────────────
 
-export default function MenuListPanel({ accountId, onTotalChange }: MenuListPanelProps) {
+export default function MenuListPanel({
+  accountId,
+  onTotalChange,
+}: MenuListPanelProps) {
   const [byCategory, setByCategory] = useState<Record<string, Menu[]>>({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // ref로 콜백 관리 — fetchMenus 의존성 배열에서 제외해 불필요한 재fetch 방지
   const onTotalChangeRef = useRef(onTotalChange);
-  useEffect(() => { onTotalChangeRef.current = onTotalChange; }, [onTotalChange]);
+  useEffect(() => {
+    onTotalChangeRef.current = onTotalChange;
+  }, [onTotalChange]);
 
   const fetchMenus = useCallback(() => {
     if (!accountId) return;
@@ -258,7 +263,9 @@ export default function MenuListPanel({ accountId, onTotalChange }: MenuListPane
   }, [accountId]);
 
   // 초기 로딩
-  useEffect(() => { fetchMenus(); }, [fetchMenus]);
+  useEffect(() => {
+    fetchMenus();
+  }, [fetchMenus]);
 
   // 메뉴 데이터 변경 시 자동 재fetch (원가 저장, 챗봇 메뉴 변경)
   useEffect(() => {
