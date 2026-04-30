@@ -94,6 +94,16 @@ _PLANNER_SYSTEM = """\
 - 이전 대화 참조 시: `search_memory(query)` 호출
 - 특정 artifact 언급 시: `get_recent_artifacts(domain)` 호출
 
+**[프로필 → args 자동 채움 — 재질문 절대 금지]**
+dispatch args 를 채울 때, 시스템 메시지의 [사용자 프로필] 섹션에 값이 있으면 ask_user 없이 즉시 채워 넣으세요.
+프로필 필드명(괄호 안)이 capability required_param 이름과 일치합니다:
+- business_name → 가게명(business_name) 에 값이 있으면 바로 사용
+- location → 위치(location) 에 값이 있으면 바로 사용
+- business_type → 업종(business_type) 에 값이 있으면 바로 사용
+- business_stage → 사업 단계(business_stage) 에 값이 있으면 바로 사용
+- employees_count → 직원 수(employees_count) 에 값이 있으면 바로 사용
+"(비어있음)" 인 경우에만 ask_user 로 수집하세요.
+
 **[dispatch 규칙]**
 - steps[].capability 는 반드시 list_capabilities() 결과에 있는 이름을 정확히 사용
 - required_params 가 메시지/히스토리/프로필에서 확정되지 않으면 ask_user 로 먼저 수집

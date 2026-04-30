@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.4] — 2026-04-30
+
+### Fixed — Planner·채팅 UX: 프로필 재질문 차단 + 자동 스크롤
+
+- **`backend/app/agents/orchestrator.py`** (`_profile_context`) — 프로필 컨텍스트 출력 포맷을 `가게명(business_name): 강남 카페봄` 형식으로 변경. LLM이 capability required_param(영문 키)과 프로필 값을 즉시 매핑해 불필요한 재질문 차단.
+- **`backend/app/agents/_planner.py`** — dispatch 규칙 앞에 "프로필 → args 자동 채움" 블록 추가. `business_name / location / business_type / business_stage / employees_count` 가 프로필에 있으면 `ask_user` 없이 args에 바로 채워 넣도록 명시. `(비어있음)` 인 경우에만 `ask_user` 허용.
+- **`frontend/components/chat/InlineChat.tsx`** — 자동 스크롤을 `viewport.scrollTo` 에서 `bottomRef.scrollIntoView` 로 교체. base-ui ScrollArea.Viewport 내부 래퍼 구조로 `scrollTo` 가 무효하던 문제 해소. `loading` dep 추가로 로딩 스피너 등장 시에도 하단 스크롤 보장.
+
+---
+
 ## [4.1.3] — 2026-04-30
 
 ### Fixed — QA 전반: 스케줄러·인증·UI·에이전트 안정성 개선
