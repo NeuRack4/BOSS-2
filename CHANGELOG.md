@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.10] — 2026-04-30
+
+### Fixed — 마케팅: YouTube·Instagram 계정별 OAuth 설정 + 댓글 자격증명 격리
+
+- **`integrations.py`** — `PUT /integrations/youtube` 신규 엔드포인트 추가. YouTube Client ID·Client Secret·Redirect URI를 `platform_credentials` 테이블에 계정별 저장. `GET /integrations/youtube`에 `configured` 상태 및 저장된 Client ID·Redirect URI 반환 필드 추가. `DELETE /integrations/youtube` 시 OAuth 토큰과 자격증명 동시 삭제.
+- **`youtube.py`** — `_oauth_settings(account_id)`가 DB에서 계정별 OAuth 설정을 우선 로드하고 없을 때만 전역 환경변수로 폴백. `get_oauth_url`, `exchange_code_for_tokens`, `_refresh_token` 모두 `account_id` 전달로 계정별 OAuth 동작.
+- **`IntegrationsModal.tsx`** — YouTube 탭에 Client ID·Client Secret·Redirect URI 입력 폼 추가. 설정 저장 전 "Google 계정 연결하기" 버튼 비활성화. "현재 API 주소로 채우기" 버튼으로 Redirect URI 자동 입력.
+- **`MarketingDashboard.tsx`** — YouTube 미연결 버튼 클릭 시 직접 OAuth 팝업 대신 `boss:open-integrations-modal` 이벤트로 IntegrationsModal YouTube 탭 오픈.
+- **`comment_manager.py`** — `fetch_instagram_comments`, `post_instagram_reply`가 전역 `settings`에서 토큰을 가져오던 방식을 `account_id` 기반 per-account 자격증명 조회로 교체.
+- **`comments.py`** — `post_reply` 엔드포인트에서 `post_instagram_reply` 호출 시 `account_id` 누락 버그 수정.
+- **`instagram.py`** — `publish_reels`에 `account_id` 파라미터 추가.
+- **`marketing.py` (router)** — `generate_shorts`의 `publish_reels` 호출에 `account_id` 전달 누락 수정.
+
 ## [4.1.9] — 2026-04-30
 
 ### Added — 로그인/회원가입 Split Stage 디자인 교체

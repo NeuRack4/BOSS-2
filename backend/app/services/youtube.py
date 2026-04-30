@@ -28,12 +28,30 @@ _SCOPES           = " ".join([
 
 # ── OAuth URL 생성 ────────────────────────────────────────────────────────────
 
-def _oauth_settings() -> tuple[str, str, str]:
+def _oauth_settings(account_id: str = "") -> tuple[str, str, str]:
     from app.core.config import settings
 
-    client_id = (settings.youtube_client_id or "").strip()
-    client_secret = (settings.youtube_client_secret or "").strip()
-    redirect_uri = (settings.youtube_redirect_uri or "").strip()
+    creds = {}
+    if account_id:
+        try:
+            from app.core.supabase import get_supabase
+
+            sb = get_supabase()
+            res = (
+                sb.table("platform_credentials")
+                .select("credentials")
+                .eq("account_id", account_id)
+                .eq("platform", "youtube")
+                .execute()
+            )
+            if res.data:
+                creds = res.data[0].get("credentials") or {}
+        except Exception:
+            log.exception("[youtube] failed to load account OAuth settings")
+
+    client_id = (creds.get("youtube_client_id") or settings.youtube_client_id or "").strip()
+    client_secret = (creds.get("youtube_client_secret") or settings.youtube_client_secret or "").strip()
+    redirect_uri = (creds.get("youtube_redirect_uri") or settings.youtube_redirect_uri or "").strip()
     missing = []
     if not client_id:
         missing.append("YOUTUBE_CLIENT_ID")
@@ -49,7 +67,7 @@ def _oauth_settings() -> tuple[str, str, str]:
 def get_oauth_url(account_id: str) -> str:
     """Google OAuth 2.0 인가 URL 반환. state = account_id."""
     import urllib.parse
-    client_id, _, redirect_uri = _oauth_settings()
+    client_id, _, redirect_uri = _oauth_settings(account_id)
 
     params = {
         "client_id":     client_id,
@@ -60,6 +78,7 @@ def get_oauth_url(account_id: str) -> str:
         "prompt":        "consent",   # 매번 refresh_token 재발급
         "state":         account_id,
     }
+    params["state"] = account_id
     return f"{_GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
@@ -68,7 +87,7 @@ def get_oauth_url(account_id: str) -> str:
 async def exchange_code_for_tokens(code: str, account_id: str) -> dict:
     """Authorization code → access/refresh token 교환 후 DB upsert."""
     from app.core.supabase import get_supabase
-    client_id, client_secret, redirect_uri = _oauth_settings()
+    client_id, client_secret, redirect_uri = _oauth_settings(account_id)
 
     async with httpx.AsyncClient() as client:
         r = await client.post(_GOOGLE_TOKEN_URL, data={
@@ -103,7 +122,7 @@ async def exchange_code_for_tokens(code: str, account_id: str) -> dict:
 async def _refresh_token(account_id: str, refresh_token: str) -> str:
     """refresh_token으로 새 access_token 획득 후 DB 업데이트."""
     from app.core.supabase import get_supabase
-    client_id, client_secret, _ = _oauth_settings()
+    client_id, client_secret, _ = _oauth_settings(account_id)
 
     async with httpx.AsyncClient() as client:
         r = await client.post(_GOOGLE_TOKEN_URL, data={

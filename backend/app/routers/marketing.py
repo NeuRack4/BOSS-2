@@ -427,6 +427,10 @@ async def delete_business_photo(photo_id: str, account_id: str = Query(...)):
 async def youtube_oauth_start(account_id: str = Query(...)):
     """YouTube OAuth 2.0 인가 URL 반환."""
     from app.services.youtube import get_oauth_url
+    try:
+        return {"url": get_oauth_url(account_id)}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     from app.core.config import settings
     if not settings.youtube_client_id:
         raise HTTPException(status_code=503, detail="YOUTUBE_CLIENT_ID 환경변수가 설정되지 않았습니다.")
@@ -568,6 +572,7 @@ async def generate_shorts(
             try:
                 from app.services.instagram import publish_reels
                 reels_url = await publish_reels(
+                    account_id=account_id,
                     video_url=storage_url,
                     caption=description or title,
                     hashtags=tag_list,
@@ -603,6 +608,7 @@ async def generate_shorts(
         try:
             from app.services.instagram import publish_reels
             reels_url = await publish_reels(
+                account_id=account_id,
                 video_url=storage_url,
                 caption=description or title,
                 hashtags=tag_list,

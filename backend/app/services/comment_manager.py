@@ -152,12 +152,13 @@ async def post_youtube_reply(account_id: str, parent_id: str, reply_text: str) -
 
 # ── Instagram ─────────────────────────────────────────────────────────────────
 
-async def fetch_instagram_comments() -> list[dict]:
+async def fetch_instagram_comments(account_id: str) -> list[dict]:
     """최근 미디어(최대 10개) 의 댓글(미디어당 최대 20개) 수집."""
-    from app.core.config import settings
+    from app.services.instagram import _get_instagram_credentials
 
-    token   = settings.meta_access_token
-    ig_id   = settings.instagram_user_id
+    creds = _get_instagram_credentials(account_id)
+    token = creds.get("meta_access_token", "")
+    ig_id = creds.get("instagram_user_id", "")
     if not token or not ig_id:
         return []
 
@@ -194,13 +195,14 @@ async def fetch_instagram_comments() -> list[dict]:
     return comments
 
 
-async def post_instagram_reply(comment_id: str, reply_text: str) -> None:
+async def post_instagram_reply(account_id: str, comment_id: str, reply_text: str) -> None:
     """Instagram 댓글에 답글 게시."""
-    from app.core.config import settings
+    from app.services.instagram import _get_instagram_credentials
 
-    token = settings.meta_access_token
+    creds = _get_instagram_credentials(account_id)
+    token = creds.get("meta_access_token", "")
     if not token:
-        raise RuntimeError("META_ACCESS_TOKEN 이 설정되지 않았습니다.")
+        raise RuntimeError("Instagram 연결 설정이 없습니다. 연동 설정에서 Instagram 액세스 토큰을 저장해주세요.")
 
     async with httpx.AsyncClient(timeout=20) as c:
         r = await c.post(f"{_GRAPH}/{comment_id}/replies", params={
@@ -236,7 +238,7 @@ async def scan_and_store(
     if "youtube" in platforms:
         tasks.append(fetch_youtube_comments(account_id))
     if "instagram" in platforms:
-        tasks.append(fetch_instagram_comments())
+        tasks.append(fetch_instagram_comments(account_id))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for r in results:

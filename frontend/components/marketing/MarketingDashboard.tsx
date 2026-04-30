@@ -49,6 +49,12 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
   }, []);
 
   const handleConnectYoutube = useCallback(async () => {
+    window.dispatchEvent(
+      new CustomEvent("boss:open-integrations-modal", {
+        detail: { tab: "youtube" },
+      }),
+    );
+    return;
     setYtConnecting(true);
     try {
       const sb = createClient();
@@ -83,7 +89,7 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
       };
       window.addEventListener("message", onMsg);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "YouTube connection failed.");
+      alert(error instanceof Error ? (error as Error).message : "YouTube connection failed.");
       setYtConnecting(false);
     }
   }, [accountId, refresh]);

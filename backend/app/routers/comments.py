@@ -84,7 +84,7 @@ async def post_reply(comment_id: str, account_id: str = Query(...)):
         if row["platform"] == "youtube":
             await post_youtube_reply(account_id, row["comment_id"], row["ai_reply"])
         else:
-            await post_instagram_reply(row["comment_id"], row["ai_reply"])
+            await post_instagram_reply(account_id, row["comment_id"], row["ai_reply"])
     except Exception as e:
         log.exception("reply post failed: %s", e)
         raise HTTPException(status_code=502, detail=str(e)[:300])

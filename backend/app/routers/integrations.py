@@ -146,11 +146,41 @@ async def delete_instagram(account_id: str):
 async def get_youtube_status(account_id: str):
     """youtube_oauth_tokens 테이블에서 연결 상태 조회."""
     from app.services.youtube import get_connection_status
-    return await get_connection_status(account_id)
+    status = await get_connection_status(account_id)
+    row = _get_credentials(account_id, "youtube")
+    creds = row["credentials"] if row else {}
+    return {
+        **status,
+        "configured": bool(creds.get("youtube_client_id") and creds.get("youtube_client_secret")),
+        "youtube_client_id": creds.get("youtube_client_id", ""),
+        "youtube_redirect_uri": creds.get("youtube_redirect_uri", ""),
+        "updated_at": row["updated_at"] if row else None,
+    }
+
+
+class YouTubeCredentials(BaseModel):
+    account_id: str
+    youtube_client_id: str
+    youtube_client_secret: str
+    youtube_redirect_uri: str
+
+
+@router.put("/youtube")
+async def save_youtube(req: YouTubeCredentials):
+    if not req.youtube_client_id.strip() or not req.youtube_client_secret.strip() or not req.youtube_redirect_uri.strip():
+        raise HTTPException(status_code=400, detail="YouTube Client ID, Client Secret, Redirect URI are required.")
+    _upsert_credentials(req.account_id, "youtube", {
+        "youtube_client_id": req.youtube_client_id.strip(),
+        "youtube_client_secret": req.youtube_client_secret.strip(),
+        "youtube_redirect_uri": req.youtube_redirect_uri.strip(),
+    })
+    log.info("[integrations] youtube oauth settings saved for account=%s", req.account_id)
+    return {"success": True}
 
 
 @router.delete("/youtube")
 async def delete_youtube(account_id: str):
     sb = get_supabase()
     sb.table("youtube_oauth_tokens").delete().eq("account_id", account_id).execute()
+    _delete_credentials(account_id, "youtube")
     return {"success": True}

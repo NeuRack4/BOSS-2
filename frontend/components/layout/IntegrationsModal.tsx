@@ -251,6 +251,16 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
     text: string;
   } | null>(null);
 
+  const defaultYoutubeRedirectUri = `${API}/api/marketing/youtube/oauth/callback`;
+  const [ytClientId, setYtClientId] = useState("");
+  const [ytClientSecret, setYtClientSecret] = useState("");
+  const [ytRedirectUri, setYtRedirectUri] = useState(defaultYoutubeRedirectUri);
+  const [ytSaving, setYtSaving] = useState(false);
+  const [ytMsg, setYtMsg] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setAccountId(data.user.id);
@@ -280,6 +290,10 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
     if (naver.blog_id) setBlogId(naver.blog_id);
     setIgStatus(ig);
     setYtStatus(yt);
+    if (typeof yt.youtube_client_id === "string") setYtClientId(yt.youtube_client_id);
+    if (typeof yt.youtube_redirect_uri === "string" && yt.youtube_redirect_uri) {
+      setYtRedirectUri(yt.youtube_redirect_uri);
+    }
   };
 
   const saveNaver = async () => {
@@ -372,11 +386,19 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
   };
 
   const connectYouTube = async () => {
+    setYtMsg(null);
+    if (!ytStatus.configured) {
+      setYtMsg({ type: "err", text: "YouTube OAuth 설정을 먼저 저장해 주세요." });
+      return;
+    }
     const res = await fetch(
       `${API}/api/marketing/youtube/oauth/start?account_id=${accountId}`,
     );
     const data = await res.json();
-    if (!data.url) return;
+    if (!res.ok || !data.url) {
+      setYtMsg({ type: "err", text: data.detail || "YouTube 연결 URL을 만들 수 없습니다." });
+      return;
+    }
     const popup = window.open(
       data.url,
       "youtube_oauth",
@@ -398,11 +420,48 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
     }, 1000);
   };
 
+  const saveYouTube = async () => {
+    setYtMsg(null);
+    if (!ytClientId.trim() || !ytClientSecret.trim() || !ytRedirectUri.trim()) {
+      setYtMsg({ type: "err", text: "Client ID, Client Secret, Redirect URI를 모두 입력해 주세요." });
+      return;
+    }
+    setYtSaving(true);
+    try {
+      const res = await fetch(`${API}/api/integrations/youtube`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: accountId,
+          youtube_client_id: ytClientId.trim(),
+          youtube_client_secret: ytClientSecret.trim(),
+          youtube_redirect_uri: ytRedirectUri.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setYtMsg({ type: "err", text: d.detail || "YouTube 설정 저장에 실패했습니다." });
+        return;
+      }
+      setYtMsg({ type: "ok", text: "YouTube OAuth 설정이 저장되었습니다." });
+      setYtClientSecret("");
+      fetchAll();
+    } catch {
+      setYtMsg({ type: "err", text: "네트워크 오류" });
+    } finally {
+      setYtSaving(false);
+    }
+  };
+
   const disconnectYouTube = async () => {
     if (!confirm("YouTube 연결을 해제하시겠습니까?")) return;
     await fetch(`${API}/api/integrations/youtube?account_id=${accountId}`, {
       method: "DELETE",
     });
+    setYtClientId("");
+    setYtClientSecret("");
+    setYtRedirectUri(defaultYoutubeRedirectUri);
+    setYtMsg(null);
     fetchAll();
   };
 
@@ -632,9 +691,67 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
           )}
 
           {!ytStatus.connected && (
+            <FormCard tab="youtube">
+              <Field label="YouTube Client ID" required>
+                <input
+                  className={inputCls("youtube")}
+                  value={ytClientId}
+                  onChange={(e) => setYtClientId(e.target.value)}
+                  placeholder="000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                />
+              </Field>
+              <Field label="YouTube Client Secret" required>
+                <input
+                  className={inputCls("youtube")}
+                  type="password"
+                  value={ytClientSecret}
+                  onChange={(e) => setYtClientSecret(e.target.value)}
+                  placeholder={ytStatus.configured ? "저장됨" : "GOCSPX-..."}
+                />
+              </Field>
+              <Field label="Redirect URI" required hint="Google Console에도 같은 값을 등록">
+                <input
+                  className={inputCls("youtube")}
+                  value={ytRedirectUri}
+                  onChange={(e) => setYtRedirectUri(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setYtRedirectUri(defaultYoutubeRedirectUri)}
+                  className="mt-1 self-start text-[12px] font-medium text-red-600 hover:text-red-700"
+                >
+                  현재 API 주소로 채우기
+                </button>
+              </Field>
+              {ytMsg && (
+                <p className={`text-[12px] ${ytMsg.type === "ok" ? "text-green-600" : "text-red-600"}`}>
+                  {ytMsg.text}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={saveYouTube}
+                  disabled={ytSaving}
+                  className="bg-red-600 text-white hover:bg-red-700 text-[13px] px-4 py-2 h-auto rounded-md disabled:opacity-50"
+                >
+                  {ytSaving ? "저장 중..." : "YouTube 설정 저장"}
+                </Button>
+                <Button
+                  onClick={connectYouTube}
+                  disabled={!ytStatus.configured}
+                  className="bg-[#111827] text-white hover:bg-[#374151] text-[13px] px-4 py-2 h-auto rounded-md disabled:opacity-50"
+                >
+                  Google 계정 연결하기
+                </Button>
+              </div>
+            </FormCard>
+          )}
+
+          {!ytStatus.connected && (
             <Button
               onClick={connectYouTube}
-              className="self-start bg-[#111827] text-white hover:bg-[#374151] text-[13px] px-4 py-2 h-auto rounded-md"
+              disabled={!ytStatus.configured}
+              className="hidden self-start bg-[#111827] text-white hover:bg-[#374151] text-[13px] px-4 py-2 h-auto rounded-md disabled:opacity-50"
             >
               Google 계정 연결하기
             </Button>

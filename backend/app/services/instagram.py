@@ -245,6 +245,7 @@ async def _create_reels_container(
 
 async def publish_reels(
     *,
+    account_id: str,
     video_url: str,
     caption: str,
     hashtags: list[str],
