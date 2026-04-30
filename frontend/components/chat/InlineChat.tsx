@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpIcon,
   Camera,
@@ -486,6 +487,7 @@ const adjustHeight = (el: HTMLTextAreaElement | null) => {
 };
 
 export const InlineChat = () => {
+  const router = useRouter();
   const {
     registerSender,
     currentSessionId,
@@ -1961,7 +1963,7 @@ export const InlineChat = () => {
                           if (msg.savedArtifactId) {
                             openDetail(msg.savedArtifactId);
                           } else if (msg.savedDomain) {
-                            window.location.href = `/${msg.savedDomain}`;
+                            router.push(`/${msg.savedDomain}`);
                           }
                         }}
                         className="rounded-[5px] border-[#030303]/15 bg-white text-[#030303]/70 hover:bg-[#030303]/[0.05] hover:text-[#030303] text-xs font-medium"
