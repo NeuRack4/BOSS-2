@@ -247,7 +247,7 @@ async def update_cost(record_id: str, req: CostPatchRequest):
         await index_artifact(
             account_id=req.account_id,
             source_type="sales",
-            source_id=f"cost_{record_id}",
+            source_id=record_id,
             content=_record_to_text(updated),
         )
     except Exception:

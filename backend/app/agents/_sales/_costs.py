@@ -110,7 +110,7 @@ async def dispatch_save_costs(
             await index_artifact(
                 account_id=account_id,
                 source_type="sales",
-                source_id=f"cost_{record['id']}",
+                source_id=record["id"],
                 content=_record_to_text(record),
             )
         except Exception:

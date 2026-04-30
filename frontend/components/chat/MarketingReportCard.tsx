@@ -90,10 +90,26 @@ const REPORT_TABS: {
   label: string;
   activeClass: string;
 }[] = [
-  { key: "overview", label: "\uac1c\uc694", activeClass: "bg-slate-700 text-white" },
-  { key: "instagram", label: "\uc778\uc2a4\ud0c0", activeClass: "bg-pink-500 text-white" },
-  { key: "youtube", label: "\uc720\ud29c\ube0c", activeClass: "bg-red-500 text-white" },
-  { key: "actions", label: "\ud560 \uc77c", activeClass: "bg-orange-400 text-white" },
+  {
+    key: "overview",
+    label: "\uac1c\uc694",
+    activeClass: "bg-slate-700 text-white",
+  },
+  {
+    key: "instagram",
+    label: "\uc778\uc2a4\ud0c0",
+    activeClass: "bg-pink-500 text-white",
+  },
+  {
+    key: "youtube",
+    label: "\uc720\ud29c\ube0c",
+    activeClass: "bg-red-500 text-white",
+  },
+  {
+    key: "actions",
+    label: "\ud560 \uc77c",
+    activeClass: "bg-orange-400 text-white",
+  },
 ];
 
 // ── 파서 ──────────────────────────────────────────────────────────────────

@@ -165,7 +165,11 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
             <CostTab overview={state.overview} onChatMessage={onChatMessage} />
           )}
           {activeTab === "menu" && (
-            <MenuProfitTab menus={state.menus} accountId={accountId} onChatMessage={onChatMessage} />
+            <MenuProfitTab
+              menus={state.menus}
+              accountId={accountId}
+              onChatMessage={onChatMessage}
+            />
           )}
           {activeTab === "notification" && (
             <NotificationTab

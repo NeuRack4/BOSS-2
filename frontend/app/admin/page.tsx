@@ -924,9 +924,7 @@ export default function AdminPage() {
         {activeTab === "payments" && userId && (
           <PaymentsTab accountId={userId} />
         )}
-        {activeTab === "stats" && userId && (
-          <StatsTab stats={stats} />
-        )}
+        {activeTab === "stats" && userId && <StatsTab stats={stats} />}
         {activeTab === "costs" && userId && <CostsTab accountId={userId} />}
       </div>
     </div>

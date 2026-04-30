@@ -43,7 +43,9 @@ function getDday(dueDateStr: string): string {
   today.setHours(0, 0, 0, 0);
   const due = new Date(dueDateStr);
   due.setHours(0, 0, 0, 0);
-  const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const diff = Math.round(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
   if (diff === 0) return "D-Day";
   if (diff > 0) return `D-${diff}`;
   return `D+${Math.abs(diff)}`;
@@ -68,7 +70,13 @@ function canShowInstagram(item: NoticeItem): boolean {
   );
 }
 
-function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }) {
+function NoticeCard({
+  item,
+  accountId,
+}: {
+  item: NoticeItem;
+  accountId: string;
+}) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<InstagramPayload | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -98,7 +106,9 @@ function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }
       if (!res.ok || json?.error) throw new Error(json?.error || "생성 실패");
       setPreview(json.data as InstagramPayload);
     } catch (e) {
-      setIgError(e instanceof Error ? e.message : "인스타그램 예시 생성에 실패했습니다.");
+      setIgError(
+        e instanceof Error ? e.message : "인스타그램 예시 생성에 실패했습니다.",
+      );
     } finally {
       setGenerating(false);
     }
@@ -111,7 +121,9 @@ function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-[#f5edd8]"
       >
-        <span className={`mt-0.5 shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${colorClass}`}>
+        <span
+          className={`mt-0.5 shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${colorClass}`}
+        >
           {dday}
         </span>
         <div className="min-w-0 flex-1">
@@ -133,7 +145,8 @@ function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }
         <div className="space-y-3 border-t border-[#e8dfc8] px-4 pb-4 pt-3">
           {item.target && (
             <p className="text-xs text-[#030303]/60">
-              <span className="font-medium text-[#030303]/80">대상</span> · {item.target}
+              <span className="font-medium text-[#030303]/80">대상</span> ·{" "}
+              {item.target}
             </p>
           )}
           {item.idea && (
@@ -141,7 +154,9 @@ function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#030303]/40">
                 아이디어
               </p>
-              <p className="text-sm leading-relaxed text-[#2e2719]">{item.idea}</p>
+              <p className="text-sm leading-relaxed text-[#2e2719]">
+                {item.idea}
+              </p>
             </div>
           )}
           {item.steps && item.steps.length > 0 && (
@@ -165,12 +180,16 @@ function NoticeCard({ item, accountId }: { item: NoticeItem; accountId: string }
           )}
           {item.expected && (
             <div className="rounded-lg border border-[#e8dfc8] bg-white/60 px-3 py-2">
-              <span className="text-xs font-medium text-[#030303]/50">기대효과 · </span>
+              <span className="text-xs font-medium text-[#030303]/50">
+                기대효과 ·{" "}
+              </span>
               <span className="text-sm text-[#2e2719]">{item.expected}</span>
             </div>
           )}
           {item.why && (
-            <p className="text-xs leading-relaxed text-[#030303]/40">{item.why}</p>
+            <p className="text-xs leading-relaxed text-[#030303]/40">
+              {item.why}
+            </p>
           )}
 
           {/* 인스타그램 예시 */}
@@ -220,17 +239,24 @@ export const NoticeModal = ({ open, onClose }: Props) => {
     const run = async () => {
       setLoading(true);
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!user) {
-        if (!cancelled) { setItems([]); setLoading(false); }
+        if (!cancelled) {
+          setItems([]);
+          setLoading(false);
+        }
         return;
       }
 
       if (!cancelled) setAccountId(user.id);
 
       try {
-        const res = await fetch(`${API}/api/marketing/notices?account_id=${user.id}`);
+        const res = await fetch(
+          `${API}/api/marketing/notices?account_id=${user.id}`,
+        );
         const json = await res.json();
         if (!cancelled) setItems(Array.isArray(json.data) ? json.data : []);
       } catch {
@@ -241,7 +267,9 @@ export const NoticeModal = ({ open, onClose }: Props) => {
     };
 
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   return (

@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.9] — 2026-04-30
+
+### Added — 로그인/회원가입 Split Stage 디자인 교체
+
+- **`BossAuthLayout.tsx`** (신규) — 좌측 다크 스테이지 + 우측 폼 패널 2분할 레이아웃. 브랜드 메트릭 카드, 뱃지, 폰트(DM Sans · DM Mono · Instrument Serif) 포함.
+- **`BossAuthPage.tsx`** (신규) — `useState` 기반 탭 전환으로 Sign in ↔ Create account 페이지 이동 없이 즉시 전환. 비밀번호 강도 미터(`StrengthMeter`), 비밀번호 확인 필드, `Cmd+Enter` 단축키 지원.
+- **`app/(auth)/login/page.tsx`, `signup/page.tsx`** — `BossAuthPage` thin wrapper로 교체. 기존 bento-grid 레이아웃 제거.
+
+### Fixed — 로그인 페이지 레이아웃
+
+- **`BossAuthLayout.tsx`** — 좌우 하단 푸터 수직 정렬 불일치 수정. stage `padding-bottom` 40px → 20px로 통일.
+
+### Fixed — Sales 대시보드 QA10
+
+- **`MenuProfitTab.tsx`** — 메뉴 원가 인라인 편집 기능 추가 및 전체 리팩토링. 카테고리 색상 팔레트 고정, 마진율 색상 임계값 조정, 챗봇 CTA 버튼 통일.
+- **`RevenueDetailTab.tsx`** — 기간별 빈 상태 메시지 통일, 주간 요약 수치 카드 레이아웃 개선, 코드 포맷팅 정리.
+- **`OverviewTab.tsx`** — 온보딩 체크리스트 카드형 UI + 항목별 `copiedIdx` 피드백, `goalCopied` 상태 추가. 전체 세미콜론 일관성 적용.
+- **`CostTab.tsx`** — 전월 비교 빈 상태 문구 및 스타일 통일.
+- **`NotificationTab.tsx`** — 알림 시간 표시 한국어 포맷(오전/오후) 개선.
+- **`useDashboardData.ts`** — 코드 포맷팅 전면 정리 (세미콜론, 줄바꿈 일관성).
+- **`NoticeModal.tsx`**, **`PaymentModal.tsx`**, **`SlackTab.tsx`** — 긴 라인 줄바꿈 및 포맷팅 정리.
+- **`MarketingReportCard.tsx`** — 리포트 카드 레이아웃 개선.
+- **`ActionsTab.tsx`**, **`MenuListPanel.tsx`**, **`admin/page.tsx`** — 코드 포맷팅 통일.
+
 ## [4.1.8] — 2026-04-30
 
 ### Fixed — Sales 대시보드 UX: 거짓말 버튼 제거 + 빈 상태 통일 + Slack 연결 모달

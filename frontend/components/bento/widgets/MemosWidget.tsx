@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type MemoRow = {
   id: string;
@@ -32,6 +34,29 @@ const formatRelative = (iso: string): string => {
 export const MemosWidget = ({ bgColor }: { bgColor?: string }) => {
   const [items, setItems] = useState<MemoRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const fetchMemos = async () => {
+    const sb = createClient();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const { data } = await sb
+      .from("memos")
+      .select("id, content, updated_at, artifacts(title)")
+      .eq("account_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    setItems((data as unknown as MemoRow[] | null) ?? []);
+    setLoading(false);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +89,49 @@ export const MemosWidget = ({ bgColor }: { bgColor?: string }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (adding) {
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  }, [adding]);
+
+  const openAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraft("");
+    setAdding(true);
+  };
+
+  const cancelAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAdding(false);
+    setDraft("");
+  };
+
+  const submitMemo = async (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    const text = draft.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    try {
+      const sb = createClient();
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (!user) return;
+      await fetch(`${API}/api/memos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: user.id, content: text }),
+      });
+      setAdding(false);
+      setDraft("");
+      await fetchMemos();
+      window.dispatchEvent(new CustomEvent("boss:artifacts-changed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const shown = items.slice(0, 3);
 
   return (
@@ -71,10 +139,11 @@ export const MemosWidget = ({ bgColor }: { bgColor?: string }) => {
       role="button"
       tabIndex={0}
       onClick={() =>
+        !adding &&
         window.dispatchEvent(new CustomEvent("boss:open-memos-modal"))
       }
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (!adding && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           window.dispatchEvent(new CustomEvent("boss:open-memos-modal"));
         }
@@ -86,8 +155,60 @@ export const MemosWidget = ({ bgColor }: { bgColor?: string }) => {
         <span className="text-base font-semibold tracking-tight text-[#030303]">
           Memos
         </span>
-        <ArrowUpRight className="h-5 w-5 opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:opacity-100" />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openAdd}
+            className="rounded p-0.5 text-[#030303]/60 transition-colors hover:bg-[#030303]/10 hover:text-[#030303]"
+            title="메모 추가"
+          >
+            <Plus size={15} />
+          </button>
+          <ArrowUpRight className="h-5 w-5 opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:opacity-100" />
+        </div>
       </div>
+
+      {adding && (
+        <div
+          className="mb-2 flex shrink-0 flex-col gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitMemo(e);
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setAdding(false);
+                setDraft("");
+              }
+            }}
+            placeholder="메모 입력… (Cmd+Enter 저장)"
+            rows={3}
+            className="w-full resize-none rounded-[5px] border border-[#030303]/20 bg-white/70 px-2.5 py-2 text-[12.5px] leading-snug text-[#030303] placeholder:text-[#030303]/40 focus:outline-none focus:ring-1 focus:ring-[#030303]/30"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={cancelAdd}
+              className="flex items-center gap-0.5 rounded px-2 py-1 text-[11px] text-[#030303]/50 hover:bg-[#030303]/10"
+            >
+              <X size={11} /> 취소
+            </button>
+            <button
+              type="button"
+              onClick={submitMemo}
+              disabled={!draft.trim() || saving}
+              className="rounded px-2.5 py-1 text-[11px] font-medium text-[#030303] transition-colors hover:bg-[#030303]/15 disabled:opacity-40"
+            >
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-hidden">
         {loading ? (
           <div className="flex h-full items-center justify-center text-xs text-[#030303]/50">
@@ -112,7 +233,7 @@ export const MemosWidget = ({ bgColor }: { bgColor?: string }) => {
                   className="block w-full rounded-[5px] bg-[#fcfcfc]/50 px-3 py-2 text-left text-[#030303] transition-colors hover:bg-[#fcfcfc]/80"
                 >
                   <div className="mb-0.5 truncate text-[11px] font-semibold uppercase tracking-wider text-[#030303]/55">
-                    {cleanTitle(m.artifacts?.title)}
+                    {m.artifacts?.title ? cleanTitle(m.artifacts.title) : "메모"}
                   </div>
                   <p className="text-[13px] leading-snug line-clamp-2">
                     {m.content}
