@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.3] — 2026-04-30
+
+### Fixed — QA 전반: 스케줄러·인증·UI·에이전트 안정성 개선
+
+- **`backend/app/scheduler/celery_app.py`** — Celery Beat tick 태스크에 `expires` 옵션 추가. Worker 재시작 후 Redis queue backlog가 드레인되며 tick이 연속 발사되던 현상 해소.
+- **`frontend/proxy.ts`** — `supabase.auth.getUser()` 네트워크 오류(`Failed to fetch`) 시 `/login` 강제 리다이렉트 방지. try/catch로 오류 흡수 후 세션 쿠키 신뢰.
+- **`frontend/components/layout/Header.tsx`** — ⌘K 검색 단축키가 textarea·input·contentEditable 포커스 중에도 발동되던 문제 수정. 태블릿(768px) 헤더 오버플로우 해소 — 반응형 브레이크포인트 분기 적용.
+- **`backend/app/agents/_recruitment_tools.py` · `recruitment.py`** — `write_checklist_guide` docstring에서 "근로계약서" 예시 제거, AGENT_SYSTEM_PROMPT에 계약서 작성 거부 규칙 추가. 채용 도메인에서 계약서 artifact가 생성되던 중복 라우팅 수정.
+- **`frontend/components/bento/DomainPage.tsx`** — 부모 컨테이너의 `overflow-x-hidden` 제거. KanbanBoard 4번째 컬럼이 잘리던 가로 스크롤 문제 해소.
+- **`frontend/components/bento/BentoGrid.tsx`** — 대시보드 summary fetch에 6초 AbortController 타임아웃 추가. 백엔드 hang 시 "불러오는 중…" 토스트가 무한 잔류하던 문제 수정.
+- **`backend/app/agents/recruitment.py`** (`run_interview`) — 면접 질문 생성 시 `[CHOICES]` 및 추가 정보 요청 금지 명시. LLM이 급여·조건 등을 되물으며 `write_interview` 호출을 지연하던 문제 수정.
+- **`frontend/components/chat/InlineChat.tsx`** — New Session 클릭 시 `chatAbortRef`로 in-flight fetch 즉시 중단 + `setLoading(false)` 호출. 구 세션 응답이 새 세션 메시지 목록에 이어붙던 문제 수정.
+
+---
+
 ## [4.1.2] — 2026-04-29
 
 ### Fixed — Chatbot: 챗봇 응답 UX 개선
