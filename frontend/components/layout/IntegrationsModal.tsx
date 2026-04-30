@@ -254,7 +254,6 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
   const defaultYoutubeRedirectUri = `${API}/api/marketing/youtube/oauth/callback`;
   const [ytClientId, setYtClientId] = useState("");
   const [ytClientSecret, setYtClientSecret] = useState("");
-  const [ytRedirectUri, setYtRedirectUri] = useState(defaultYoutubeRedirectUri);
   const [ytSaving, setYtSaving] = useState(false);
   const [ytMsg, setYtMsg] = useState<{
     type: "ok" | "err";
@@ -291,9 +290,6 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
     setIgStatus(ig);
     setYtStatus(yt);
     if (typeof yt.youtube_client_id === "string") setYtClientId(yt.youtube_client_id);
-    if (typeof yt.youtube_redirect_uri === "string" && yt.youtube_redirect_uri) {
-      setYtRedirectUri(yt.youtube_redirect_uri);
-    }
   };
 
   const saveNaver = async () => {
@@ -422,8 +418,8 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
 
   const saveYouTube = async () => {
     setYtMsg(null);
-    if (!ytClientId.trim() || !ytClientSecret.trim() || !ytRedirectUri.trim()) {
-      setYtMsg({ type: "err", text: "Client ID, Client Secret, Redirect URI를 모두 입력해 주세요." });
+    if (!ytClientId.trim() || !ytClientSecret.trim()) {
+      setYtMsg({ type: "err", text: "Client ID와 Client Secret을 모두 입력해 주세요." });
       return;
     }
     setYtSaving(true);
@@ -435,7 +431,7 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
           account_id: accountId,
           youtube_client_id: ytClientId.trim(),
           youtube_client_secret: ytClientSecret.trim(),
-          youtube_redirect_uri: ytRedirectUri.trim(),
+          youtube_redirect_uri: defaultYoutubeRedirectUri,
         }),
       });
       if (!res.ok) {
@@ -460,7 +456,6 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
     });
     setYtClientId("");
     setYtClientSecret("");
-    setYtRedirectUri(defaultYoutubeRedirectUri);
     setYtMsg(null);
     fetchAll();
   };
@@ -708,20 +703,6 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
                   onChange={(e) => setYtClientSecret(e.target.value)}
                   placeholder={ytStatus.configured ? "저장됨" : "GOCSPX-..."}
                 />
-              </Field>
-              <Field label="Redirect URI" required hint="Google Console에도 같은 값을 등록">
-                <input
-                  className={inputCls("youtube")}
-                  value={ytRedirectUri}
-                  onChange={(e) => setYtRedirectUri(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setYtRedirectUri(defaultYoutubeRedirectUri)}
-                  className="mt-1 self-start text-[12px] font-medium text-red-600 hover:text-red-700"
-                >
-                  현재 API 주소로 채우기
-                </button>
               </Field>
               {ytMsg && (
                 <p className={`text-[12px] ${ytMsg.type === "ok" ? "text-green-600" : "text-red-600"}`}>

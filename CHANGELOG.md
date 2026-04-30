@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.11] — 2026-04-30
+
+### Fixed — 마케팅: YouTube 연결 설정에서 Redirect URI 입력 제거
+
+- **`IntegrationsModal.tsx`** — YouTube OAuth 설정 폼에서 Redirect URI 입력 필드 및 "현재 API 주소로 채우기" 버튼 제거. 저장 시 `{API}/api/marketing/youtube/oauth/callback` 고정값으로 자동 설정.
+- **`integrations.py`** — `PUT /integrations/youtube` 유효성 검사에서 `youtube_redirect_uri` 필수 조건 제거.
+
 ## [4.1.10] — 2026-04-30
 
 ### Fixed — 마케팅: YouTube·Instagram 계정별 OAuth 설정 + 댓글 자격증명 격리
