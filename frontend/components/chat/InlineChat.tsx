@@ -606,6 +606,7 @@ export const InlineChat = () => {
   const sendRef = useRef<
     ((text: string, messageIndex?: number) => Promise<void>) | null
   >(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
@@ -626,6 +627,9 @@ export const InlineChat = () => {
 
   useEffect(() => {
     if (newSessionTick === 0) return;
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    setLoading(false);
     setMessages(emptyMessages());
     setInitialSuggestions(pickSuggested());
     setInput("");
@@ -633,7 +637,7 @@ export const InlineChat = () => {
     setLastSpeaker(null);
     adjustHeight(textareaRef.current);
     textareaRef.current?.focus();
-  }, [newSessionTick, setLastSpeaker]);
+  }, [newSessionTick, setLastSpeaker, setLoading]);
 
   useEffect(() => {
     if (loadSessionTick === 0 || !pendingLoadSessionId || !userId) return;
@@ -1204,6 +1208,9 @@ export const InlineChat = () => {
       });
       setLoading(true);
 
+      const controller = new AbortController();
+      chatAbortRef.current = controller;
+
       try {
         const chatBody: Record<string, unknown> = {
           message: trimmed,
@@ -1227,6 +1234,7 @@ export const InlineChat = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(chatBody),
+          signal: controller.signal,
         });
         const data = await res.json();
         const _replyPeek: string = data?.data?.reply ?? "";
@@ -1354,7 +1362,8 @@ export const InlineChat = () => {
         } else {
           fetchSessions();
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "서버 연결 오류가 발생했습니다." },

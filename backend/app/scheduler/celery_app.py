@@ -42,6 +42,8 @@ celery_app.conf.beat_schedule = {
     "scheduler-tick": {
         "task": "app.scheduler.tasks.tick",
         "schedule": celery_schedule(run_every=settings.scheduler_tick_seconds),
+        # Worker 다운 중 쌓인 stale tick은 버림 — backlog 방지
+        "options": {"expires": settings.scheduler_tick_seconds},
     },
     # YouTube 댓글 1시간마다 자동 수집 (dev)
     "comment-scan": {

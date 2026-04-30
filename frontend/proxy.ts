@@ -23,9 +23,14 @@ export const proxy = async (request: NextRequest) => {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // getUser() 네트워크 오류(Failed to fetch) 시 세션 쿠키를 신뢰하고 통과
+    return supabaseResponse;
+  }
 
   const { pathname } = request.nextUrl;
   const PUBLIC_PATHS = new Set(["/login", "/signup"]);

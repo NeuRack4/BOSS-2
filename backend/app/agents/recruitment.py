@@ -160,6 +160,7 @@ AGENT_SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
 2. 부족한 정보는 [CHOICES] 로 한 번에 하나씩 되물으세요.
 3. placeholder 절대 금지 — 확정되지 않은 정보(매장명·주소·연락처 등)를 임의 값으로 채우지 마세요.
 4. 한 턴에 하나의 terminal tool만 호출하세요.
+5. 계약서(근로계약서·임대차계약서 등) 작성 요청은 이 에이전트 범위 밖입니다. write_checklist_guide 로 계약서를 만들지 마세요. 계약서가 필요하면 "documents 도메인을 통해 처리해드릴게요"라고 안내하세요.
 
 [Placeholder 절대 금지 — 최우선]
 채용공고 작성 시:
@@ -1397,7 +1398,8 @@ async def run_interview(
     system += (
         f"\n\n[면접 질문 생성 요청 — 모든 정보 확정]\n"
         f"직종: {position}, 레벨: {level}, 질문 수: {count}개\n"
-        f"즉시 write_interview 도구를 호출해 저장하세요. 추가 질문 없이 바로 실행하세요."
+        f"⚠️ 위 정보로 충분합니다. 추가 정보(급여·근무 조건·일정 등) 절대 요청 금지.\n"
+        f"[CHOICES] 도 사용 금지. 지금 즉시 write_interview 도구를 호출해 질문 {count}개를 저장하세요."
     )
     return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system)
 
@@ -2254,7 +2256,7 @@ def describe(account_id: str) -> list[dict]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "예: '근로계약서 체크리스트'"},
+                    "topic": {"type": "string", "description": "예: '신입 채용 체크리스트'. 계약서 작성에는 사용 불가 — doc_contract 사용"},
                     "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
                 },
                 "required": ["topic"],

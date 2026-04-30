@@ -35,7 +35,7 @@ export const DomainPage = ({ domain }: Props) => {
     <div className="bento-shell flex h-screen flex-col overflow-hidden">
       <Header />
       <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-[1400px] overflow-x-hidden p-4 md:p-6">
+        <div className="mx-auto max-w-[1400px] p-4 md:p-6">
           <div
             className={cn(
               "relative mb-6 overflow-hidden rounded-[5px] p-6 text-[color:var(--kb-fg-on-banner)] shadow-lg md:p-8",

@@ -188,7 +188,9 @@ def write_checklist_guide(
     """[TERMINAL] 채용 관련 체크리스트 또는 가이드를 저장합니다.
     이 도구를 호출하면 대화가 종료됩니다 — 이후 추가 도구를 호출하지 마세요.
 
-    title: 문서 제목 (예: "근로계약서 작성 체크리스트")
+    ⚠️ 계약서(근로계약서 포함) 작성에는 사용하지 마세요. 계약서는 documents 도메인의 doc_contract 전용입니다.
+
+    title: 문서 제목 (예: "신입 바리스타 채용 체크리스트")
     content: 완성된 체크리스트 또는 가이드 본문 (마크다운)
     doc_type: 문서 유형 — "checklist" 또는 "guide" (기본: checklist)
     """

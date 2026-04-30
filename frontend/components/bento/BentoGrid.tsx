@@ -21,16 +21,19 @@ export const BentoGrid = ({ accountId }: Props) => {
   useEffect(() => {
     let cancel = false;
     const load = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       try {
         const res = await fetch(
           `${apiBase}/api/dashboard/summary?account_id=${accountId}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         );
         const json = await res.json();
         if (!cancel) setSummary(json?.data ?? null);
       } catch {
         if (!cancel) setSummary(null);
       } finally {
+        clearTimeout(timeoutId);
         if (!cancel) setLoading(false);
       }
     };
