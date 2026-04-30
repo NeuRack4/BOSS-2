@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Optional
 
 from app.core.embedder import embed_text
 from app.core.supabase import get_supabase
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/memos", tags=["memos"])
 
 class MemoCreateRequest(BaseModel):
     account_id: str
-    artifact_id: str
+    artifact_id: Optional[str] = None
     content: str
 
 
@@ -60,28 +60,26 @@ async def create_memo(req: MemoCreateRequest):
         raise HTTPException(status_code=400, detail="content is empty")
 
     sb = get_supabase()
-    # artifact 소유권 확인 (다른 계정 artifact에 메모 금지)
-    art = (
-        sb.table("artifacts")
-        .select("id,account_id")
-        .eq("id", req.artifact_id)
-        .single()
-        .execute()
-    ).data
-    if not art:
-        raise HTTPException(status_code=404, detail="artifact not found")
-    if art["account_id"] != req.account_id:
-        raise HTTPException(status_code=403, detail="not allowed")
+    if req.artifact_id:
+        art = (
+            sb.table("artifacts")
+            .select("id,account_id")
+            .eq("id", req.artifact_id)
+            .single()
+            .execute()
+        ).data
+        if not art:
+            raise HTTPException(status_code=404, detail="artifact not found")
+        if art["account_id"] != req.account_id:
+            raise HTTPException(status_code=403, detail="not allowed")
+
+    row_data: dict = {"account_id": req.account_id, "content": content}
+    if req.artifact_id:
+        row_data["artifact_id"] = req.artifact_id
 
     ins = (
         sb.table("memos")
-        .insert(
-            {
-                "account_id": req.account_id,
-                "artifact_id": req.artifact_id,
-                "content": content,
-            }
-        )
+        .insert(row_data)
         .execute()
     )
     row = (ins.data or [None])[0]
