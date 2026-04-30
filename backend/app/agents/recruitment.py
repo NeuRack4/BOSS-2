@@ -160,6 +160,7 @@ AGENT_SYSTEM_PROMPT = """당신은 채용 전문 AI 에이전트입니다.
 2. 부족한 정보는 [CHOICES] 로 한 번에 하나씩 되물으세요.
 3. placeholder 절대 금지 — 확정되지 않은 정보(매장명·주소·연락처 등)를 임의 값으로 채우지 마세요.
 4. 한 턴에 하나의 terminal tool만 호출하세요.
+5. 계약서(근로계약서·임대차계약서 등) 작성 요청은 이 에이전트 범위 밖입니다. write_checklist_guide 로 계약서를 만들지 마세요. 계약서가 필요하면 "documents 도메인을 통해 처리해드릴게요"라고 안내하세요.
 
 [Placeholder 절대 금지 — 최우선]
 채용공고 작성 시:
@@ -2254,7 +2255,7 @@ def describe(account_id: str) -> list[dict]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "예: '근로계약서 체크리스트'"},
+                    "topic": {"type": "string", "description": "예: '신입 채용 체크리스트'. 계약서 작성에는 사용 불가 — doc_contract 사용"},
                     "kind":  {"type": "string", "enum": ["checklist", "guide"], "default": "checklist"},
                 },
                 "required": ["topic"],
