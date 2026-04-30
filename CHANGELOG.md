@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.8] — 2026-04-30
+
+### Fixed — Sales 대시보드 UX: 거짓말 버튼 제거 + 빈 상태 통일 + Slack 연결 모달
+
+- **`OverviewTab.tsx`** — Stage 0 온보딩 체크리스트 재설계. `justify-between` 레이아웃(라벨↔버튼 간격 과다) → 카드형 레이아웃(라벨 위·버튼 아래). 버튼 텍스트 `입력하기` → `챗봇에 물어보기`. 항목별 독립 `copiedIdx`로 클릭 항목에만 피드백. 하단 `GoalRing + "이번달 목표: 미설정"` 중복 제거.
+- **`OverviewTab.tsx`** — Stage 1 `목표 설정하기` 버튼 피드백 개선. 하단 CTA 버튼 변경(시선 분리) → 버튼 자체에 `✓ 복사됐어요!` 표시. `goalCopied` 독립 상태 추가.
+- **`MenuProfitTab.tsx`** — 메뉴 빈 상태 버튼 개선. `메뉴 등록하러 가기` → `챗봇에 물어보기`. early return 구조로 `copied` 피드백이 표시되지 않던 버그 수정.
+- **`RevenueDetailTab.tsx`** — 빈 상태 문구 통일. 이번달 카테고리: `카테고리 데이터가 없어요` → `이번달 매출 기록이 없어요` + 📊 이모지. 오늘 부제: UI 직접 언급 제거 → `오늘 매출을 기록하면 일별 추이를 볼 수 있어요`.
+- **`CostTab.tsx`** — 빈 상태 문구 통일. `비용 데이터가 없어요` → `이번달 비용 기록이 없어요` + 카드 테두리 추가. `전월 비교 데이터가 없어요` → `아직 전월 비교를 할 수 없어요`.
+- **`SalesDashboard.tsx`** — `Connect에서 Slack 연결하기` 버튼 클릭해도 아무 일도 없던 버그 수정. `connectOpen` 상태는 존재했으나 `IntegrationsModal` 렌더링 코드 누락. `initialTab="slack"`으로 모달 추가.
+
+---
+
 ## [4.1.7] — 2026-04-30
 
 ### Added

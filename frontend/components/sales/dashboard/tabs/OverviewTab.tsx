@@ -134,32 +134,43 @@ function GoalRing({ percent, hasGoal }: { percent: number; hasGoal: boolean }) {
 }
 
 // ── 온보딩 체크리스트 (Stage 0) ────────────────────────────────────────────────
-function OnboardingChecklist({ onChatClick }: { onChatClick: (msg: string) => void }) {
+function OnboardingChecklist({ onChatMessage }: { onChatMessage?: (msg: string) => void }) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+
   const items = [
     { label: "첫 매출 기록하기", msg: "오늘 매출을 입력하고 싶어요" },
     { label: "메뉴 등록하기", msg: "메뉴를 등록하고 싶어요" },
     { label: "이번달 목표 설정하기", msg: "이번달 매출 목표를 설정하고 싶어요" },
   ]
 
+  const handleClick = (idx: number, msg: string) => {
+    onChatMessage?.(msg)
+    setCopiedIdx(idx)
+    setTimeout(() => setCopiedIdx(null), 2000)
+  }
+
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-700">시작해볼까요? 🌱</p>
-      {items.map(item => (
-        <div key={item.label} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
-          <span className="text-sm text-slate-600">{item.label}</span>
-          <button
-            onClick={() => onChatClick(item.msg)}
-            className="flex items-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-green-600"
-          >
-            <MessageCircle className="h-3 w-3" />
-            입력하기
-          </button>
-        </div>
-      ))}
-      <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-        <GoalRing percent={0} hasGoal={false} />
-        <span>이번달 목표: 미설정</span>
-      </div>
+    <div className="space-y-2">
+      <p className="mb-3 text-sm font-semibold text-slate-700">시작해볼까요? 🌱</p>
+      {items.map((item, idx) => {
+        const isCopied = copiedIdx === idx
+        return (
+          <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="mb-2.5 text-sm font-medium text-slate-700">{item.label}</p>
+            <button
+              onClick={() => handleClick(idx, item.msg)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                isCopied
+                  ? "bg-green-500 text-white"
+                  : "border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+              }`}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              {isCopied ? "✓ 복사됐어요! 대시보드 채팅창에 붙여넣기 하세요" : "챗봇에 물어보기"}
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -172,6 +183,7 @@ type Props = {
 
 export function OverviewTab({ state, onChatMessage }: Props) {
   const [copied, setCopied] = useState(false)
+  const [goalCopied, setGoalCopied] = useState(false)
 
   const handleChat = (msg: string) => {
     onChatMessage?.(msg)
@@ -179,11 +191,17 @@ export function OverviewTab({ state, onChatMessage }: Props) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleGoalChat = () => {
+    onChatMessage?.("이번달 매출 목표를 설정하고 싶어요")
+    setGoalCopied(true)
+    setTimeout(() => setGoalCopied(false), 2000)
+  }
+
   // Stage 0: 온보딩
   if (state.stage === 0) {
     return (
       <div className="p-4">
-        <OnboardingChecklist onChatClick={handleChat} />
+        <OnboardingChecklist onChatMessage={onChatMessage} />
       </div>
     )
   }
@@ -234,10 +252,14 @@ export function OverviewTab({ state, onChatMessage }: Props) {
           )}
           {!state.goal?.monthly_goal && (
             <button
-              onClick={() => handleChat("이번달 매출 목표를 설정하고 싶어요")}
-              className="mt-2 text-xs text-green-600 underline"
+              onClick={handleGoalChat}
+              className={`mt-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                goalCopied
+                  ? "bg-green-500 text-white"
+                  : "border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+              }`}
             >
-              목표 설정하기
+              {goalCopied ? "✓ 복사됐어요! 채팅창에 붙여넣기 하세요" : "목표 설정하기"}
             </button>
           )}
         </div>

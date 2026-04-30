@@ -318,7 +318,7 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
             <div className="py-4 text-center">
               <p className="text-2xl">☀️</p>
               <p className="mt-2 text-sm font-medium text-slate-600">오늘 아직 매출 기록이 없어요</p>
-              <p className="mt-1 text-xs text-slate-400">대시보드 채팅창에서 오늘 매출을 입력해보세요</p>
+              <p className="mt-1 text-xs text-slate-400">오늘 매출을 기록하면 일별 추이를 볼 수 있어요</p>
               {weekAvg > 0 && (
                 <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-600">
                   이번주 일평균 {fmt(weekAvg)}원 — 오늘도 기록하면 추이를 볼 수 있어요
@@ -376,8 +376,9 @@ export function RevenueDetailTab({ categories, weeklyData, periodActivation, onC
             </div>
           ) : (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-400">카테고리 데이터가 없어요</p>
-              <p className="mt-1 text-xs text-slate-300">매출을 기록하면 자동으로 분석돼요</p>
+              <p className="text-2xl">📊</p>
+              <p className="mt-2 text-sm font-medium text-slate-500">이번달 매출 기록이 없어요</p>
+              <p className="mt-1 text-xs text-slate-400">매출을 기록하면 카테고리별 분석이 시작돼요</p>
             </div>
           )}
         </>
