@@ -40,6 +40,14 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
     if (tab === "actions") fetchActions();
   };
 
+  const handleConnectInstagram = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent("boss:open-integrations-modal", {
+        detail: { tab: "instagram" },
+      }),
+    );
+  }, []);
+
   const handleConnectYoutube = useCallback(async () => {
     setYtConnecting(true);
     try {
@@ -49,12 +57,18 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
       const res = await fetch(
         `${API}/api/marketing/youtube/oauth/start?account_id=${aid}`,
       );
-      const { url } = await res.json();
+      const payload = await res.json();
+      if (!res.ok || !payload.url) {
+        throw new Error(payload.detail || payload.error || "YouTube connection failed.");
+      }
       const popup = window.open(
-        url,
+        payload.url,
         "youtube_oauth",
         "popup=true,width=600,height=700",
       );
+      if (!popup) {
+        throw new Error("Popup was blocked. Please allow popups and try again.");
+      }
       const onMsg = async (e: MessageEvent) => {
         if (e.data?.type !== "youtube_connected") return;
         window.removeEventListener("message", onMsg);
@@ -68,7 +82,8 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
         setYtConnecting(false);
       };
       window.addEventListener("message", onMsg);
-    } catch {
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "YouTube connection failed.");
       setYtConnecting(false);
     }
   }, [accountId, refresh]);
@@ -198,6 +213,7 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
           {activeTab === "overview" && (
             <OverviewTab
               data={state.data}
+              onConnectInstagram={handleConnectInstagram}
               onConnectYoutube={handleConnectYoutube}
               analysis={state.analysis}
               analysisLoading={state.analysisLoading}
@@ -209,6 +225,7 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
             <InstagramTab
               ig={state.data.instagram}
               periodDays={state.data.period_days}
+              onConnect={handleConnectInstagram}
             />
           )}
           {activeTab === "youtube" && (
