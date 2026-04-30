@@ -1,6 +1,6 @@
 # BOSS-2
 
-![version](https://img.shields.io/badge/version-4.1.4-blue)
+![version](https://img.shields.io/badge/version-4.1.5-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 채팅 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
 
