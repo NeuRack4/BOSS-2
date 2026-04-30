@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.7] — 2026-04-30
+
+### Added
+
+- **스케줄 설정 UI 개선** (`NodeDetailModal.tsx`) — 아티팩트 상세 모달의 스케줄 섹션을 cron 문자열 직접 입력 방식에서 토글 버튼 방식으로 교체. 매일/매주/매월 주기 선택, 요일(매주) 또는 날짜(매월) 선택, 09~22시 시간 선택 버튼 제공. 선택값에서 cron 표현식을 자동 생성하고 기존 cron 로드 시 역파싱 지원.
+
+### Fixed
+
+- **비동기 컨텍스트 내 sync Supabase 호출 차단** (`orchestrator.py`) — `run()`, `build_briefing()`, `_handle_planning()` 등 async 함수에서 sync postgrest 클라이언트 호출을 `asyncio.to_thread()`로 래핑. 이벤트 루프 블록으로 인한 `httpx.RemoteProtocolError: Server disconnected` (HTTP 500) 오류 해소.
+- **장기 메모리 모달 편집 기능 제거** (`LongTermMemoryModal.tsx`) — 장기 메모리를 읽기 전용으로 변경하고 내용을 마크다운으로 렌더링.
+- **스케줄 매니저 cron 표시 개선** (`ScheduleManagerModal.tsx`) — cron 표현식을 한국어 시간 형태로 표시 (예: `0 9 * * 1` → `매주 월요일 오전 9시`).
+
 ## [4.1.6] — 2026-04-30
 
 ### Fixed — 회원가입 비밀번호 확인 입력란 추가 + 로그인 페이지 로고 깨짐 수정
