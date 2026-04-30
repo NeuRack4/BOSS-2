@@ -89,7 +89,10 @@ export const SalesInputTable = ({ data, onClose, onConfirm }: Props) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[#2e2719]/40 backdrop-blur-sm"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="relative flex max-h-[86vh] w-[min(760px,94vw)] flex-col overflow-hidden rounded-[5px] border border-[#030303]/10 bg-[#f4f1ed] shadow-xl">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[#030303]/[0.08] px-4 py-3">
