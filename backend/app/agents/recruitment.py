@@ -1398,7 +1398,8 @@ async def run_interview(
     system += (
         f"\n\n[면접 질문 생성 요청 — 모든 정보 확정]\n"
         f"직종: {position}, 레벨: {level}, 질문 수: {count}개\n"
-        f"즉시 write_interview 도구를 호출해 저장하세요. 추가 질문 없이 바로 실행하세요."
+        f"⚠️ 위 정보로 충분합니다. 추가 정보(급여·근무 조건·일정 등) 절대 요청 금지.\n"
+        f"[CHOICES] 도 사용 금지. 지금 즉시 write_interview 도구를 호출해 질문 {count}개를 저장하세요."
     )
     return await _run_recruitment_agent(account_id, message, history, rag_context, long_term_context, system)
 
