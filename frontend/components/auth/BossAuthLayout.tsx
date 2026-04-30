@@ -196,7 +196,7 @@ const CSS = `
 .ba-stage {
   background: #14110D;
   color: #F8F4EB;
-  padding: 36px 56px 40px;
+  padding: 36px 56px 20px;
   display: flex;
   flex-direction: column;
   position: relative;
