@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.6] — 2026-04-30
+
+### Fixed — 회원가입 비밀번호 확인 입력란 추가 + 로그인 페이지 로고 깨짐 수정
+
+- **`frontend/app/(auth)/signup/page.tsx`** — 비밀번호 확인 입력란(`Confirm password`) 추가. 입력 중 불일치 시 인라인 힌트 표시, 제출 시 불일치 검증으로 차단.
+- **`frontend/proxy.ts`** — matcher에서 이미지·폰트 파일 확장자(`.png`, `.jpg`, `.svg`, `.webp`, `.woff`, `.ttf` 등) 제외. 미인증 상태에서 `/boss-logo.png`가 `/login`으로 307 리다이렉트되어 로그인 페이지 로고가 깨지던 버그 수정.
+
 ## [4.1.5] — 2026-04-30
 
 ### Fixed — Sales: 이벤트 전파·페이지 이탈·메모리 오염 수정
