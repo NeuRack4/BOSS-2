@@ -141,7 +141,7 @@ export const ChatHistoryModal = ({ open, onClose }: Props) => {
                   >
                     <button
                       type="button"
-                      onClick={() => handlePick(s.id)}
+                      onClick={(e) => { e.stopPropagation(); handlePick(s.id); }}
                       disabled={deleting}
                       className="block w-full px-3 py-2 pr-10 text-left disabled:opacity-50"
                     >

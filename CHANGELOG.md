@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.4] — 2026-04-30
+
+### Fixed — Sales: 이벤트 전파·페이지 이탈·메모리 오염 수정
+
+- **`ChatHistoryModal.tsx`** — 히스토리 항목 클릭 버튼(`handlePick`)에 `e.stopPropagation()` 추가. React 포털 이벤트가 상위 Link로 전파되어 도메인 페이지로 이동하던 버그 수정.
+- **`SalesInputTable.tsx`** — 백드롭 div에 `onClick stopPropagation` 추가. 비포털 fixed 오버레이 클릭 이벤트 버블링 차단.
+- **`InlineChat.tsx`** — `window.location.href` 하드 네비게이션을 `router.push`로 교체. ACTION 마커 처리 중 대시보드 이탈 방지.
+- **`sales.py`** — `run_sales_checklist`에 근로계약·노무 관련 키워드 가드 추가. 오케스트레이터 미스라우팅 시 `sales` 메모리 슬롯 오염 방지.
+
 ## [4.1.3] — 2026-04-30
 
 ### Fixed — QA 전반: 스케줄러·인증·UI·에이전트 안정성 개선
