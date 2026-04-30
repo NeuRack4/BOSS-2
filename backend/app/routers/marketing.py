@@ -24,6 +24,14 @@ from app.core.llm import client as openai_client
 from app.core.config import settings
 from app.core.supabase import get_supabase
 from app.agents._marketing_knowledge import search_subsidy_programs
+from app.services.marketing_data_quality import (
+    NO_MARKETING_CONTENT_MESSAGE,
+    has_any_marketing_performance,
+    has_instagram_performance,
+    has_youtube_performance,
+    mark_empty_instagram,
+    mark_empty_youtube,
+)
 
 log = logging.getLogger(__name__)
 
@@ -334,14 +342,6 @@ async def publish_instagram(req: InstagramPublishRequest):
     인스타그램 비즈니스 계정에 이미지 피드 게시.
     META_ACCESS_TOKEN / INSTAGRAM_USER_ID 환경변수 필요.
     """
-    from app.core.config import settings
-
-    if not settings.meta_access_token or not settings.instagram_user_id:
-        raise HTTPException(
-            status_code=503,
-            detail="META_ACCESS_TOKEN / INSTAGRAM_USER_ID 환경변수가 설정되지 않았습니다.",
-        )
-
     try:
         from app.services.instagram import publish_post
         post_url = await publish_post(
@@ -725,7 +725,7 @@ async def get_instagram_report(
 ):
     """Instagram 계정/게시물 성과 데이터 조회."""
     from app.services.instagram_insights import collect_report_data
-    data = await collect_report_data(days=days)
+    data = mark_empty_instagram(await collect_report_data(days=days, account_id=account_id))
     return {"data": data, "error": data.get("error")}
 
 
@@ -736,7 +736,7 @@ async def get_youtube_report(
 ):
     """YouTube Analytics 채널/영상 성과 데이터 조회."""
     from app.services.youtube_analytics import collect_report_data
-    data = await collect_report_data(account_id=account_id, days=days)
+    data = mark_empty_youtube(await collect_report_data(account_id=account_id, days=days))
     return {"data": data, "error": data.get("channel", {}).get("error")}
 
 
@@ -761,6 +761,9 @@ async def get_marketing_dashboard(
         ig_result = {"error": str(ig_result)}
     if isinstance(yt_result, Exception):
         yt_result = {"error": str(yt_result)}
+
+    ig_result = mark_empty_instagram(ig_result)
+    yt_result = mark_empty_youtube(yt_result)
 
     return {
         "data": {"instagram": ig_result, "youtube": yt_result, "period_days": days},
@@ -793,8 +796,14 @@ async def get_marketing_analysis(
     if isinstance(yt_daily, Exception):
         yt_daily = []
 
-    ig_ok = "error" not in ig_result
-    yt_ok = "error" not in yt_result.get("channel", {})
+    if not has_any_marketing_performance(ig_result, yt_result):
+        return {
+            "data": None,
+            "error": NO_MARKETING_CONTENT_MESSAGE,
+        }
+
+    ig_ok = has_instagram_performance(ig_result)
+    yt_ok = has_youtube_performance(yt_result)
 
     # Instagram 일별 도달수
     ig_daily: list[dict] = []
@@ -818,10 +827,6 @@ async def get_marketing_analysis(
                 ig_user_id = c.get("instagram_user_id", "")
         except Exception:
             pass
-        if not access_token or not ig_user_id:
-            from app.core.config import settings
-            access_token = access_token or settings.meta_access_token or ""
-            ig_user_id = ig_user_id or settings.instagram_user_id or ""
         if access_token and ig_user_id:
             try:
                 ig_daily = await get_daily_reach(access_token, ig_user_id, days=days)
@@ -913,8 +918,14 @@ async def get_marketing_dashboard_actions(
     if isinstance(yt_result, Exception):
         yt_result = {"error": str(yt_result)}
 
-    ig_ok = "error" not in ig_result
-    yt_ok = "error" not in yt_result.get("channel", {})
+    if not has_any_marketing_performance(ig_result, yt_result):
+        return {
+            "data": [],
+            "error": NO_MARKETING_CONTENT_MESSAGE,
+        }
+
+    ig_ok = has_instagram_performance(ig_result)
+    yt_ok = has_youtube_performance(yt_result)
 
     summary_parts = [f"[분석 기간] 최근 {days}일"]
     if ig_ok:

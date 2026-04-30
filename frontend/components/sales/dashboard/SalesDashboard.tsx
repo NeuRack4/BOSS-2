@@ -9,6 +9,7 @@ import { RevenueDetailTab } from "./tabs/RevenueDetailTab";
 import { CostTab } from "./tabs/CostTab";
 import { MenuProfitTab } from "./tabs/MenuProfitTab";
 import { NotificationTab } from "./tabs/NotificationTab";
+import { IntegrationsModal } from "@/components/layout/IntegrationsModal";
 
 const fmt = (n: number) =>
   n >= 10_000 ? `${(n / 10_000).toFixed(1)}만` : n.toLocaleString();
@@ -80,6 +81,12 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
 
   // ── 펼쳐진 상태 ───────────────────────────────────────────────────────────
   return (
+    <>
+    <IntegrationsModal
+      open={connectOpen}
+      onClose={() => setConnectOpen(false)}
+      initialTab="slack"
+    />
     <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {/* 헤더: 탭 + 접기 버튼 */}
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -170,5 +177,6 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
         </>
       )}
     </div>
+    </>
   );
 }

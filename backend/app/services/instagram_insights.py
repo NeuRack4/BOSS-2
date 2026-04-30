@@ -239,9 +239,11 @@ async def collect_report_data(days: int = 30, account_id: str = "") -> dict:
             pass
 
     if not access_token or not ig_user_id:
-        from app.core.config import settings
-        access_token = access_token or settings.meta_access_token or ""
-        ig_user_id = ig_user_id or settings.instagram_user_id or ""
+        if not account_id:
+            # account_id 없이 호출된 경우에만 전역 설정 사용 (레거시)
+            from app.core.config import settings
+            access_token = access_token or settings.meta_access_token or ""
+            ig_user_id = ig_user_id or settings.instagram_user_id or ""
 
     if not access_token or not ig_user_id:
         return {"error": "Instagram 계정이 연결되지 않았습니다. 플랫폼 연동 설정에서 연결해 주세요."}

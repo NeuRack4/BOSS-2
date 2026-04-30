@@ -42,6 +42,12 @@ from app.agents._marketing_tools import (
     get_marketing_extra,
 )
 from app.core.config import settings
+from app.services.marketing_data_quality import (
+    NO_MARKETING_CONTENT_MESSAGE,
+    has_any_marketing_performance,
+    has_instagram_performance,
+    has_youtube_performance,
+)
 
 log = logging.getLogger("boss2.marketing")
 
@@ -1160,8 +1166,19 @@ async def run_marketing_report(
     if isinstance(yt_data, Exception):
         yt_data = {"error": str(yt_data)}
 
-    ig_ok = "error" not in ig_data
-    yt_ok = "error" not in yt_data.get("channel", {})
+    if not has_any_marketing_performance(ig_data, yt_data):
+        return (
+            "업로드된 Instagram 게시물이나 YouTube 영상 성과 데이터가 없어 "
+            "성과 분석 리포트를 만들지 않았습니다. 실제 게시/업로드 후 지표가 수집되면 분석할 수 있습니다."
+        )
+
+    ig_ok = has_instagram_performance(ig_data)
+    yt_ok = has_youtube_performance(yt_data)
+    if not ig_ok and isinstance(ig_data, dict) and not ig_data.get("error"):
+        ig_data = {**ig_data, "error": NO_MARKETING_CONTENT_MESSAGE}
+    if not yt_ok and isinstance(yt_data, dict) and not yt_data.get("channel", {}).get("error"):
+        channel = yt_data.get("channel") if isinstance(yt_data.get("channel"), dict) else {}
+        yt_data = {**yt_data, "channel": {**channel, "error": NO_MARKETING_CONTENT_MESSAGE}}
 
     # AI 분석용 데이터 요약 텍스트
     summary_parts: list[str] = [f"[분석 기간] 최근 {period}일"]
@@ -1315,8 +1332,8 @@ async def run_marketing_report(
     # [[MARKETING_REPORT]] 마커 생성
     report_payload = {
         "period_days": period,
-        "instagram": ig_data if ig_ok else {"error": ig_data.get("error")},
-        "youtube": yt_data if yt_ok else {"error": yt_data.get("channel", {}).get("error")},
+        "instagram": ig_data if ig_ok else {"error": ig_data.get("error") or NO_MARKETING_CONTENT_MESSAGE},
+        "youtube": yt_data if yt_ok else {"error": yt_data.get("channel", {}).get("error") or NO_MARKETING_CONTENT_MESSAGE},
         "analysis": analysis,
         "actions": actions,
     }

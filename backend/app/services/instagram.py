@@ -31,9 +31,8 @@ _GRAPH_BASE = "https://graph.facebook.com/v19.0"
 
 
 def _get_instagram_credentials(account_id: str) -> dict:
-    """DB에서 account_id별 Instagram 자격증명 로드. 없으면 settings fallback."""
+    """DB에서 account_id별 Instagram 자격증명 로드. 없으면 빈 dict 반환."""
     from app.core.supabase import get_supabase
-    from app.core.config import settings
     try:
         sb = get_supabase()
         res = (
@@ -47,11 +46,7 @@ def _get_instagram_credentials(account_id: str) -> dict:
             return res.data[0]["credentials"]
     except Exception:
         pass
-    return {
-        "meta_access_token":    settings.meta_access_token,
-        "meta_ig_access_token": settings.meta_ig_access_token,
-        "instagram_user_id":    settings.instagram_user_id,
-    }
+    return {}
 
 
 async def _download_image(url: str) -> bytes:

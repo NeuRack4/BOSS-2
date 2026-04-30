@@ -2,7 +2,6 @@
 "use client";
 
 import { Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
 import type {
   DailyInstagramData,
   DailyYoutubeData,
@@ -311,6 +310,7 @@ function AnalysisPanel({
 
 type Props = {
   data: MarketingData;
+  onConnectInstagram?: () => void;
   onConnectYoutube?: () => void;
   analysis: MarketingAnalysis | null;
   analysisLoading: boolean;
@@ -320,6 +320,7 @@ type Props = {
 
 export function OverviewTab({
   data,
+  onConnectInstagram,
   onConnectYoutube,
   analysis,
   analysisLoading,
@@ -330,12 +331,13 @@ export function OverviewTab({
   const yt = data.youtube;
   const igOk = ig && !ig.error;
   const ytOk = yt && yt.channel && !yt.channel.error;
+  const canAnalyze = !!igOk || !!ytOk;
 
   return (
     <div className="space-y-5 p-4">
       {/* 플랫폼 연결 상태 */}
       <div className="flex flex-wrap gap-2">
-        <PlatformChip connected={!!igOk} label="Instagram" />
+        <PlatformChip connected={!!igOk} label="Instagram" onConnect={onConnectInstagram} />
         <PlatformChip
           connected={!!ytOk}
           label="YouTube"
@@ -414,7 +416,7 @@ export function OverviewTab({
       )}
 
       {/* AI 성과 분석 버튼 or 분석 결과 */}
-      {!analysisLoaded && !analysisLoading && (
+      {canAnalyze && !analysisLoaded && !analysisLoading && (
         <button
           onClick={onRequestAnalysis}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-100 bg-violet-50 py-3 text-sm font-medium text-violet-600 transition hover:bg-violet-100"
