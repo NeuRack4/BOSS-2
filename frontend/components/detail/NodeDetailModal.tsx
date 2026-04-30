@@ -1039,6 +1039,10 @@ export const NodeDetailModal = () => {
 
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [cronDraft, setCronDraft] = useState("");
+  const [schedFreq, setSchedFreq] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [schedDow, setSchedDow] = useState(1);
+  const [schedDom, setSchedDom] = useState(1);
+  const [schedHour, setSchedHour] = useState(9);
   const [scheduleStatus, setScheduleStatus] = useState<"active" | "paused">(
     "active",
   );
@@ -1126,7 +1130,30 @@ export const NodeDetailModal = () => {
         });
         const se = metaBool(meta, "schedule_enabled");
         setScheduleEnabled(se);
-        setCronDraft(metaString(meta, "cron"));
+        const cronVal = metaString(meta, "cron");
+        setCronDraft(cronVal);
+        // parse existing cron into UI state
+        const cp = cronVal.trim().split(/\s+/);
+        if (cp.length === 5) {
+          const [cm, ch, cdom, , cdow] = cp;
+          const ph = parseInt(ch, 10);
+          const pm = parseInt(cm, 10);
+          if (!isNaN(ph) && ph >= 9 && ph <= 22) setSchedHour(ph);
+          else setSchedHour(9);
+          if (cdow !== "*") {
+            setSchedFreq("weekly");
+            setSchedDow(parseInt(cdow, 10) || 1);
+          } else if (cdom !== "*") {
+            setSchedFreq("monthly");
+            setSchedDom(parseInt(cdom, 10) || 1);
+          } else {
+            setSchedFreq("daily");
+          }
+          void pm;
+        } else {
+          setSchedFreq("daily");
+          setSchedHour(9);
+        }
         const ss = metaString(meta, "schedule_status");
         setScheduleStatus(ss === "paused" ? "paused" : "active");
         setBoostStars(3);
@@ -1195,7 +1222,9 @@ export const NodeDetailModal = () => {
   const [menuTotal, setMenuTotal] = useState<number | null>(null);
 
   // artifact 바뀔 때 menuTotal 초기화 (이전 모달 값 잔류 방지)
-  useEffect(() => { setMenuTotal(null); }, [artifact?.id]);
+  useEffect(() => {
+    setMenuTotal(null);
+  }, [artifact?.id]);
   const downloadAttachment = useCallback(async () => {
     if (!attachment) return;
     setDownloading(true);
@@ -1369,16 +1398,25 @@ export const NodeDetailModal = () => {
     });
   };
 
+  const buildCron = (
+    freq: "daily" | "weekly" | "monthly",
+    dow: number,
+    dom: number,
+    hour: number,
+  ) => {
+    if (freq === "weekly") return `0 ${hour} * * ${dow}`;
+    if (freq === "monthly") return `0 ${hour} ${dom} * *`;
+    return `0 ${hour} * * *`;
+  };
+
   const toggleSchedule = async (v: boolean) => {
     setScheduleEnabled(v);
     if (v) {
-      if (!cronDraft.trim()) {
-        // open the input but don't call API yet
-        return;
-      }
+      const cron = buildCron(schedFreq, schedDow, schedDom, schedHour);
+      setCronDraft(cron);
       await patchArtifact({
         schedule_enabled: true,
-        cron: cronDraft,
+        cron,
         schedule_status: scheduleStatus,
       });
     } else {
@@ -1387,10 +1425,11 @@ export const NodeDetailModal = () => {
   };
 
   const saveCron = async () => {
-    if (!cronDraft.trim()) return;
+    const cron = buildCron(schedFreq, schedDow, schedDom, schedHour);
+    setCronDraft(cron);
     await patchArtifact({
       schedule_enabled: true,
-      cron: cronDraft,
+      cron,
       schedule_status: scheduleStatus,
     });
   };
@@ -1480,7 +1519,11 @@ export const NodeDetailModal = () => {
     <Modal
       open={open}
       onClose={closeDetail}
-      title={artifact?.type === "menu_list" && menuTotal !== null ? `메뉴판(${menuTotal}개)` : (artifact?.title ?? "Loading...")}
+      title={
+        artifact?.type === "menu_list" && menuTotal !== null
+          ? `메뉴판(${menuTotal}개)`
+          : (artifact?.title ?? "Loading...")
+      }
       widthClass="w-[min(1120px,95vw)]"
       variant="dashboard"
     >
@@ -1581,7 +1624,10 @@ export const NodeDetailModal = () => {
                 {/* MENU LIST 패널 — menu_list artifact 카드 클릭 시 표시 */}
                 {artifact.type === "menu_list" && accountId && (
                   <Section>
-                    <MenuListPanel accountId={accountId} onTotalChange={setMenuTotal} />
+                    <MenuListPanel
+                      accountId={accountId}
+                      onTotalChange={setMenuTotal}
+                    />
                   </Section>
                 )}
 
@@ -2158,20 +2204,95 @@ export const NodeDetailModal = () => {
                   </div>
                   {scheduleEnabled && (
                     <div className="flex flex-col gap-2 text-[12px]">
+                      {/* 주기 선택 */}
+                      <div className="flex gap-1">
+                        {(["daily", "weekly", "monthly"] as const).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => setSchedFreq(f)}
+                            className={cn(
+                              "rounded-[4px] px-2.5 py-1 text-[11px] font-medium",
+                              schedFreq === f
+                                ? "bg-[#030303] text-white"
+                                : "border border-[#030303]/15 text-[#030303]/60 hover:border-[#030303]/30",
+                            )}
+                          >
+                            {f === "daily" ? "매일" : f === "weekly" ? "매주" : "매월"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* 요일 선택 (매주) */}
+                      {schedFreq === "weekly" && (
+                        <div className="flex gap-1">
+                          {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setSchedDow(i)}
+                              className={cn(
+                                "h-6 w-6 rounded-full text-[11px] font-medium",
+                                schedDow === i
+                                  ? "bg-[#030303] text-white"
+                                  : "border border-[#030303]/15 text-[#030303]/60 hover:border-[#030303]/30",
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 날짜 선택 (매월) */}
+                      {schedFreq === "monthly" && (
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setSchedDom(d)}
+                              className={cn(
+                                "h-6 w-6 rounded-[4px] text-[11px] font-medium",
+                                schedDom === d
+                                  ? "bg-[#030303] text-white"
+                                  : "border border-[#030303]/15 text-[#030303]/60 hover:border-[#030303]/30",
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 시간 선택 (09~22시) */}
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from({ length: 14 }, (_, i) => i + 9).map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setSchedHour(h)}
+                            className={cn(
+                              "rounded-[4px] px-1.5 py-0.5 text-[11px] font-medium",
+                              schedHour === h
+                                ? "bg-[#030303] text-white"
+                                : "border border-[#030303]/15 text-[#030303]/60 hover:border-[#030303]/30",
+                            )}
+                          >
+                            {h}시
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* 저장 + 상태 버튼 */}
                       <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="cron (예: 0 9 * * *)"
-                          value={cronDraft}
-                          onChange={(e) => setCronDraft(e.target.value)}
-                          className="flex-1 rounded-[4px] border border-[#030303]/15 bg-white px-2 py-1 font-mono outline-none focus:border-[#030303]/40"
-                        />
                         <button
                           type="button"
                           onClick={saveCron}
-                          className="rounded-[4px] bg-[#030303] px-2 py-1 text-[11px] text-white"
+                          className="flex items-center gap-1 rounded-[4px] bg-[#030303] px-2 py-1 text-[11px] text-white"
                         >
                           <Save size={11} />
+                          저장
                         </button>
                         <button
                           type="button"

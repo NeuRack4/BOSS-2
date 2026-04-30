@@ -113,15 +113,38 @@ const startOfToday = () => {
   return d;
 };
 
-const cronHuman = (expr?: string) => {
+const _DOW_KO: Record<string, string> = {
+  "0": "일", "1": "월", "2": "화", "3": "수", "4": "목", "5": "금", "6": "토", "7": "일",
+};
+
+const cronHuman = (expr?: string): string => {
   if (!expr) return "";
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) return expr;
-  const [m, h, dom, mon, dow] = parts;
-  if (dom === "*" && mon === "*" && dow === "*") {
-    if (dow === "*") {
-      return `Daily ${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
-    }
+  const [minute, hour, dom, month, dow] = parts;
+
+  let timeStr = "";
+  const h = parseInt(hour, 10);
+  const mn = parseInt(minute, 10);
+  if (!isNaN(h) && !isNaN(mn)) {
+    const ampm = h < 12 ? "오전" : "오후";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    timeStr = mn === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}시 ${mn}분`;
+  }
+
+  if (dow !== "*" && dom === "*") {
+    const days = dow
+      .replace(/-/g, ",")
+      .split(",")
+      .map((d) => (_DOW_KO[d] ?? d) + "요일")
+      .join("/");
+    return `매주 ${days}${timeStr ? " " + timeStr : ""}`;
+  }
+  if (dom !== "*" && dow === "*") {
+    return `매월 ${dom}일${timeStr ? " " + timeStr : ""}`;
+  }
+  if (dow === "*" && dom === "*" && month === "*") {
+    return `매일${timeStr ? " " + timeStr : ""}`;
   }
   return expr;
 };

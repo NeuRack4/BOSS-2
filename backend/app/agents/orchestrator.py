@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -1258,7 +1259,7 @@ async def _handle_planning(
     nick_ctx: str,
 ) -> str:
     start, end = await _extract_date_range(message)
-    facts = _gather_plan_facts(account_id, start, end)
+    facts = await asyncio.to_thread(_gather_plan_facts, account_id, start, end)
 
     # 추가: 각 도메인별 오늘 추천도 섞어 plan 에 반영
     from app.agents import recruitment, marketing, sales, documents
@@ -1312,8 +1313,8 @@ async def run(
     rag_context: str = "",
     long_term_context: str = "",
 ) -> str:
-    nick_ctx = (
-        _nickname_context(account_id)
+    nick_ctx = await asyncio.to_thread(
+        lambda: _nickname_context(account_id)
         + _profile_context(account_id)
         + _profile_nudge_context(account_id)
     )
@@ -1508,7 +1509,7 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
 
     # 핵심 4개 필드 누락 시 온보딩 브리핑 즉시 발화 (8h 조건 무시)
     _onboarding_keys = ("display_name", "business_type", "location", "primary_goal")
-    _p = get_profile(account_id)
+    _p = await asyncio.to_thread(get_profile, account_id)
     _missing_onboard = [k for k in _onboarding_keys if not (_p or {}).get(k)]
     if len(_missing_onboard) >= 2:
         _nick = (_p or {}).get("display_name") or "사장님"
@@ -1532,7 +1533,7 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
             "meta": {"onboarding": True},
         }
 
-    agg = _aggregate_activity(account_id, since_iso)
+    agg = await asyncio.to_thread(_aggregate_activity, account_id, since_iso)
 
     if not _briefing_should_fire(last_seen_at, agg["task_failed"], now):
         return {"should_fire": False}
@@ -1556,7 +1557,7 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
     suggestions = suggestions[:5]
 
     # 상위 도메인 1~2개 기반 장기기억 recall (hybrid_search 1회)
-    top_doms = _top_domains_last_week(account_id, limit=2)
+    top_doms = await asyncio.to_thread(_top_domains_last_week, account_id, 2)
     recall_context = ""
     if top_doms:
         # 최근 제목 몇 개 뽑아 쿼리 문장 구성
@@ -1574,9 +1575,9 @@ async def build_briefing(account_id: str, last_seen_at: datetime | None) -> dict
             pass
 
     # LLM 한 겹
-    nickname = get_nickname(account_id)
-    filled_count, missing_keys = _profile_sparseness(account_id)
-    profile_ctx = _profile_context(account_id)
+    nickname = await asyncio.to_thread(get_nickname, account_id)
+    filled_count, missing_keys = await asyncio.to_thread(_profile_sparseness, account_id)
+    profile_ctx = await asyncio.to_thread(_profile_context, account_id)
     SPARSE_THRESHOLD = 3
 
     facts_lines = [
