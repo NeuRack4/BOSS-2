@@ -2,6 +2,9 @@
 # BOSS-2 — monorepo .gitignore
 # ============================================================
 
+# --- Git Worktrees ---
+.worktrees/
+
 # --- Secrets / Env ---
 .env
 .env.*
