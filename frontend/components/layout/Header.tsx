@@ -19,6 +19,7 @@ import { PaymentModal } from "@/components/layout/PaymentModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { useLayout } from "@/components/bento/LayoutContext";
 import { COLOR_SETS } from "@/components/bento/colorSets";
+import { CalendarDays, Activity as ActivityIcon, Bell } from "lucide-react";
 
 type HeaderProps = {
   sidebar?: boolean;
@@ -141,8 +142,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
       }
       className={
         layoutCtx.isEditing
-          ? "bg-[#ebe0ca] text-[#2e2719]"
-          : "text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+          ? "hidden sm:flex bg-[#ebe0ca] text-[#2e2719]"
+          : "hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
       }
     >
       Layout
@@ -201,7 +202,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
               variant="ghost"
               size="sm"
               onClick={() => setIntegrationsOpen(true)}
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+              className="hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
             >
               Connect
             </Button>
@@ -209,7 +210,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
               variant="ghost"
               size="sm"
               onClick={() => setPaymentOpen(true)}
-              className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+              className="hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
             >
               Payment
             </Button>
@@ -277,7 +278,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                   title="Schedule"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
-                  Schedule
+                  <CalendarDays className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Schedule</span>
                 </Button>
                 <Button
                   variant="ghost"
@@ -286,7 +288,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                   title="Activity"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
-                  Activity
+                  <ActivityIcon className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Activity</span>
                 </Button>
                 <Button
                   variant="ghost"
@@ -295,7 +298,8 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                   title="Notice"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
-                  Notice
+                  <Bell className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Notice</span>
                 </Button>
                 <Button
                   variant="ghost"
