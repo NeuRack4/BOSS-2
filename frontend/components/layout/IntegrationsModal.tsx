@@ -612,7 +612,7 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
                 아래로 스크롤 → <strong>"승인된 리디렉션 URI"</strong> 항목에서{" "}
                 <strong>"+ URI 추가"</strong> 클릭 → 아래 주소를 정확히 입력 →{" "}
                 <strong>"만들기"</strong>
-                <Code tab="youtube">{`http://localhost:8000/api/marketing/youtube/oauth/callback`}</Code>
+                <Code tab="youtube">{`${API}/api/marketing/youtube/oauth/callback`}</Code>
               </Step>
               <Step n={7} tab="youtube">
                 팝업에 표시되는 <strong>클라이언트 ID</strong>와{" "}
