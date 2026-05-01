@@ -1373,6 +1373,55 @@ async def run_save_costs(
     return f"비용 **{saved}건** 저장됐어요. 총 **{total:,}원**."
 
 
+async def run_set_revenue_goal(
+    account_id: str,
+    message: str,
+    history: list[dict],
+    rag_context: str = "",
+    long_term_context: str = "",
+    monthly_goal: int = 0,
+    **_kwargs,
+) -> str:
+    """월 매출 목표를 profiles.profile_meta.monthly_sales_goal 에 저장."""
+    from app.core.supabase import get_supabase
+
+    # 플래너가 monthly_goal을 못 넘긴 경우 message에서 직접 파싱
+    if not monthly_goal:
+        full_text = message + " " + " ".join(
+            m.get("content", "") for m in (history or [])[-4:] if isinstance(m.get("content"), str)
+        )
+        import re as _re
+        m = _re.search(r"(\d+(?:\.\d+)?)\s*(억|천만|백만|만)\s*원?", full_text)
+        if m:
+            num, unit = float(m.group(1)), m.group(2)
+            monthly_goal = int(num * {"억": 100_000_000, "천만": 10_000_000, "백만": 1_000_000, "만": 10_000}[unit])
+        else:
+            m2 = _re.search(r"(\d{4,})\s*원", full_text)
+            if m2:
+                monthly_goal = int(m2.group(1))
+
+    try:
+        monthly_goal = int(monthly_goal)
+    except (TypeError, ValueError):
+        monthly_goal = 0
+
+    if monthly_goal <= 0:
+        return "목표 금액을 확인할 수 없어요. '500만원 목표'처럼 금액을 포함해서 말씀해 주세요."
+
+    sb = get_supabase()
+    try:
+        profile = sb.table("profiles").select("profile_meta").eq("id", account_id).execute()
+        meta = (profile.data or [{}])[0].get("profile_meta") or {}
+        meta["monthly_sales_goal"] = monthly_goal
+        sb.table("profiles").update({"profile_meta": meta}).eq("id", account_id).execute()
+    except Exception as e:
+        log.warning("[sales] set_revenue_goal 저장 실패: %s", e)
+        return "목표 저장 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요."
+
+    goal_str = f"{monthly_goal // 10000}만원" if monthly_goal >= 10000 else f"{monthly_goal:,}원"
+    return f"이번 달 매출 목표를 **{goal_str}**으로 설정했어요! 칸반 대시보드에서 달성률을 확인할 수 있어요."
+
+
 def describe(account_id: str) -> list[dict]:
     """Sales 도메인 capability 매니페스트."""
     from app.agents._sales_context import get_pending_receipt, get_pending_save
@@ -1387,6 +1436,25 @@ def describe(account_id: str) -> list[dict]:
             ),
             "handler": run_cost_entry,
             "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "sales_set_revenue_goal",
+            "description": (
+                "이번 달 매출 목표 금액을 저장. "
+                "'이번 달 목표 500만원', '매출 목표 설정', '목표 1000만원으로 해줘' 등 "
+                "목표 금액이 포함된 설정 요청 시 호출."
+            ),
+            "handler": run_set_revenue_goal,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "monthly_goal": {
+                        "type": "integer",
+                        "description": "월 목표 매출 금액 (원 단위 정수). 예: 500만원 → 5000000",
+                    },
+                },
+                "required": ["monthly_goal"],
+            },
         },
         {
             "name": "sales_revenue_entry",

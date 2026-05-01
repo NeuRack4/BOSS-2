@@ -35,12 +35,30 @@ export function SalesDashboard({ accountId, onChatMessage }: Props) {
   const [connectOpen, setConnectOpen] = useState(false);
   const { state, periodActivation, refresh } = useDashboardData(accountId);
 
-  useEffect(() => {
+  const fetchSlackStatus = () => {
     const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     fetch(`${API}/api/slack/status?account_id=${accountId}`)
       .then((r) => r.json())
       .then((res) => setSlackConnected(res.connected ?? false));
+  };
+
+  useEffect(() => {
+    fetchSlackStatus();
   }, [accountId]);
+
+  // Slack 연동 완료 신호 감지 (SlackTab의 localStorage 신호)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "slack_connected_signal") fetchSlackStatus();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [accountId]);
+
+  // Connect 모달 닫힐 때 상태 재확인
+  useEffect(() => {
+    if (!connectOpen) fetchSlackStatus();
+  }, [connectOpen]);
 
   const goalPercent =
     state.goal?.achievement_rate != null

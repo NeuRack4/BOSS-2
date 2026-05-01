@@ -11,6 +11,13 @@ import type {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function getStage(count: number): 0 | 1 | 2 {
   if (count === 0) return 0;
   if (count <= 4) return 1;
@@ -30,7 +37,7 @@ function extrapolate(series: DayPoint[], daysBack = 7): DailyData[] {
   return Array.from({ length: daysBack }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() - (daysBack - 1 - i));
-    const dateStr = d.toISOString().split("T")[0];
+    const dateStr = toLocalDateStr(d);
     const found = series.find((s) => s.date === dateStr && s.sales > 0);
     return {
       date: dateStr,
@@ -100,10 +107,29 @@ export function useDashboardData(accountId: string) {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();
         }),
-        fetch(`${API}/api/stats/daily?account_id=${accountId}`).then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json();
-        }),
+        (async () => {
+          const now = new Date();
+          const curY = now.getFullYear();
+          const curM = now.getMonth() + 1;
+          const dayOfMonth = now.getDate();
+
+          const curRes = await fetch(
+            `${API}/api/stats/daily?account_id=${accountId}&year=${curY}&month=${curM}`,
+          ).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+
+          if (dayOfMonth <= 6) {
+            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevY = prevDate.getFullYear();
+            const prevM = prevDate.getMonth() + 1;
+            const prevRes = await fetch(
+              `${API}/api/stats/daily?account_id=${accountId}&year=${prevY}&month=${prevM}`,
+            ).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+
+            const merged = [...(prevRes.data?.series ?? []), ...(curRes.data?.series ?? [])];
+            return { data: { series: merged } };
+          }
+          return curRes;
+        })(),
         fetch(`${API}/api/stats/goal?account_id=${accountId}`).then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();
@@ -133,10 +159,11 @@ export function useDashboardData(accountId: string) {
       const entryCount = realEntries.length;
       const stage = getStage(entryCount);
 
-      const todayStr = new Date().toISOString().split("T")[0];
-      const yesterday = new Date();
+      const now = new Date();
+      const todayStr = toLocalDateStr(now);
+      const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
+      const yesterdayStr = toLocalDateStr(yesterday);
 
       const todayPoint = series.find((s) => s.date === todayStr);
       const yesterdayPoint = series.find((s) => s.date === yesterdayStr);
@@ -161,14 +188,12 @@ export function useDashboardData(accountId: string) {
           : null;
 
       const weeklyData: DailyData[] =
-        stage === 0
-          ? []
-          : stage === 1
-            ? extrapolate(series, 7)
-            : Array.from({ length: 7 }, (_, i) => {
-                const d = new Date();
+        stage <= 1
+          ? extrapolate(series, 7)
+          : Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(now);
                 d.setDate(d.getDate() - (6 - i));
-                const dateStr = d.toISOString().split("T")[0];
+                const dateStr = toLocalDateStr(d);
                 const found = series.find(
                   (s) => s.date === dateStr && s.sales > 0,
                 );

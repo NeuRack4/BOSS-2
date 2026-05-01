@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 from app.core.config import settings
 from app.core.supabase import get_supabase
@@ -31,7 +31,9 @@ def get_oauth_url(account_id: str = Query(...)):
         f"&redirect_uri={settings.slack_redirect_uri}"
         f"&state={account_id}"
     )
-    return {"url": url}
+    response = JSONResponse(content={"url": url})
+    response.headers["ngrok-skip-browser-warning"] = "true"
+    return response
 
 
 @router.get("/oauth/callback")
@@ -68,9 +70,11 @@ async def oauth_callback(code: str = Query(...), state: str = Query(...)):
         "team_name": team_name,
     }, on_conflict="account_id").execute()
 
-    return RedirectResponse(
+    redirect = RedirectResponse(
         url=f"{settings.boss_frontend_url}/slack-success"
     )
+    redirect.headers["ngrok-skip-browser-warning"] = "true"
+    return redirect
 
 
 @router.get("/status")
