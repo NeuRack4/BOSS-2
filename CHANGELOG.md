@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.13] — 2026-05-01
+
+### Fixed — 보안: 채팅 메시지 조회 시 account_id 검증 누락 수정
+
+- **`memory/short_term.py`** — `get_messages()`, `get_turn_count()`에 `account_id` 파라미터 추가 및 쿼리 필터 적용. `replace_messages()` delete 쿼리에도 `account_id` 필터 추가. service_role 키가 RLS를 우회하는 환경에서 session_id만으로 타 계정 채팅 히스토리에 접근 가능하던 취약점 수정.
+- **`routers/chat.py`** — `get_messages()` 호출부에 `account_id` 전달하도록 수정.
+
 ## [4.1.12] — 2026-04-30
 
 ### Fixed — 칸반: 카드 이동 후 글자 투명 현상 수정
