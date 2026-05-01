@@ -34,6 +34,7 @@ export const OnboardingTour = () => {
   useEffect(() => {
     if (!isActive || !isModalStep || !userId) return;
     const supabase = createClient();
+    let cancelled = false;
     supabase
       .from("artifacts")
       .select("id")
@@ -42,10 +43,20 @@ export const OnboardingTour = () => {
       .limit(1)
       .single()
       .then(({ data }) => {
-        if (data) openDetail((data as { id: string }).id);
+        if (!cancelled && data) openDetail((data as { id: string }).id);
       });
-    return () => closeDetail();
-  }, [isActive, isModalStep, userId, openDetail, closeDetail]);
+    return () => { cancelled = true; };
+    // openDetail은 useCallback([]) — 안정적 참조이므로 deps 생략
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, isModalStep, userId]);
+
+  // 모달 스텝에서 벗어날 때만 closeDetail
+  useEffect(() => {
+    if (isModalStep || !isActive) return;
+    closeDetail();
+    // closeDetail은 useCallback([]) — 안정적 참조이므로 deps 생략
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalStep, isActive]);
 
   // 타겟 요소 좌표 계산
   const recalculate = useCallback(() => {
