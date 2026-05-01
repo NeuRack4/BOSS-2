@@ -39,6 +39,7 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
       setIsOpen(false);
       setCurrentStep(0);
       localStorage.setItem("boss_tour_done", "1");
+      window.dispatchEvent(new CustomEvent("boss:tour-complete"));
     } else {
       setCurrentStep((s) => s + 1);
     }

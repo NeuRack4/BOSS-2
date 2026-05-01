@@ -14,6 +14,8 @@ class ChatRequest(BaseModel):
     receipt_payload: dict[str, Any] | None = None
     # SalesInputTable / CostInputTable 의 Save 버튼 — 사용자 확정 items.
     save_payload: dict[str, Any] | None = None
+    # 투어 완료 후 LLM 인사 트리거 — user 턴 히스토리에 저장하지 않음.
+    is_tour_greeting: bool = False
 
 
 class ChatResponse(BaseModel):

@@ -1400,6 +1400,39 @@ export const InlineChat = () => {
     });
   }, [registerSender, send]);
 
+  // 투어 완료 시 LLM 인사 자동 트리거
+  useEffect(() => {
+    const onTourComplete = async () => {
+      if (!userId || !apiBase) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`${apiBase}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: " ",
+            account_id: userId,
+            session_id: currentSessionId ?? undefined,
+            is_tour_greeting: true,
+          }),
+        });
+        const data = await res.json();
+        const rawReply: string = data?.data?.reply ?? "안녕하세요!";
+        const newSessionId: string | undefined = data?.data?.session_id;
+        if (newSessionId && newSessionId !== currentSessionId) {
+          setCurrentSessionId(newSessionId);
+        }
+        setMessages((prev) => [...prev, { role: "assistant" as const, content: rawReply }]);
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    };
+    window.addEventListener("boss:tour-complete", onTourComplete);
+    return () => window.removeEventListener("boss:tour-complete", onTourComplete);
+  }, [userId, apiBase, currentSessionId, setCurrentSessionId, setLoading]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
     if (!list || list.length === 0) return;
