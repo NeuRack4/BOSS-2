@@ -1418,11 +1418,17 @@ export const InlineChat = () => {
         });
         const data = await res.json();
         const rawReply: string = data?.data?.reply ?? "안녕하세요!";
+        const greetingChoices: string[] | undefined = data?.data?.choices?.length
+          ? data.data.choices
+          : undefined;
         const newSessionId: string | undefined = data?.data?.session_id;
         if (newSessionId && newSessionId !== currentSessionId) {
           setCurrentSessionId(newSessionId);
         }
-        setMessages((prev) => [...prev, { role: "assistant" as const, content: rawReply }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant" as const, content: rawReply, choices: greetingChoices },
+        ]);
       } catch {
         // silent
       } finally {
