@@ -133,7 +133,8 @@ function CategoryBar({ item, maxPct }: { item: CategoryItem; maxPct: number }) {
 // ── 주간 상세 뷰 ───────────────────────────────────────────────────────────────
 function WeekDetailView({ data }: { data: DailyData[] }) {
   const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
-  const todayStr = new Date().toISOString().split("T")[0];
+  const _now = new Date();
+  const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
   const maxAmount = Math.max(...data.map((d) => d.amount), 1);
   const realDays = data.filter((d) => !d.isEstimated);
   const recordedCount = realDays.length;
@@ -321,7 +322,8 @@ export function RevenueDetailTab({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const _n = new Date();
+  const todayStr = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
   const todayEntry = weeklyData.find((d) => d.date === todayStr);
   const todayTotal = todayEntry?.amount ?? 0;
   const weekTotal = weeklyData.reduce((sum, d) => sum + d.amount, 0);

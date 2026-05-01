@@ -669,8 +669,10 @@ export const InlineChat = () => {
               parseWorkTableAction(afterCost);
             const { cleaned: afterShorts, payload: shortsWizard } =
               extractShortsWizardPayload(afterWork);
+            const { cleaned: afterInsight, payload: salesInsight } =
+              extractInsightPayload(afterShorts);
             const { cleaned: afterMenu, payload: menuChart } =
-              extractMenuChartPayload(afterShorts);
+              extractMenuChartPayload(afterInsight);
             const { cleaned: afterMktReport, payload: mktReport } =
               extractMarketingReportPayload(afterMenu);
             const {
@@ -703,6 +705,7 @@ export const InlineChat = () => {
               costAction,
               workAction: workAction ?? undefined,
               shortsWizard: shortsWizard ?? undefined,
+              salesInsight: salesInsight ?? undefined,
               menuChart: menuChart ?? undefined,
               marketingReport: mktReport ?? undefined,
               eventPoster: eventPoster ?? undefined,

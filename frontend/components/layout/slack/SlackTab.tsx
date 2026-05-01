@@ -47,8 +47,21 @@ export function SlackTab() {
       `${API}/api/slack/oauth/url?account_id=${accountId}`,
     );
     const { url } = await res.json();
-    // 새 탭에서 OAuth 진행 → 모달 유지
     window.open(url, "_blank", "noopener,noreferrer");
+
+    // noopener 환경에서 storage 이벤트가 발화 안 될 수 있어 폴링으로 보완
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const r = await fetch(`${API}/api/slack/status?account_id=${accountId}`);
+      const data = await r.json();
+      if (data.connected) {
+        setConnected(true);
+        setTeamName(data.team_name ?? "");
+        clearInterval(poll);
+      }
+      if (attempts >= 20) clearInterval(poll); // 40초 후 자동 종료
+    }, 2000);
   };
 
   const handleDisconnect = async () => {
