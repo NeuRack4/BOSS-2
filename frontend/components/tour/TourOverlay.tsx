@@ -57,12 +57,12 @@ export const TourOverlay = () => {
     if (!step) return;
     const el = document.querySelector(`[data-tour-id="${step.id}"]`);
     if (!el) {
-      setTargetRect(null);
+      next();
       return;
     }
     const r = el.getBoundingClientRect();
     setTargetRect({ x: r.left, y: r.top, width: r.width, height: r.height });
-  }, [currentStep]);
+  }, [currentStep, next]);
 
   // Scroll target into view then update rect
   useEffect(() => {
