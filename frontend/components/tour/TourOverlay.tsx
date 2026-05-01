@@ -76,7 +76,6 @@ export const TourOverlay = () => {
   // Scroll target into view on step change; skip step if element not found
   useEffect(() => {
     if (!isOpen) return;
-    setTargetRect(null);
     const step = TOUR_STEPS[currentStep];
     if (!step) return;
     // Short delay to let React finish rendering the target element
