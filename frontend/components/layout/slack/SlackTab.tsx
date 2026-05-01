@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -10,6 +10,14 @@ export function SlackTab() {
   const [connected, setConnected] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [loading, setLoading] = useState(true);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 컴포넌트 언마운트 시 폴링 정리
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -50,17 +58,22 @@ export function SlackTab() {
     window.open(url, "_blank", "noopener,noreferrer");
 
     // noopener 환경에서 storage 이벤트가 발화 안 될 수 있어 폴링으로 보완
+    if (pollRef.current) clearInterval(pollRef.current); // 기존 폴링 중단
     let attempts = 0;
-    const poll = setInterval(async () => {
+    pollRef.current = setInterval(async () => {
       attempts++;
       const r = await fetch(`${API}/api/slack/status?account_id=${accountId}`);
       const data = await r.json();
       if (data.connected) {
         setConnected(true);
         setTeamName(data.team_name ?? "");
-        clearInterval(poll);
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
       }
-      if (attempts >= 20) clearInterval(poll); // 40초 후 자동 종료
+      if (attempts >= 20) {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+      }
     }, 2000);
   };
 
