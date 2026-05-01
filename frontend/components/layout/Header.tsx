@@ -307,7 +307,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                   variant="ghost"
                   size="sm"
                   onClick={startTour}
-                  title="사용 가이드"
+                  title="Guide"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
                   <BookOpen className="h-4 w-4 shrink-0" />
