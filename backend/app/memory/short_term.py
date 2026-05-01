@@ -1,7 +1,7 @@
 from app.core.supabase import get_supabase
 
 
-async def get_messages(session_id: str, include_extras: bool = False) -> list[dict]:
+async def get_messages(account_id: str, session_id: str, include_extras: bool = False) -> list[dict]:
     """세션 대화 전체 로드.
 
     기본은 LLM 컨텍스트용 `{role, content}` 만 반환.
@@ -14,6 +14,7 @@ async def get_messages(session_id: str, include_extras: bool = False) -> list[di
     rows = (
         sb.table("chat_messages")
         .select(select_cols)
+        .eq("account_id", account_id)
         .eq("session_id", session_id)
         .order("created_at")
         .execute()
@@ -62,7 +63,7 @@ async def replace_messages(
     account_id: str, session_id: str, messages: list[dict]
 ) -> None:
     sb = get_supabase()
-    sb.table("chat_messages").delete().eq("session_id", session_id).execute()
+    sb.table("chat_messages").delete().eq("account_id", account_id).eq("session_id", session_id).execute()
     if not messages:
         return
     rows = [
@@ -77,6 +78,6 @@ async def replace_messages(
     sb.table("chat_messages").insert(rows).execute()
 
 
-async def get_turn_count(session_id: str) -> int:
-    messages = await get_messages(session_id)
+async def get_turn_count(account_id: str, session_id: str) -> int:
+    messages = await get_messages(account_id, session_id)
     return sum(1 for m in messages if m["role"] == "user")

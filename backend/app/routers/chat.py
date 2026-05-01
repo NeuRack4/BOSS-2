@@ -71,7 +71,7 @@ async def chat(req: ChatRequest):
             session_created = True
 
     # 1. 단기 메모리 (세션 스코프)
-    history = await short_term.get_messages(session_id)
+    history = await short_term.get_messages(account_id, session_id)
 
     # 첫 user 메시지 여부 판단 (제목 생성 트리거)
     is_first_user_msg = not any(m["role"] == "user" for m in history)
