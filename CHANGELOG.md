@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.13] — 2026-05-01
+
+### Changed — 대시보드: BentoGrid 레이아웃 조정
+
+- **`BentoGrid.tsx`** — Comment Queue 위젯 슬롯(`main-comment`) 제거.
+- **`BentoGrid.tsx`** — Upcoming Schedule 박스를 1행 → 3행으로 확장 (`row-span-1` → `row-span-3`, 열 4~6, 행 6~8).
+- **`BentoGrid.tsx`** — Subsidy 박스를 왼쪽으로 2열 확장 (`col-start-9, col-span-4` → `col-start-7, col-span-6`, 열 7~12, 행 7~8).
+
 ## [4.1.12] — 2026-04-30
 
 ### Fixed — 칸반: 카드 이동 후 글자 투명 현상 수정
