@@ -1,11 +1,25 @@
+export type TourIconName =
+  | "MessageSquare"
+  | "Megaphone"
+  | "Users"
+  | "TrendingUp"
+  | "FileText"
+  | "Store"
+  | "Brain"
+  | "Clock"
+  | "Calendar"
+  | "Zap"
+  | "StickyNote"
+  | "Target";
+
 export type TourStep = {
   id: string;
   title: string;
-  iconName: string;
+  iconName: TourIconName;
   description: string;
 };
 
-export const TOUR_STEPS: TourStep[] = [
+export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "chat",
     title: "Chat",
