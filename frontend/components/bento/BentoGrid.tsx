@@ -54,47 +54,47 @@ export const BentoGrid = ({ accountId }: Props) => {
       <div className="w-full max-w-[1400px]">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:auto-rows-[140px] md:gap-4">
           {/* Chat — not customizable */}
-          <div className="order-1 md:col-span-6 md:row-span-5 md:col-start-1 md:row-start-1 h-[560px] md:h-auto">
+          <div data-tour-id="chat" className="order-1 md:col-span-6 md:row-span-5 md:col-start-1 md:row-start-1 h-[560px] md:h-auto">
             <ChatCenterCard />
           </div>
 
           {/* Col 7-9: two stacked slots */}
           <div className="order-2 md:col-span-3 md:row-span-4 md:col-start-7 md:row-start-1 flex flex-col gap-3 md:gap-4">
-            <div className="h-[160px] md:h-auto md:flex-[4]">
+            <div data-tour-id="recruitment" className="h-[160px] md:h-auto md:flex-[4]">
               <WidgetSlot slotId="main-col7-top" renderProps={rp} />
             </div>
-            <div className="h-[160px] md:h-auto md:flex-[6]">
+            <div data-tour-id="sales" className="h-[160px] md:h-auto md:flex-[6]">
               <WidgetSlot slotId="main-col7-bottom" renderProps={rp} />
             </div>
           </div>
 
           {/* Col 10-12: two stacked slots */}
           <div className="order-3 md:col-span-3 md:row-span-4 md:col-start-10 md:row-start-1 flex flex-col gap-3 md:gap-4">
-            <div className="h-[160px] md:h-auto md:flex-[6]">
+            <div data-tour-id="marketing" className="h-[160px] md:h-auto md:flex-[6]">
               <WidgetSlot slotId="main-col10-top" renderProps={rp} />
             </div>
-            <div className="h-[160px] md:h-auto md:flex-[4]">
+            <div data-tour-id="documents" className="h-[160px] md:h-auto md:flex-[4]">
               <WidgetSlot slotId="main-col10-bottom" renderProps={rp} />
             </div>
           </div>
 
           {/* Previous Chat */}
-          <div className="order-6 md:col-span-3 md:row-span-3 md:col-start-1 md:row-start-6 h-[420px] md:h-auto">
+          <div data-tour-id="chat-history" className="order-6 md:col-span-3 md:row-span-3 md:col-start-1 md:row-start-6 h-[420px] md:h-auto">
             <WidgetSlot slotId="main-prev-chat" renderProps={rp} />
           </div>
 
           {/* Schedule */}
-          <div className="order-7 md:col-span-3 md:row-span-3 md:col-start-4 md:row-start-6 h-[420px] md:h-auto">
+          <div data-tour-id="upcoming-schedule" className="order-7 md:col-span-3 md:row-span-3 md:col-start-4 md:row-start-6 h-[420px] md:h-auto">
             <WidgetSlot slotId="main-schedule" renderProps={rp} />
           </div>
 
           {/* Activity */}
-          <div className="order-8 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-5 h-[284px] md:h-auto">
+          <div data-tour-id="recent-activity" className="order-8 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-5 h-[284px] md:h-auto">
             <WidgetSlot slotId="main-activity" renderProps={rp} />
           </div>
 
           {/* Subsidy */}
-          <div className="order-10 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-7 h-[284px] md:h-auto">
+          <div data-tour-id="subsidy-matches" className="order-10 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-7 h-[284px] md:h-auto">
             <WidgetSlot slotId="main-subsidy" renderProps={rp} />
           </div>
         </div>

@@ -49,9 +49,32 @@ async def _maybe_title(account_id: str, session_id: str, first_user_msg: str) ->
         pass
 
 
+_TOUR_GREETING_PROMPT = """투어 가이드를 막 마쳤어.
+사용자에게 BOSS에 온 걸 환영하는 따뜻하고 생동감 있는 인사를 한 문장으로 건네줘.
+그 다음, 프로필을 먼저 작성하면 BOSS가 내 가게에 맞춰 훨씬 정확하게 도와줄 수 있다는 점을 강조해서 프로필 작성을 강력 추천하는 멘트를 한두 문장으로 써줘.
+마지막으로 오늘 바로 시도해볼 수 있는 샘플 요청 예시를 제시해줘.
+
+출력 형식 (반드시 이 포맷 그대로):
+[환영 인사 한 문장]
+
+[프로필 작성 추천 멘트 — 개인화에 꼭 필요하다는 이유 포함, 1~2문장]
+
+오늘 어떤 것부터 시작해볼까요? 아래 예시 중 하나를 눌러도 되고, 직접 입력해도 좋아요 😊
+
+[CHOICES]
+프로필 작성하기
+이번 주 인스타그램 홍보 게시물 3개 만들어줘
+다음 달 채용 공고 초안 작성해줘
+어제 매출 데이터 입력하고 분석해줘
+단골 고객 감사 이벤트 기획해줘
+근로계약서 검토해서 위험 조항 찾아줘
+블로그 포스팅용 가게 소개글 써줘
+[/CHOICES]"""
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    if not req.message.strip():
+    if not req.is_tour_greeting and not req.message.strip():
         raise HTTPException(status_code=400, detail="메시지가 비어있습니다.")
 
     account_id = req.account_id
@@ -117,10 +140,11 @@ async def chat(req: ChatRequest):
             (req.save_payload or {}).get("kind"),
             len((req.save_payload or {}).get("items") or []),
         )
+    effective_message = _TOUR_GREETING_PROMPT if req.is_tour_greeting else req.message
     clear_speaker()
     try:
         reply = await orchestrator.run(
-            message=req.message,
+            message=effective_message,
             account_id=account_id,
             history=history,
             rag_context=rag_context,
@@ -134,30 +158,30 @@ async def chat(req: ChatRequest):
         clear_pending_save()
         clear_speaker()
 
-    # 6. 대화 저장 — upload_payload 가 있으면 user 메시지에 attachment 메타 동봉
-    user_attachment: dict | None = None
-    if req.upload_payload and isinstance(req.upload_payload, dict):
-        up = req.upload_payload
-        filename = up.get("original_name") or up.get("title") or "attachment"
-        size_bytes = up.get("size_bytes")
-        user_attachment = {
-            "filename":      filename,
-            "size_kb":       round(size_bytes / 1024) if isinstance(size_bytes, (int, float)) else None,
-            "status":        "done",
-            "storage_path":  up.get("storage_path"),
-            "bucket":        up.get("bucket"),
-            "mime_type":     up.get("mime_type"),
-        }
-    await short_term.append_message(
-        account_id, session_id, "user", req.message, attachment=user_attachment,
-    )
+    # 6. 대화 저장 — tour greeting 은 user 턴 없이 assistant 만 저장
+    if not req.is_tour_greeting:
+        user_attachment: dict | None = None
+        if req.upload_payload and isinstance(req.upload_payload, dict):
+            up = req.upload_payload
+            filename = up.get("original_name") or up.get("title") or "attachment"
+            size_bytes = up.get("size_bytes")
+            user_attachment = {
+                "filename":      filename,
+                "size_kb":       round(size_bytes / 1024) if isinstance(size_bytes, (int, float)) else None,
+                "status":        "done",
+                "storage_path":  up.get("storage_path"),
+                "bucket":        up.get("bucket"),
+                "mime_type":     up.get("mime_type"),
+            }
+        await short_term.append_message(
+            account_id, session_id, "user", req.message, attachment=user_attachment,
+        )
+        # 첫 user 메시지면 제목 생성 (백그라운드)
+        if is_first_user_msg:
+            asyncio.create_task(_maybe_title(account_id, session_id, req.message))
     await short_term.append_message(
         account_id, session_id, "assistant", reply, speaker=speaker,
     )
-
-    # 첫 user 메시지면 제목 생성 (백그라운드)
-    if is_first_user_msg:
-        asyncio.create_task(_maybe_title(account_id, session_id, req.message))
 
     # [ARTIFACT] 블록은 제거하되, 그 뒤에 붙은 [[마커]]는 유지
     _ARTIFACT_BLOCK_RE = re.compile(r"\[ARTIFACT\].*?\[/ARTIFACT\]", re.DOTALL)
