@@ -39,6 +39,7 @@ export const OnboardingTour = () => {
 
   useEffect(() => {
     if (!isActive) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     recalculate();
     window.addEventListener("resize", recalculate);
     window.addEventListener("scroll", recalculate, true);
