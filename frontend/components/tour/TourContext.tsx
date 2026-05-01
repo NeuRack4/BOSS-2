@@ -35,15 +35,14 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const next = useCallback(() => {
-    setCurrentStep((s) => {
-      if (s >= TOUR_STEPS.length - 1) {
-        setIsOpen(false);
-        localStorage.setItem("boss_tour_done", "1");
-        return 0;
-      }
-      return s + 1;
-    });
-  }, []);
+    if (currentStep >= TOUR_STEPS.length - 1) {
+      setIsOpen(false);
+      setCurrentStep(0);
+      localStorage.setItem("boss_tour_done", "1");
+    } else {
+      setCurrentStep((s) => s + 1);
+    }
+  }, [currentStep]);
 
   const prev = useCallback(() => {
     setCurrentStep((s) => Math.max(0, s - 1));

@@ -1,5 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { TourProvider, useTour } from "../TourContext";
+import { TOUR_STEPS } from "../tourSteps";
 import type { ReactNode } from "react";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -50,11 +51,11 @@ describe("useTour", () => {
   });
 
   it("next() on last step closes tour", () => {
+    const lastIndex = TOUR_STEPS.length - 1;
     const { result } = renderHook(() => useTour(), { wrapper });
     act(() => result.current.start());
-    // advance to last step (index 11)
-    for (let i = 0; i < 11; i++) act(() => result.current.next());
-    expect(result.current.currentStep).toBe(11);
+    for (let i = 0; i < lastIndex; i++) act(() => result.current.next());
+    expect(result.current.currentStep).toBe(lastIndex);
     act(() => result.current.next());
     expect(result.current.isOpen).toBe(false);
   });
