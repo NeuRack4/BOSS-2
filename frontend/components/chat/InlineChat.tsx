@@ -1615,13 +1615,13 @@ export const InlineChat = () => {
             </div>
           </div>
         ) : null}
+        <div data-tour="artifact-canvas" className="min-h-0 flex-1 flex flex-col">
         <ScrollArea
           className={cn(
             "min-h-0 flex-1 px-3 py-2",
             messages.length === 0 && !loading && "hidden",
           )}
           viewportRef={scrollViewportRef}
-          data-tour="artifact-canvas"
         >
           <div className="space-y-2.5">
             {messages.map((msg, i) => {
@@ -2424,6 +2424,7 @@ export const InlineChat = () => {
             <div ref={bottomRef} />
           </div>
         </ScrollArea>
+        </div>
 
         <div className="bg-[#fcfcfc] px-3 py-2" data-tour="chat-input">
           <div className="relative rounded-[5px] border border-[#030303]/30 bg-[#ffffff] focus-within:border-[#030303]/50">

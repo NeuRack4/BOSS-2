@@ -277,6 +277,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                   variant="ghost"
                   size="sm"
                   onClick={() => setScheduleOpen(true)}
+                  data-tour="schedule-toggle"
                   title="Schedule"
                   className="text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
                 >
@@ -302,6 +303,26 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                 >
                   <Bell className="h-4 w-4 shrink-0" />
                   <span className="hidden sm:inline">Notice</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setProfileOpen(true)}
+                  data-tour="profile-menu"
+                  title="프로필"
+                  className="hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  👤
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLongMemOpen(true)}
+                  data-tour="memory-badge"
+                  title="장기 기억"
+                  className="hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  🧠
                 </Button>
                 <Button
                   variant="ghost"

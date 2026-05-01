@@ -22,7 +22,7 @@ export const DomainCard = ({ domain, stats, bgColor }: Props) => {
   return (
     <Link
       href={`/${domain}`}
-      data-tour={domain === "recruitment" ? "domain-nav" : undefined}
+      data-tour="domain-nav"
       style={{ backgroundColor: bgColor ?? meta.bgHex }}
       className={cn(
         "group relative flex h-full flex-col overflow-hidden rounded-[5px] p-5 shadow-lg transition-all",
