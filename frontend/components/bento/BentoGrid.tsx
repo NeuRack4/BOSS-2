@@ -84,7 +84,7 @@ export const BentoGrid = ({ accountId }: Props) => {
           </div>
 
           {/* Schedule */}
-          <div className="order-7 md:col-span-3 md:row-span-1 md:col-start-4 md:row-start-6 h-[140px] md:h-auto">
+          <div className="order-7 md:col-span-3 md:row-span-3 md:col-start-4 md:row-start-6 h-[420px] md:h-auto">
             <WidgetSlot slotId="main-schedule" renderProps={rp} />
           </div>
 
@@ -93,13 +93,8 @@ export const BentoGrid = ({ accountId }: Props) => {
             <WidgetSlot slotId="main-activity" renderProps={rp} />
           </div>
 
-          {/* Comment Queue */}
-          <div className="order-9 md:col-span-5 md:row-span-2 md:col-start-4 md:row-start-7 h-[284px] md:h-auto">
-            <WidgetSlot slotId="main-comment" renderProps={rp} />
-          </div>
-
           {/* Subsidy */}
-          <div className="order-10 md:col-span-4 md:row-span-2 md:col-start-9 md:row-start-7 h-[284px] md:h-auto">
+          <div className="order-10 md:col-span-6 md:row-span-2 md:col-start-7 md:row-start-7 h-[284px] md:h-auto">
             <WidgetSlot slotId="main-subsidy" renderProps={rp} />
           </div>
         </div>
