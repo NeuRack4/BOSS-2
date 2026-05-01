@@ -1,13 +1,26 @@
 "use client";
 
+import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { BriefingLoader } from "@/components/chat/BriefingLoader";
 import { BentoGrid } from "@/components/bento/BentoGrid";
 import { LayoutProvider } from "@/components/bento/LayoutContext";
 import { useChat } from "@/components/chat/ChatContext";
+import { TourOverlay } from "@/components/tour/TourOverlay";
+import { useTour } from "@/components/tour/TourContext";
 
 export default function DashboardPage() {
   const { userId } = useChat();
+  const { start } = useTour();
+
+  // Auto-start on first visit
+  useEffect(() => {
+    if (!userId) return;
+    if (!localStorage.getItem("boss_tour_done")) {
+      const t = setTimeout(start, 800);
+      return () => clearTimeout(t);
+    }
+  }, [userId, start]);
 
   return (
     <LayoutProvider accountId={userId ?? ""}>
@@ -23,6 +36,7 @@ export default function DashboardPage() {
           )}
         </main>
         <BriefingLoader />
+        <TourOverlay />
       </div>
     </LayoutProvider>
   );
