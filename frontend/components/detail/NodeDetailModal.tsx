@@ -10,7 +10,6 @@ import {
   Download,
   FileCheck2,
   FileText,
-  Link2,
   ListChecks,
   MessageSquarePlus,
   Paperclip,
@@ -1523,6 +1522,8 @@ export const NodeDetailModal = () => {
     ? `${artifact.kind}${artifact.type ? ` · ${artifact.type}` : ""}`
     : "";
 
+  if (isHubNode) return null;
+
   return (
     <Modal
       open={open}
@@ -2339,80 +2340,6 @@ export const NodeDetailModal = () => {
                     </div>
                   )}
                 </Section>}
-
-                {/* RELATED */}
-                <Section>
-                  <SectionHeader
-                    icon={<Link2 size={13} />}
-                    title="Related"
-                    hint={`${data.edges.parents.length + data.edges.children.length} links`}
-                  />
-                  {data.edges.parents.length === 0 &&
-                  data.edges.children.length === 0 ? (
-                    <p className="text-[12px] text-[#030303]/40">
-                      Nothing here yet
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 text-[12px]">
-                      <div>
-                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[#030303]/50">
-                          ↑ parents
-                        </div>
-                        <ul className="space-y-1">
-                          {data.edges.parents.map((p) => (
-                            <li key={`p-${p.id}`}>
-                              <button
-                                type="button"
-                                onClick={() => openDetail(p.id)}
-                                className="w-full rounded-[4px] border border-[#030303]/10 bg-white px-2 py-1 text-left hover:border-[#030303]/30"
-                              >
-                                <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-[#030303]/40">
-                                  {p.relation}
-                                </span>
-                                <span className="text-[#030303]">
-                                  {p.title || p.id.slice(0, 8)}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                          {data.edges.parents.length === 0 && (
-                            <li className="text-[11px] text-[#030303]/40">
-                              Nothing here yet
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[#030303]/50">
-                          ↓ children
-                        </div>
-                        <ul className="space-y-1">
-                          {data.edges.children.map((c) => (
-                            <li key={`c-${c.id}`}>
-                              <button
-                                type="button"
-                                onClick={() => openDetail(c.id)}
-                                className="w-full rounded-[4px] border border-[#030303]/10 bg-white px-2 py-1 text-left hover:border-[#030303]/30"
-                              >
-                                <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-[#030303]/40">
-                                  {c.relation}
-                                </span>
-                                <span className="text-[#030303]">
-                                  {c.title || c.id.slice(0, 8)}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                          {data.edges.children.length === 0 && (
-                            <li className="text-[11px] text-[#030303]/40">
-                              Nothing here yet
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                </Section>
 
                 {/* RUN HISTORY (if schedule enabled) */}
                 {scheduleEnabled && data.logs.length > 0 && (
