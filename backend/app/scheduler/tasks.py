@@ -10,6 +10,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
+import redis as redis_lib
 from croniter import croniter
 
 from app.agents import orchestrator
@@ -23,6 +24,14 @@ from openai import OpenAI
 from app.core.config import settings
 
 log = logging.getLogger(__name__)
+
+_redis: redis_lib.Redis | None = None
+
+def _get_redis() -> redis_lib.Redis:
+    global _redis
+    if _redis is None:
+        _redis = redis_lib.from_url(settings.celery_broker_url, ssl_cert_reqs=None, decode_responses=True)
+    return _redis
 
 
 def _next_run_iso(cron_expr: str | None, base: datetime) -> str | None:
@@ -54,10 +63,20 @@ def _notify_kind_to_text(kind: str, due_label: str | None) -> tuple[str, str]:
     return prefix, template.format(label=label)
 
 
-@celery_app.task(name="app.scheduler.tasks.tick")
+@celery_app.task(name="app.scheduler.tasks.tick", acks_late=False)
 def tick() -> dict:
     """Beat가 60초마다 호출하는 스캐너."""
     now = datetime.now(timezone.utc)
+
+    # 중복 실행 방지: 55초 내 다른 tick이 이미 실행 중이면 스킵
+    try:
+        r = _get_redis()
+        lock_key = "boss2:tick:lock"
+        if not r.set(lock_key, now.isoformat(), nx=True, ex=settings.scheduler_tick_seconds - 5):
+            return {"skipped": True, "reason": "duplicate_tick"}
+    except Exception as e:
+        log.warning("tick lock check failed (proceeding): %s", e)
+
     due = find_due_schedules(now=now)
     notifications = find_date_notifications(today=now.date())
 
