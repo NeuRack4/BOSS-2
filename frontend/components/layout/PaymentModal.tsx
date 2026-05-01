@@ -220,7 +220,6 @@ const PaymentMethodModal = ({
         totalAmount: planInfo.amount,
         currency: "KRW",
         payMethod: method.payMethod,
-        windowType: { pc: "POPUP" },
         ...(method.easyPayProvider
           ? { easyPay: { easyPayProvider: method.easyPayProvider } }
           : {}),

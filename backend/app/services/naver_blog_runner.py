@@ -367,7 +367,7 @@ def main():
 
             if "nidlogin" in page.url or "login.naver" in page.url:
                 COOKIE_PATH.unlink(missing_ok=True)
-                print(json.dumps({"error": "세션 만료. naver_login_setup을 다시 실행하세요."}))
+                print(json.dumps({"error": "세션이 만료되었습니다. 플랫폼 연결 설정에서 네이버 쿠키를 다시 업로드해 주세요."}))
                 sys.exit(1)
 
             try:
