@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.14] — 2026-05-01
+
+### Fixed — NodeDetailModal: hub 노드 접근 차단 + Period/Schedule UI 버그 수정
+
+- **`NodeDetailModal.tsx`** — `anchor | domain` 종류의 허브 노드를 상세 모달에서 열면 `null`을 반환해 렌더링 차단. 기존에는 모달이 열린 채로 Period·Schedule 편집 시 400 Bad Request가 반복되던 문제 수정.
+- **`NodeDetailModal.tsx`** — 허브 노드(`isHubNode`)에서 Period·Schedule 편집 섹션 미노출. 날짜 `onBlur`마다 PATCH → 400이 반복되던 근본 원인 제거.
+- **`NodeDetailModal.tsx`** — `applyPeriodPatch`를 `patchArtifact`에서 분리해 Period 저장 후 불필요한 `reload()` 호출 제거. 날짜 필드 이동 시 모달이 반복 재로드되던 문제 수정.
+- **`NodeDetailModal.tsx`** — Related(부모·자식 엣지 목록) 섹션 제거. 내부 노드 구조가 사용자에게 노출되던 문제 해소.
+
 ## [4.1.13] — 2026-05-01
 
 ### Fixed — 보안: 채팅 메시지 조회 시 account_id 검증 누락 수정
