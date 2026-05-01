@@ -127,7 +127,7 @@ export const TourOverlay = () => {
   const maskH = targetRect.height + PADDING * 2;
 
   const GAP = 16;
-  const PANEL_WIDTH = 280;
+  const PANEL_WIDTH = 360;
   const panelCenterY = targetRect.y + targetRect.height / 2;
   const panelX = panelOnLeft
     ? Math.max(8, targetRect.x - PADDING - GAP - PANEL_WIDTH)
@@ -170,48 +170,48 @@ export const TourOverlay = () => {
                 transform: "translateY(-50%)",
               }),
         }}
-        className="rounded-[8px] border border-[#ddd0b4] bg-[#faf8f4] p-4 shadow-xl"
+        className="rounded-[10px] border border-[#ddd0b4] bg-[#faf8f4] p-5 shadow-xl"
       >
-        <div className="mb-3 flex items-center gap-2">
-          <Icon className="h-5 w-5 shrink-0 text-[#4a7c59]" />
-          <span className="text-[15px] font-semibold text-[#2e2719]">{step.title}</span>
+        <div className="mb-3 flex items-center gap-2.5">
+          <Icon className="h-6 w-6 shrink-0 text-[#4a7c59]" />
+          <span className="text-[18px] font-semibold text-[#2e2719]">{step.title}</span>
         </div>
 
         <hr className="mb-3 border-[#ddd0b4]" />
 
-        <p className="text-[13px] leading-relaxed text-[#5a5040]">{step.description}</p>
+        <p className="text-[15px] leading-relaxed text-[#5a5040]">{step.description}</p>
 
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-[11px] text-[#030303]/40">
+        <div className="mt-5 flex items-center justify-between">
+          <span className="text-[13px] text-[#030303]/40">
             {currentStep + 1} / {TOUR_STEPS.length}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={prev}
               disabled={currentStep === 0}
-              className="flex h-7 w-7 items-center justify-center rounded-[5px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca] disabled:opacity-30"
+              className="flex h-8 w-8 items-center justify-center rounded-[5px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca] disabled:opacity-30"
               aria-label="이전"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               type="button"
               onClick={next}
-              className="flex h-7 items-center gap-1 rounded-[5px] bg-[#4a7c59] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#3d6a4a]"
+              className="flex h-8 items-center gap-1.5 rounded-[5px] bg-[#4a7c59] px-4 text-[14px] font-medium text-white transition-colors hover:bg-[#3d6a4a]"
             >
               {currentStep === TOUR_STEPS.length - 1 ? "완료" : "다음"}
               {currentStep < TOUR_STEPS.length - 1 && (
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-4 w-4" />
               )}
             </button>
             <button
               type="button"
               onClick={close}
-              className="flex h-7 w-7 items-center justify-center rounded-[5px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca]"
+              className="flex h-8 w-8 items-center justify-center rounded-[5px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca]"
               aria-label="닫기"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>
