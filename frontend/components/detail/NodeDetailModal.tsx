@@ -10,7 +10,6 @@ import {
   Download,
   FileCheck2,
   FileText,
-  Link2,
   ListChecks,
   MessageSquarePlus,
   Paperclip,
@@ -1180,6 +1179,7 @@ export const NodeDetailModal = () => {
 
   const artifact = data?.artifact;
   const meta = artifact?.metadata ?? null;
+  const isHubNode = artifact?.kind === "anchor" || artifact?.kind === "domain";
 
   const analysisPayload: ReviewPayload | null = useMemo(() => {
     if (!artifact || artifact.type !== "analysis") return null;
@@ -1380,7 +1380,14 @@ export const NodeDetailModal = () => {
   };
 
   const applyPeriodPatch = async (patch: MetaPatch) => {
-    await patchArtifact(patch);
+    if (!currentId || !accountId) return;
+    const res = await fetch(`${API}/api/artifacts/${currentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: accountId, ...patch }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    notifyArtifactsChanged();
   };
 
   const togglePeriod = async (v: boolean) => {
@@ -1514,6 +1521,8 @@ export const NodeDetailModal = () => {
   const kindBadge = artifact
     ? `${artifact.kind}${artifact.type ? ` · ${artifact.type}` : ""}`
     : "";
+
+  if (isHubNode) return null;
 
   return (
     <Modal
@@ -2102,7 +2111,7 @@ export const NodeDetailModal = () => {
                 )}
 
                 {/* PERIOD */}
-                <Section>
+                {!isHubNode && <Section>
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#030303]/60">
                       <CalendarDays size={13} />
@@ -2187,10 +2196,10 @@ export const NodeDetailModal = () => {
                       </label>
                     </div>
                   )}
-                </Section>
+                </Section>}
 
                 {/* SCHEDULE */}
-                <Section>
+                {!isHubNode && <Section>
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#030303]/60">
                       <Clock size={13} />
@@ -2330,81 +2339,7 @@ export const NodeDetailModal = () => {
                       )}
                     </div>
                   )}
-                </Section>
-
-                {/* RELATED */}
-                <Section>
-                  <SectionHeader
-                    icon={<Link2 size={13} />}
-                    title="Related"
-                    hint={`${data.edges.parents.length + data.edges.children.length} links`}
-                  />
-                  {data.edges.parents.length === 0 &&
-                  data.edges.children.length === 0 ? (
-                    <p className="text-[12px] text-[#030303]/40">
-                      Nothing here yet
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 text-[12px]">
-                      <div>
-                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[#030303]/50">
-                          ↑ parents
-                        </div>
-                        <ul className="space-y-1">
-                          {data.edges.parents.map((p) => (
-                            <li key={`p-${p.id}`}>
-                              <button
-                                type="button"
-                                onClick={() => openDetail(p.id)}
-                                className="w-full rounded-[4px] border border-[#030303]/10 bg-white px-2 py-1 text-left hover:border-[#030303]/30"
-                              >
-                                <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-[#030303]/40">
-                                  {p.relation}
-                                </span>
-                                <span className="text-[#030303]">
-                                  {p.title || p.id.slice(0, 8)}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                          {data.edges.parents.length === 0 && (
-                            <li className="text-[11px] text-[#030303]/40">
-                              Nothing here yet
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[#030303]/50">
-                          ↓ children
-                        </div>
-                        <ul className="space-y-1">
-                          {data.edges.children.map((c) => (
-                            <li key={`c-${c.id}`}>
-                              <button
-                                type="button"
-                                onClick={() => openDetail(c.id)}
-                                className="w-full rounded-[4px] border border-[#030303]/10 bg-white px-2 py-1 text-left hover:border-[#030303]/30"
-                              >
-                                <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-[#030303]/40">
-                                  {c.relation}
-                                </span>
-                                <span className="text-[#030303]">
-                                  {c.title || c.id.slice(0, 8)}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                          {data.edges.children.length === 0 && (
-                            <li className="text-[11px] text-[#030303]/40">
-                              Nothing here yet
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                </Section>
+                </Section>}
 
                 {/* RUN HISTORY (if schedule enabled) */}
                 {scheduleEnabled && data.logs.length > 0 && (
