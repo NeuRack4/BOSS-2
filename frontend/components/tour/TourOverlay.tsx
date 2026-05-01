@@ -127,6 +127,13 @@ export const TourOverlay = () => {
   const maskW = targetRect.width + PADDING * 2;
   const maskH = targetRect.height + PADDING * 2;
 
+  const GAP = 16;
+  const PANEL_WIDTH = 280;
+  const panelCenterY = targetRect.y + targetRect.height / 2;
+  const panelX = panelOnLeft
+    ? Math.max(8, targetRect.x - PADDING - GAP - PANEL_WIDTH)
+    : targetRect.x + targetRect.width + PADDING + GAP;
+
   return (
     <>
       {/* SVG overlay */}
@@ -154,13 +161,15 @@ export const TourOverlay = () => {
         style={{
           position: "fixed",
           zIndex: 51,
-          width: 280,
+          width: PANEL_WIDTH,
           maxWidth: "calc(100vw - 48px)",
           ...(isMobile
             ? { bottom: 24, left: "50%", transform: "translateX(-50%)" }
-            : panelOnLeft
-            ? { left: 24, top: "50%", transform: "translateY(-50%)" }
-            : { right: 24, top: "50%", transform: "translateY(-50%)" }),
+            : {
+                left: panelX,
+                top: panelCenterY,
+                transform: "translateY(-50%)",
+              }),
         }}
         className="rounded-[8px] border border-[#ddd0b4] bg-[#faf8f4] p-4 shadow-xl"
       >
