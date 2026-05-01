@@ -1180,6 +1180,7 @@ export const NodeDetailModal = () => {
 
   const artifact = data?.artifact;
   const meta = artifact?.metadata ?? null;
+  const isHubNode = artifact?.kind === "anchor" || artifact?.kind === "domain";
 
   const analysisPayload: ReviewPayload | null = useMemo(() => {
     if (!artifact || artifact.type !== "analysis") return null;
@@ -1380,7 +1381,14 @@ export const NodeDetailModal = () => {
   };
 
   const applyPeriodPatch = async (patch: MetaPatch) => {
-    await patchArtifact(patch);
+    if (!currentId || !accountId) return;
+    const res = await fetch(`${API}/api/artifacts/${currentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: accountId, ...patch }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    notifyArtifactsChanged();
   };
 
   const togglePeriod = async (v: boolean) => {
@@ -2102,7 +2110,7 @@ export const NodeDetailModal = () => {
                 )}
 
                 {/* PERIOD */}
-                <Section>
+                {!isHubNode && <Section>
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#030303]/60">
                       <CalendarDays size={13} />
@@ -2187,10 +2195,10 @@ export const NodeDetailModal = () => {
                       </label>
                     </div>
                   )}
-                </Section>
+                </Section>}
 
                 {/* SCHEDULE */}
-                <Section>
+                {!isHubNode && <Section>
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#030303]/60">
                       <Clock size={13} />
@@ -2330,7 +2338,7 @@ export const NodeDetailModal = () => {
                       )}
                     </div>
                   )}
-                </Section>
+                </Section>}
 
                 {/* RELATED */}
                 <Section>
