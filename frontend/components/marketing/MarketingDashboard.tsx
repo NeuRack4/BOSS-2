@@ -1,7 +1,7 @@
 // frontend/components/marketing/MarketingDashboard.tsx
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BarChart2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useMarketingData } from "./hooks/useMarketingData";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -34,6 +34,12 @@ export function MarketingDashboard({ accountId, onChatMessage }: Props) {
   const [ytConnecting, setYtConnecting] = useState(false);
   const { state, refresh, fetchActions, fetchAnalysis } =
     useMarketingData(accountId);
+
+  useEffect(() => {
+    const handler = () => refresh();
+    window.addEventListener("boss:integrations-changed", handler);
+    return () => window.removeEventListener("boss:integrations-changed", handler);
+  }, [refresh]);
 
   const handleTabClick = (tab: Tab) => {
     setActiveTab(tab);

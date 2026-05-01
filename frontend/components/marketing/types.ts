@@ -19,6 +19,8 @@ export interface InstagramPost {
   impressions: number;
   engagement: number;
   saved: number;
+  comments: number;
+  shares: number;
 }
 
 export interface InstagramData {

@@ -245,6 +245,7 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
   const [metaToken, setMetaToken] = useState("");
   const [metaIgToken, setMetaIgToken] = useState("");
   const [igUserId, setIgUserId] = useState("");
+  const [igUserIdWarn, setIgUserIdWarn] = useState(false);
   const [igSaving, setIgSaving] = useState(false);
   const [igMsg, setIgMsg] = useState<{
     type: "ok" | "err";
@@ -362,6 +363,7 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
       }
       setIgMsg({ type: "ok", text: "저장되었습니다." });
       fetchAll();
+      window.dispatchEvent(new CustomEvent("boss:integrations-changed", { detail: { platform: "instagram" } }));
     } catch {
       setIgMsg({ type: "err", text: "네트워크 오류" });
     } finally {
@@ -404,7 +406,10 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
       if (e.data?.type !== "youtube_connected") return;
       window.removeEventListener("message", onMessage);
       popup?.close();
-      if (e.data.success) fetchAll();
+      if (e.data.success) {
+        fetchAll();
+        window.dispatchEvent(new CustomEvent("boss:integrations-changed", { detail: { platform: "youtube" } }));
+      }
     };
     window.addEventListener("message", onMessage);
     const timer = setInterval(() => {
@@ -626,6 +631,10 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
                 </div>
               </div>
             </div>
+          ) : ytStatus.configured ? (
+            <StatusBanner connected={false}>
+              OAuth 설정이 저장되었습니다. 아래 <strong>Google 계정 연결하기</strong> 버튼을 클릭하여 연결을 완료하세요.
+            </StatusBanner>
           ) : (
             <StatusBanner connected={false}>
               아직 연결되지 않았습니다. 아래 안내를 따라 연결하세요.
@@ -908,11 +917,20 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
             <Field label="Instagram User ID" required hint="(숫자 ID)">
               <input
                 type="text"
+                inputMode="numeric"
                 value={igUserId}
-                onChange={(e) => setIgUserId(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (/\D/.test(raw)) setIgUserIdWarn(true);
+                  else setIgUserIdWarn(false);
+                  setIgUserId(raw.replace(/\D/g, ""));
+                }}
                 placeholder="123456789012345"
                 className={inputCls()}
               />
+              {igUserIdWarn && (
+                <p className="mt-1 text-[11px] text-red-500">숫자만 입력 가능합니다.</p>
+              )}
             </Field>
             <Field label="Meta IG Access Token" hint="(IGAA… DM 발송용, 선택)">
               <input
@@ -1072,38 +1090,36 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
           )}
 
           {!naverStatus.connected && (
-            <GuideBox tab="naver" title="쿠키 발급 및 연결 방법">
+            <GuideBox tab="naver" title="연결 방법">
               <Step n={1} tab="naver">
-                백엔드 서버(uvicorn)가 <strong>실행 중</strong>인지 먼저
-                확인하세요.
-                <Hint>
-                  실행 명령: uvicorn app.main:app --reload --port 8000
-                </Hint>
+                Chrome 브라우저에서{" "}
+                <strong>naver.com</strong>에 접속해 본인 계정으로 로그인하세요.
               </Step>
               <Step n={2} tab="naver">
-                <strong>새 터미널</strong>을 열고 아래 명령어를 입력 후 엔터
-                <Code tab="naver">{`cd backend\npython -m app.services.naver_login_setup`}</Code>
-              </Step>
-              <Step n={3} tab="naver">
-                잠시 후 <strong>브라우저 창이 자동으로 열립니다</strong> → 열린
-                브라우저에서{" "}
-                <strong>네이버(naver.com) 아이디·비밀번호로 직접 로그인</strong>
+                Chrome 웹스토어에서{" "}
+                <strong>Cookie-Editor</strong> 확장프로그램을 설치하세요.
                 <Hint>
-                  캡차(문자 인증·퍼즐)가 나타나면 직접 해결한 뒤 로그인을
-                  완료하세요.
+                  Chrome 주소창에 아래를 입력하거나 웹스토어에서 "Cookie-Editor"로 검색하세요.
+                  <br />
+                  chrome.google.com/webstore → "Cookie-Editor" 검색 → 설치
                 </Hint>
               </Step>
+              <Step n={3} tab="naver">
+                설치 후 <strong>naver.com</strong> 탭이 열린 상태에서 주소창
+                오른쪽 확장프로그램 아이콘(퍼즐 조각) →{" "}
+                <strong>Cookie-Editor</strong> 클릭
+              </Step>
               <Step n={4} tab="naver">
-                로그인이 완료되면 브라우저는 그대로 두고 →{" "}
-                <strong>터미널 창으로 돌아와</strong>{" "}
-                <strong>엔터(Enter) 키</strong> 입력
+                팝업 하단의 <strong>Export</strong> 버튼 클릭 →{" "}
+                <strong>Export as JSON</strong> 선택 → 클립보드에 복사됩니다.
+                복사된 내용을 메모장에 붙여넣기 후{" "}
+                <strong>cookies.json</strong> 파일로 저장하세요.
+                <Hint>
+                  메모장 저장 시: 파일 → 다른 이름으로 저장 → 파일 형식을
+                  "모든 파일"로 변경 → 파일명을 cookies.json으로 입력 → 저장
+                </Hint>
               </Step>
               <Step n={5} tab="naver">
-                터미널에 <strong>"쿠키 저장 완료"</strong> 메시지가 뜨면 아래
-                경로에 파일이 생성된 것입니다.
-                <Code tab="naver">{`backend/app/services/naver_cookies.json`}</Code>
-              </Step>
-              <Step n={6} tab="naver">
                 <strong>블로그 ID 확인</strong> — 네이버 블로그에 접속해 내
                 블로그 주소의 마지막 부분이 ID입니다.
                 <Hint>
@@ -1111,13 +1127,13 @@ export const IntegrationsModal = ({ open, onClose, initialTab }: Props) => {
                   myblog123
                 </Hint>
               </Step>
-              <Step n={7} tab="naver">
-                아래 폼에 <strong>블로그 ID 입력</strong> + 5번에서 생성된{" "}
-                <strong>naver_cookies.json 파일 업로드</strong> →{" "}
+              <Step n={6} tab="naver">
+                아래 폼에 <strong>블로그 ID 입력</strong> + 4번에서 저장한{" "}
+                <strong>cookies.json 파일 업로드</strong> →{" "}
                 <strong>"저장"</strong> 클릭
                 <Hint>
-                  ※ 쿠키는 약 30일 후 만료됩니다. 만료되면 2~5번 과정을 반복해
-                  재업로드하세요.
+                  ※ 쿠키는 약 30일 후 만료됩니다. 만료되면 1·3·4번 과정을
+                  반복해 새 파일을 업로드하세요.
                 </Hint>
               </Step>
             </GuideBox>

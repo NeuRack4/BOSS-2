@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.15] — 2026-05-01
+
+### Fixed & Changed — 마케팅: 인스타그램·유튜브·네이버·결제 다수 개선
+
+- **`InstagramTab.tsx`** — 상단 지표를 `팔로워 | 게시글 수 | 공유 수 | 댓글 수`로 개편. 인상수·도달수·평균 engagement 제거, 별도 avg engagement 행 제거.
+- **`OverviewTab.tsx`** — Instagram KPI를 인스타 탭과 동일하게 `팔로워 | 게시글 수 | 공유 수 | 댓글 수`로 통일.
+- **`instagram_insights.py`** — 게시물별 `comments`, `shares` 필드를 응답에 포함.
+- **`types.ts`** — `InstagramPost`에 `comments`, `shares` 필드 추가.
+- **`MarketingDashboard.tsx`** — `boss:integrations-changed` 이벤트 수신 시 즉시 `refresh()` 호출 → 새로고침 없이 연결 상태 반영.
+- **`IntegrationsModal.tsx`** — Instagram·YouTube 연결 성공 시 `boss:integrations-changed` 이벤트 발생. YouTube `configured` 상태에 따라 배너 문구 3단계 분리. Instagram User ID 입력 필드 숫자 전용 처리 (문자 입력 시 경고 문구 표시). 네이버 블로그 가이드를 일반 사용자 기준(Cookie-Editor 확장프로그램)으로 전면 교체.
+- **`integrations.py`** — Instagram 저장 시 Meta Graph API로 실제 계정 검증. YouTube 저장 시 Google 토큰 엔드포인트로 Client ID·Secret 유효성 검증 (`invalid_client` 차단). 네이버 쿠키 저장 시 Cookie-Editor 등 다양한 형식 정규화(expirationDate→expires, sameSite 비표준값 제거) 및 필드 검증.
+- **`PaymentModal.tsx`** — `windowType: { pc: "POPUP" }` 제거 → PG사별 기본 창 유형 자동 선택으로 PC 결제 오류 해결.
+- **`naver_blog_runner.py`** — 세션 만료 오류 메시지를 일반 사용자 기준으로 수정.
+
 ## [4.1.14] — 2026-05-01
 
 ### Fixed — NodeDetailModal: hub 노드 접근 차단 + Period/Schedule UI 버그 수정

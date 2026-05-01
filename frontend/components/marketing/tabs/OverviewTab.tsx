@@ -358,19 +358,18 @@ export function OverviewTab({
               accent
             />
             <StatCard
-              label="도달수"
-              value={fmt(ig.account.reach)}
-              sub="기간 합산"
+              label="게시글 수"
+              value={fmt(ig.account.media_count)}
             />
             <StatCard
-              label="인상수"
-              value={fmt(ig.account.impressions)}
-              sub="기간 합산"
+              label="공유 수"
+              value={fmt((ig.top_posts ?? []).reduce((s, p) => s + (p.shares ?? 0), 0))}
+              sub="분석 게시물 합산"
             />
             <StatCard
-              label="avg engagement"
-              value={(ig.avg_engagement ?? 0).toFixed(1)}
-              sub={`${ig.total_posts_analyzed ?? 0}개 게시물`}
+              label="댓글 수"
+              value={fmt((ig.top_posts ?? []).reduce((s, p) => s + (p.comments ?? 0), 0))}
+              sub="분석 게시물 합산"
             />
           </div>
         </div>

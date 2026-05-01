@@ -170,6 +170,8 @@ async def get_media_insights(
                 "impressions": metrics.get("impressions", 0),
                 "engagement": engagement,
                 "saved": metrics.get("saved", 0),
+                "comments": metrics.get("comments", 0),
+                "shares": metrics.get("shares", 0),
             })
 
     return results
