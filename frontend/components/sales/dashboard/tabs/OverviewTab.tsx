@@ -239,10 +239,23 @@ export function OverviewTab({ state, onChatMessage }: Props) {
     setTimeout(() => setGoalCopied(false), 2000)
   }
 
-  // Stage 0: 온보딩
+  // Stage 0: 온보딩 (목표가 설정된 경우 목표 카드도 표시)
   if (state.stage === 0) {
     return (
-      <div className="p-4">
+      <div className="space-y-4 p-4">
+        {state.goal?.monthly_goal ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <GoalRing
+              percent={state.goal.achievement_rate != null ? Math.round(state.goal.achievement_rate) : 0}
+              hasGoal={true}
+            />
+            {state.goal.remaining != null && state.goal.remaining > 0 && (
+              <p className="mt-2 text-center text-xs text-slate-500">
+                목표까지 {fmt(state.goal.remaining)}원
+              </p>
+            )}
+          </div>
+        ) : null}
         <OnboardingChecklist onChatMessage={onChatMessage} />
       </div>
     );

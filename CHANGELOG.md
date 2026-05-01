@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.16] — 2026-05-01
+
+### Fixed — Sales 대시보드 Stage 0/1 UI + Slack 연동 UX 개선
+
+- **`OverviewTab.tsx`** — Stage 0에서도 목표 달성률 링 표시. 기존에는 온보딩 화면만 나타나 목표 설정해도 반영 안 되던 문제 수정.
+- **`useDashboardData.ts`** — Stage 0에서 weeklyData 빈 배열 강제 로직 수정. 매출 데이터 유무 관계없이 주간 데이터 표시.
+- **`RevenueDetailTab.tsx`** — `todayStr` UTC 기준 날짜 계산 오류 수정. KST 오전 9시 이전 접속 시 오늘 날짜 하루 밀리던 문제 해소.
+- **`NotificationTab.tsx`** — Slack 미연동 시 알림 설정 전체 숨김 문제 수정. 안내 배너 상단 표시 + 알림 시간 미리 설정 가능. 저장 버튼은 Slack 연동 후 활성화. 저장/Slack연결 버튼 크기·호버 효과 개선.
+- **`SalesDashboard.tsx`** — Slack 연동 완료 후 알림 탭 상태 자동 갱신. 기존에는 페이지 새로고침 해야 반영되던 문제 수정.
+- **`SlackTab.tsx`** — OAuth 완료 후 폴링(2초 간격)으로 연동 상태 자동 감지. noopener 환경에서 localStorage 이벤트 미발화 문제 대응.
+- **`slack.py`** — ngrok-skip-browser-warning 헤더 추가. 로컬 테스트 시 ngrok 경고 페이지 개입 방지.
+
+## [4.1.15] — 2026-05-01
+
+### Fixed — Sales 버그 수정 (Revenue 서브허브·목표저장·통계·raw JSON)
+
+- **`045_sales_subhubs_fix.sql`** — Revenue 서브허브 신규 가입자 누락 수정. `ensure_standard_sub_hubs`에 Revenue 추가, Customers 제외. 기존 계정 backfill.
+- **`045_sales_subhubs_fix.sql`** — 한글 서브허브(수익/비용/가격/보고서) 영문으로 rename. 중복 시 한글 archived 처리.
+- **`sales.py`** — 매출 목표 설정 챗봇 요청 시 DB 미저장 문제 수정. `run_set_revenue_goal` capability 추가.
+- **`InlineChat.tsx`** — 페이지 새로고침 후 `[[SALES_INSIGHT:...]]` raw JSON 노출 수정. 히스토리 로딩 체인에 `extractInsightPayload` 추가.
+- **`useDashboardData.ts`** — 월 경계 이전 달 데이터 미표시 수정. 이번 주가 지난달을 포함할 때 이전 달 데이터 cross-fetch.
+- **`useDashboardData.ts`** — KST 환경에서 UTC 날짜 계산 오류 수정. `toISOString()` → 로컬 날짜 기준으로 변경.
+
 ## [4.1.14] — 2026-05-01
 
 ### Fixed — NodeDetailModal: hub 노드 접근 차단 + Period/Schedule UI 버그 수정

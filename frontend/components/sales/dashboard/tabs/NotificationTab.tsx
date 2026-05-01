@@ -59,25 +59,17 @@ export function NotificationTab({
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (!slackConnected) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <BellOff className="h-8 w-8 text-slate-300" />
-        <p className="text-[13px] text-slate-500">
-          Slack 연동 후 알림을 설정할 수 있어요.
-        </p>
-        <button
-          onClick={onOpenConnect}
-          className="rounded-lg border border-[#4A154B] px-4 py-1.5 text-[12px] font-medium text-[#4A154B] hover:bg-[#f9f0f9] transition"
-        >
-          Connect에서 Slack 연결하기
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3 p-1">
+      {/* Slack 미연동 시 안내 */}
+      {!slackConnected && (
+        <div className="flex items-center gap-2 rounded-xl border border-[#e8d5e8] bg-[#f9f0f9] px-4 py-3">
+          <BellOff className="h-4 w-4 shrink-0 text-[#4A154B]" />
+          <p className="text-[12px] text-[#4A154B]">
+            알림 수신을 위해 Slack 연동이 필요해요.
+          </p>
+        </div>
+      )}
       <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 flex flex-col gap-3">
         {/* 알림 받기 + 토글 */}
         <div className="flex items-center">
@@ -127,13 +119,24 @@ export function NotificationTab({
         )}
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-1/4 self-start rounded-xl border border-[#7C3AED] bg-[#7C3AED]/10 py-2 text-[13px] font-medium text-[#7C3AED] hover:bg-[#7C3AED]/20 disabled:opacity-50 transition"
-      >
-        {saved ? "저장됐어요 ✓" : saving ? "저장 중…" : "저장"}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving || !slackConnected}
+          title={!slackConnected ? "Slack 연동 후 저장할 수 있어요" : undefined}
+          className="w-[160px] rounded-xl border border-[#7C3AED] bg-[#7C3AED]/10 py-2 text-[13px] font-medium text-[#7C3AED] hover:bg-[#7C3AED] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+        >
+          {saved ? "저장됐어요 ✓" : saving ? "저장 중…" : "저장"}
+        </button>
+        {!slackConnected && (
+          <button
+            onClick={onOpenConnect}
+            className="w-[120px] rounded-xl border border-[#4A154B] bg-[#4A154B] py-2 text-[13px] font-medium text-white hover:bg-white hover:text-[#4A154B] active:scale-95 transition"
+          >
+            Slack 연결하기
+          </button>
+        )}
+      </div>
     </div>
   );
 }
