@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.19] — 2026-05-01
+
+### Fixed — Slack 연동 폴링 무한 반복 문제 수정
+
+- **`SlackTab.tsx`** — OAuth 완료 감지용 폴링이 연동 후에도 계속 실행되던 문제 수정. `useRef`로 interval 관리, 연동 완료·40초 초과·컴포넌트 언마운트 시 자동 정리.
+
 ## [4.1.18] — 2026-05-01
 
 ### Fixed & Changed — 마케팅: 인스타그램·유튜브·네이버·결제 다수 개선
