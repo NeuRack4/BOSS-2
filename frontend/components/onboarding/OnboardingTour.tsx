@@ -37,6 +37,17 @@ export const OnboardingTour = () => {
     }
   }, [step]);
 
+  // 스텝 변경 시 타겟 요소가 뷰포트에 보이도록 스크롤
+  useEffect(() => {
+    if (!isActive || !step) return;
+    const el = document.querySelector(`[data-tour="${step.target}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // 스크롤 완료 후 좌표 재계산
+      setTimeout(recalculate, 400);
+    }
+  }, [isActive, currentStep, step, recalculate]);
+
   useEffect(() => {
     if (!isActive) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
