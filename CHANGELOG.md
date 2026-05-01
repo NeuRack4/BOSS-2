@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] — 2026-05-02
+
+### Added — 온보딩 투어 가이드
+
+- **`TourContext.tsx`** — `TourProvider` + `useTour()` 훅. `isOpen`, `currentStep`, `start/next/prev/close` 상태 관리. 마지막 스텝 완료 또는 Skip 시 `boss:tour-complete` 이벤트 발행.
+- **`tourSteps.ts`** — 12단계 투어 정의 (chat → marketing → recruitment → sales → documents → profiles → longterm-memory → chat-history → upcoming-schedule → recent-activity → memos → subsidy-matches). `TourIconName` 유니온 타입으로 아이콘 컴파일 타임 안전성 확보.
+- **`TourOverlay.tsx`** — SVG 마스크 오버레이 + 사이드 패널. 하이라이트 요소 우측(또는 좌측) 바로 옆에 패널 배치. `ResizeObserver` + scroll RAF 디바운스로 실시간 rect 추적. 패널 너비 360px, 제목 18px, 설명 15px.
+- **`BentoGrid.tsx`**, **`ProfileMemorySidebar.tsx`** — 각 그리드 컨테이너에 `data-tour-id` 속성 추가.
+- **`providers.tsx`** — `TourProvider` 앱 전역 마운트.
+- **`dashboard/page.tsx`** — `TourOverlay` 마운트 + 첫 방문 시 800ms 딜레이 후 자동 투어 시작 (`localStorage boss_tour_done` 키 기준).
+- **`Header.tsx`** — Notice와 Logout 사이에 **Guide** 버튼 추가 (`BookOpen` 아이콘). 언제든 투어 재시작 가능.
+- **`schemas.py`** — `ChatRequest`에 `is_tour_greeting: bool` 필드 추가.
+- **`chat.py`** — `is_tour_greeting=True` 시 user 턴 히스토리 저장 생략, 프로필 추천 멘트 + 도메인별 샘플 선택지 7개 포함 인사 프롬프트로 LLM 실행.
+- **`InlineChat.tsx`** — `boss:tour-complete` 수신 시 `is_tour_greeting` API 호출. 유저 버블 없이 assistant 인사만 표시, `[CHOICES]` 선택지 버튼 렌더링.
+
 ## [4.1.20] — 2026-05-01
 
 ### Added — Sales 메뉴 일괄 등록 기능
