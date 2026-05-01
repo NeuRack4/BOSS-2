@@ -2200,7 +2200,7 @@ export const NodeDetailModal = () => {
 
                 {/* SCHEDULE */}
                 {!isHubNode && <Section>
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-2 flex items-center justify-between" data-tour="schedule-toggle">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#030303]/60">
                       <Clock size={13} />
                       <span>Schedule</span>

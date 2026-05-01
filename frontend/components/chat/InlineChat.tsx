@@ -1621,6 +1621,7 @@ export const InlineChat = () => {
             messages.length === 0 && !loading && "hidden",
           )}
           viewportRef={scrollViewportRef}
+          data-tour="artifact-canvas"
         >
           <div className="space-y-2.5">
             {messages.map((msg, i) => {
@@ -2424,7 +2425,7 @@ export const InlineChat = () => {
           </div>
         </ScrollArea>
 
-        <div className="bg-[#fcfcfc] px-3 py-2">
+        <div className="bg-[#fcfcfc] px-3 py-2" data-tour="chat-input">
           <div className="relative rounded-[5px] border border-[#030303]/30 bg-[#ffffff] focus-within:border-[#030303]/50">
             {stagedFiles.length > 0 && (
               <div className="flex flex-wrap gap-1.5 border-b border-[#030303]/10 px-2.5 pt-2 pb-1.5">

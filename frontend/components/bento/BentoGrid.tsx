@@ -51,7 +51,7 @@ export const BentoGrid = ({ accountId }: Props) => {
   return (
     <div className="flex w-full justify-center gap-4 p-4 md:p-6">
       <ProfileMemorySidebar renderProps={rp} />
-      <div className="w-full max-w-[1400px]">
+      <div className="w-full max-w-[1400px]" data-tour="dashboard-widgets">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:auto-rows-[140px] md:gap-4">
           {/* Chat — not customizable */}
           <div className="order-1 md:col-span-6 md:row-span-5 md:col-start-1 md:row-start-1 h-[560px] md:h-auto">

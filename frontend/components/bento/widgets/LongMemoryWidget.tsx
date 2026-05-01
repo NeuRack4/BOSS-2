@@ -77,6 +77,7 @@ export const LongMemoryWidget = ({ bgColor }: { bgColor?: string }) => {
           window.dispatchEvent(new CustomEvent("boss:open-longmem-modal"));
         }
       }}
+      data-tour="memory-badge"
       className="group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[5px] p-5 text-left shadow-lg transition-all hover:scale-[1.015] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#030303]/30"
       style={{ backgroundColor: bgColor ?? "#eee3c4" }}
     >
