@@ -66,14 +66,17 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     setIsActive(false);
     if (!userId) return;
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({ onboarding_done: true })
       .eq("id", userId);
+    if (error) console.error("[Onboarding] failed to save onboarding_done:", error);
     window.dispatchEvent(new CustomEvent("boss:onboarding-complete"));
   }, [userId]);
 
   const next = useCallback(() => {
+    // currentStep is read directly from closure; dep array keeps it fresh,
+    // so this check is always against the current step value.
     if (currentStep + 1 >= ONBOARDING_STEPS.length) {
       void finish();
     } else {

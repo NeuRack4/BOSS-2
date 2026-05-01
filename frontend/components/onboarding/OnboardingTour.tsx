@@ -16,6 +16,8 @@ export const OnboardingTour = () => {
   const step = ONBOARDING_STEPS[currentStep];
 
   // 완료 이벤트 수신 → 인사 메시지 주입
+  // Listener is registered unconditionally: the event fires from finish() in Context
+  // after isActive is already set to false, so gating on isActive would miss it.
   useEffect(() => {
     const handler = () => {
       openChatWithBriefing(ONBOARDING_COMPLETION_MESSAGE);
