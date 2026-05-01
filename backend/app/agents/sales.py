@@ -293,6 +293,14 @@ SYSTEM_PROMPT = (
 
 허용 type: revenue_entry | cost_report | price_strategy | customer_script | customer_analysis | sales_report | promotion | checklist
 
+[메뉴 추천 후 등록 규칙]
+사용자가 "대중적인 메뉴", "추천 메뉴", "기본 메뉴" 등을 요청하면:
+1. 업종에 맞는 메뉴 5~10개를 가격과 함께 제안한다
+2. 반드시 마지막에 "이 메뉴들로 등록할까요?" 라고 확인을 구한다
+3. 사용자가 "응", "네", "그걸로 해줘", "등록해줘", "좋아" 등 긍정 응답 시
+   → sales_menu_bulk_register를 즉시 호출하여 한 번에 등록한다
+4. 추천만 하고 끝내지 말 것 — 반드시 등록까지 이어져야 한다
+
 [매출 입력 감지 규칙]
 사용자 메시지에 "N잔", "N개", "N원", "N판" 등 수량+단위 패턴이 있으면
 → revenue_entry 의도로 판단
@@ -1113,6 +1121,58 @@ async def run_menu_upsert(
     )
 
 
+@_traceable(name="sales.run_menu_bulk_register")
+async def run_menu_bulk_register(
+    *,
+    account_id: str,
+    menus: list = None,
+    message: str = "",
+    history: list[dict] | None = None,
+    long_term_context: str = "",
+    rag_context: str = "",
+    **_kwargs,
+) -> str:
+    """대중적인 메뉴 추천 후 사용자가 확인했을 때 여러 메뉴를 한 번에 등록."""
+    from app.agents._sales._menu_manager import upsert_menu
+    if not menus:
+        return "등록할 메뉴 목록을 확인할 수 없어요. 메뉴명과 가격을 다시 알려주세요."
+
+    registered, skipped = [], []
+    for item in menus:
+        try:
+            name = str(item.get("name", "")).strip()
+            price = int(item.get("price", 0))
+            category = str(item.get("category", "기타")).strip()
+            cost_price = int(item.get("cost_price", 0))
+            if not name or price <= 0:
+                continue
+            result = await upsert_menu(
+                account_id=account_id,
+                name=name,
+                category=category,
+                price=price,
+                cost_price=cost_price,
+            )
+            if result["action"] == "created":
+                registered.append(f"{name} ({price:,}원)")
+            else:
+                skipped.append(f"{name}")
+        except Exception:
+            continue
+
+    if not registered and not skipped:
+        return "등록할 수 있는 메뉴 정보가 없어요. 메뉴명과 가격을 포함해서 다시 알려주세요."
+
+    lines = []
+    if registered:
+        lines.append(f"✅ **{len(registered)}개 메뉴** 등록 완료!")
+        lines.extend(f"  - {m}" for m in registered)
+    if skipped:
+        lines.append(f"\n이미 등록된 메뉴 ({len(skipped)}개): {', '.join(skipped)}")
+    lines.append("\nPricing 칸반에서 확인하실 수 있어요.")
+    return "\n".join(lines)
+
+
 @_traceable(name="sales.run_menu_ocr")
 async def run_menu_ocr(
     *,
@@ -1564,11 +1624,42 @@ def describe(account_id: str) -> list[dict]:
             },
         },
         {
+            "name": "sales_menu_bulk_register",
+            "description": (
+                "[카테고리: Pricing] 여러 메뉴를 한 번에 등록. "
+                "'대중적인 메뉴 등록해줘', '추천 메뉴로 해줘', '그걸로 등록해줘', "
+                "'제안한 메뉴 다 등록해줘' 등 여러 메뉴를 한꺼번에 등록할 때 호출. "
+                "menus 파라미터에 [{name, price, category, cost_price}] 형태로 전달."
+            ),
+            "handler": run_menu_bulk_register,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "menus": {
+                        "type": "array",
+                        "description": "등록할 메뉴 목록",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name":       {"type": "string", "description": "메뉴명"},
+                                "price":      {"type": "integer", "description": "판매가 (원)"},
+                                "category":   {"type": "string", "description": "카테고리 (예: 음료, 음식)"},
+                                "cost_price": {"type": "integer", "description": "원가 (원, 없으면 0)"},
+                            },
+                            "required": ["name", "price"],
+                        },
+                    },
+                },
+                "required": ["menus"],
+            },
+        },
+        {
             "name": "sales_menu_upsert",
             "description": (
-                "[카테고리: Pricing] 메뉴 등록 또는 수정. "
+                "[카테고리: Pricing] 메뉴 1개 등록 또는 수정. "
                 "'아메리카노 4500원 등록해줘', '라떼 가격 5000원으로 수정', "
-                "'메뉴 추가해줘', '메뉴 가격 바꿔줘' 등 메뉴 관리 요청 시 호출."
+                "'메뉴 추가해줘', '메뉴 가격 바꿔줘' 등 단일 메뉴 관리 요청 시 호출. "
+                "여러 메뉴 동시 등록은 sales_menu_bulk_register 사용."
             ),
             "handler": run_menu_upsert,
             "parameters": {

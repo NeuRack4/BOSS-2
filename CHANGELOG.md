@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.20] — 2026-05-01
+
+### Added — Sales 메뉴 일괄 등록 기능
+
+- **`sales.py`** — `sales_menu_bulk_register` capability 추가. 대중적인 메뉴 추천 후 사용자가 확인하면 여러 메뉴를 한 번에 Pricing 칸반에 등록.
+- **`sales.py`** — SYSTEM_PROMPT에 메뉴 추천→등록 연결 규칙 추가. 추천 후 "이 메뉴들로 등록할까요?" 확인 → 긍정 응답 시 bulk 등록 자동 호출.
+- **`sales.py`** — `sales_menu_upsert` 설명에 단일 메뉴 전용임을 명시, bulk는 `sales_menu_bulk_register` 사용 안내.
+
 ## [4.1.19] — 2026-05-01
 
 ### Fixed — Slack 연동 폴링 무한 반복 문제 수정
