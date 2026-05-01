@@ -55,30 +55,21 @@ export function InstagramTab({
         <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-4">
           <StatCell label="팔로워" value={fmt(ig.account.followers_count)} />
           <StatCell
-            label="도달수"
-            value={fmt(ig.account.reach)}
-            sub={`${periodDays}일 합산`}
+            label="게시글 수"
+            value={fmt(ig.account.media_count)}
           />
           <StatCell
-            label="인상수"
-            value={fmt(ig.account.impressions)}
-            sub={`${periodDays}일 합산`}
+            label="공유 수"
+            value={fmt((ig.top_posts ?? []).reduce((s, p) => s + (p.shares ?? 0), 0))}
+            sub="분석 게시물 합산"
           />
           <StatCell
-            label="프로필 방문"
-            value={fmt(ig.account.profile_views)}
-            sub={`${periodDays}일 합산`}
+            label="댓글 수"
+            value={fmt((ig.top_posts ?? []).reduce((s, p) => s + (p.comments ?? 0), 0))}
+            sub="분석 게시물 합산"
           />
         </div>
       )}
-
-      {/* avg engagement */}
-      <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3 text-sm">
-        <span className="text-slate-500">게시물 평균 engagement</span>
-        <span className="font-semibold text-slate-800">
-          {(ig.avg_engagement ?? 0).toFixed(1)}
-        </span>
-      </div>
 
       {/* TOP 게시물 */}
       {ig.top_posts && ig.top_posts.length > 0 && (
