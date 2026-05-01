@@ -19,6 +19,7 @@ import { PaymentModal } from "@/components/layout/PaymentModal";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { useLayout } from "@/components/bento/LayoutContext";
 import { COLOR_SETS } from "@/components/bento/colorSets";
+import { useOnboarding } from "@/components/onboarding/OnboardingContext";
 import { CalendarDays, Activity as ActivityIcon, Bell } from "lucide-react";
 
 type HeaderProps = {
@@ -43,6 +44,7 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
   >(undefined);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const layoutCtx = useLayout();
+  const { startTour } = useOnboarding();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -300,6 +302,15 @@ export const Header = ({ sidebar = false }: HeaderProps = {}) => {
                 >
                   <Bell className="h-4 w-4 shrink-0" />
                   <span className="hidden sm:inline">Notice</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={startTour}
+                  title="가이드 다시 보기"
+                  className="hidden sm:flex text-[#5a5040] hover:bg-[#ebe0ca] hover:text-[#2e2719]"
+                >
+                  가이드
                 </Button>
                 <Button
                   variant="ghost"
