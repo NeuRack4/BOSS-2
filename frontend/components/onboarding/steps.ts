@@ -23,12 +23,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     position: "right",
   },
   {
-    target: "dashboard-widgets",
-    title: "📊 대시보드 위젯",
-    description: "매출 현황, 활동 로그 등 핵심 지표를 한눈에 확인하세요.",
-    position: "bottom",
-  },
-  {
     target: "artifact-canvas",
     title: "🗂 아티팩트 캔버스",
     description: "AI에게 요청하면 결과물(채용공고, 마케팅 리포트 등)이 카드로 생성됩니다.",
