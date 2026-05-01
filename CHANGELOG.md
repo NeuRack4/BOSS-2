@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.17] — 2026-05-01
+
+### Fixed
+
+- **`celery_app.py`** — `enable_utc=False` → `enable_utc=True` 수정. Beat이 naive KST 시각으로 `expires`를 저장해 Worker의 UTC 비교가 항상 False가 되던 문제 해소. Worker 재시작 시 밀린 tick 태스크가 전부 실행되는 backlog 현상 수정.
+
 ## [4.1.16] — 2026-05-01
 
 ### Fixed — Sales 대시보드 Stage 0/1 UI + Slack 연동 UX 개선

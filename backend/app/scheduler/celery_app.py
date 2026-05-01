@@ -29,9 +29,9 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
-    # v1.3: Beat crontab 이 KST 기준으로 돌도록 — tick(60s interval) 은 timezone 무관.
+    # Beat crontab 은 KST 기준 (timezone="Asia/Seoul"), UTC 내부 저장으로 expires 비교 정확히 동작.
     timezone="Asia/Seoul",
-    enable_utc=False,
+    enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
