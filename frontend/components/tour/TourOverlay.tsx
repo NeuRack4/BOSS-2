@@ -200,7 +200,7 @@ export const TourOverlay = () => {
               onClick={next}
               className="flex h-8 items-center gap-1.5 rounded-[5px] bg-[#4a7c59] px-4 text-[14px] font-medium text-white transition-colors hover:bg-[#3d6a4a]"
             >
-              {currentStep === TOUR_STEPS.length - 1 ? "완료" : "다음"}
+              {currentStep === TOUR_STEPS.length - 1 ? "Done" : "Next"}
               {currentStep < TOUR_STEPS.length - 1 && (
                 <ChevronRight className="h-4 w-4" />
               )}
@@ -208,10 +208,11 @@ export const TourOverlay = () => {
             <button
               type="button"
               onClick={close}
-              className="flex h-8 w-8 items-center justify-center rounded-[5px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca]"
-              aria-label="닫기"
+              className="flex h-8 items-center gap-1 rounded-[5px] px-3 text-[13px] text-[#5a5040] transition-colors hover:bg-[#ebe0ca]"
+              aria-label="Skip"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" />
+              Skip
             </button>
           </div>
         </div>

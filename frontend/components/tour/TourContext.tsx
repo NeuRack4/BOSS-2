@@ -32,6 +32,7 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
   const close = useCallback(() => {
     setIsOpen(false);
     localStorage.setItem("boss_tour_done", "1");
+    window.dispatchEvent(new CustomEvent("boss:tour-complete"));
   }, []);
 
   const next = useCallback(() => {
