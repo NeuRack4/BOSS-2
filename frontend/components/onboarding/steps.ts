@@ -7,6 +7,7 @@ export type OnboardingStep = {
   title: string;
   description: string;
   position: TooltipPosition;
+  action?: "open-node-detail-sample";
 };
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
@@ -33,6 +34,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     title: "🔍 상세 보기",
     description: "카드를 클릭하면 상세 내용을 확인하고 편집·다운로드할 수 있어요.",
     position: "top",
+    action: "open-node-detail-sample",
   },
   {
     target: "schedule-toggle",
