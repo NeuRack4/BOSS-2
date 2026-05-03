@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] — 2026-05-03
+
+### Fixed — Sales 영수증 이미지 → 이력서로 오라우팅 버그 수정
+
+- **`ocr.py`** — OCR 프롬프트에서 "이 이미지는 서류(계약서·제안서...)" 편향 문구 제거. 중립 프롬프트로 변경해 영수증·메뉴판 이미지의 텍스트 추출 품질 개선.
+- **`_doc_classify.py`** — 영수증 분류 키워드 확장: `합계`, `합 계`, `결제금액`, `결제 금액`, `받은금액`, `거스름돈`, `현금결제`, `현금 결제`, `부가세포함`, `영수확인` 추가. 간이영수증·현금영수증·POS 영수증을 올바르게 `receipt`로 분류.
+- **`_doc_classify.py`** — 이미지 파일 fallback 추가: 키워드·LLM 모두 판정 실패 시 `other` 대신 `receipt`로 반환. 이미지가 `upload_payloads → recruit_resume_parse` 경로로 오라우팅되던 근본 원인 차단.
+- **`InlineChat.tsx`** — `receiptItems` 필터에 안전망 추가: `final_category="other"`이고 `mime_type`이 `image/*`인 파일도 영수증 경로로 처리. 백엔드 분류 실패 시에도 영수증 OCR 정상 동작.
+
 ## [4.2.0] — 2026-05-02
 
 ### Added — 온보딩 투어 가이드
