@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.2] — 2026-05-03
+
+### Fixed — Sales 서비스 매출 입력 흐름 미동작 수정
+
+- **`sales.py`** — `_VAGUE_ENTRY_RE` 정규식 확장: `수강료`, `레슨비`, `상담료`, `컨설팅비`, `강의료`, `서비스비`, `용역비`, `수수료`, `진료비`, `치료비` 추가. "수강료 입력하고 싶어", "레슨비 기록할게" 등 수량 없는 서비스 매출 입력 의도를 감지해 `SalesInputTable`을 즉시 열도록 수정.
+- **`sales.py`** — SYSTEM_PROMPT 예시에 서비스 매출 케이스 추가 ("수강료 입력하고 싶어", "레슨비 기록할게", "상담료 넣어줘").
+
 ## [4.2.1] — 2026-05-03
 
 ### Fixed — Sales 영수증 이미지 → 이력서로 오라우팅 버그 수정
