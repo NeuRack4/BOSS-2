@@ -96,6 +96,9 @@ _HEURISTICS: tuple[tuple[Category, str, tuple[str, ...]], ...] = (
     ("receipt", "영수증", (
         "영수증", "receipt", "승인번호", "승인 번호", "카드번호", "일시불",
         "가맹점", "매출전표", "신용카드 매출", "할부 개월",
+        # 간이영수증 / 현금영수증 / POS 영수증 공통 패턴
+        "합계", "합 계", "결제금액", "결제 금액", "받은금액", "받은 금액",
+        "거스름돈", "현금결제", "현금 결제", "부가세포함", "영수확인",
     )),
     # menu — 메뉴판
     ("menu", "메뉴판", (
@@ -200,6 +203,16 @@ async def _llm_classify(text_sample: str, filename: str) -> ClassificationResult
     )
 
 
+_IMAGE_EXTS: frozenset[str] = frozenset(
+    ("jpg", "jpeg", "png", "webp", "bmp", "tiff", "gif", "heic", "heif")
+)
+
+
+def _is_image_file(filename: str) -> bool:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in _IMAGE_EXTS
+
+
 async def classify_document(text: str, filename: str) -> ClassificationResult:
     """업로드 문서 분류 진입점 (async — LLM fallback 때문에)."""
     text_sample = (text or "")[:3000]
@@ -224,6 +237,16 @@ async def classify_document(text: str, filename: str) -> ClassificationResult:
     # 휴리스틱 약함 → LLM fallback
     llm = await _llm_classify(text_sample, filename or "")
     if llm:
+        # 이미지 파일인데 LLM도 "other" 판정 → 영수증으로 보정
+        # (이미지를 upload_payloads → recruit_resume_parse 로 오라우팅 방지)
+        if _is_image_file(filename or "") and llm.category == "other":
+            return ClassificationResult(
+                category="receipt",
+                doc_type="영수증",
+                confidence=0.3,
+                reason="이미지 파일 — 텍스트 분류 불확실, 영수증으로 추정",
+                source="heuristic",
+            )
         return llm
 
     # LLM 도 실패 → heuristic top 이 있으면 낮은 confidence 로라도 반환
@@ -235,6 +258,16 @@ async def classify_document(text: str, filename: str) -> ClassificationResult:
             confidence=round(min(0.5, 0.25 + 0.05 * top_score), 2),
             reason=f"키워드 약한 매치: {', '.join(matched[:3])}",
             source="heuristic",
+        )
+
+    # 이미지 파일은 최종 fallback도 "other" 대신 "receipt"
+    if _is_image_file(filename or ""):
+        return ClassificationResult(
+            category="receipt",
+            doc_type="영수증",
+            confidence=0.2,
+            reason="이미지 파일 — 키워드/LLM 모두 판정 실패, 영수증으로 추정",
+            source="fallback",
         )
 
     return ClassificationResult(

@@ -1021,7 +1021,11 @@ export const InlineChat = () => {
         }
 
         const receiptItems = nonDocs.filter(
-          (it) => it.final_category === "receipt",
+          (it) =>
+            it.final_category === "receipt" ||
+            // 백엔드 분류 실패 안전망: 이미지 파일이 "other"로 분류됐어도 영수증 경로로 처리
+            (it.final_category === "other" &&
+              (it.mime_type || "").startsWith("image/")),
         );
         const menuItems = nonDocs.filter((it) => it.final_category === "menu");
         const otherNonDocs = nonDocs.filter(
