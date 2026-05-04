@@ -555,11 +555,14 @@ async def generate_shorts(
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
             tmp.write(video_bytes)
             tmp_path = tmp.name
+        # YouTube가 Shorts로 인식하려면 제목 또는 설명에 #Shorts 필요
+        shorts_title = title if "#Shorts" in title or "#shorts" in title else f"{title} #Shorts"
+        shorts_desc = description if "#Shorts" in description or "#shorts" in description else f"{description}\n\n#Shorts".strip()
         youtube_url = await upload_to_youtube(
             account_id=account_id,
             video_path=tmp_path,
-            title=title,
-            description=description,
+            title=shorts_title,
+            description=shorts_desc,
             tags=tag_list,
             privacy_status=privacy_status,
         )
@@ -695,7 +698,7 @@ def _persist_shorts_artifact(
         artifact_id = res.data[0]["id"]
         hub_id = pick_sub_hub_id(
             sb, account_id, "marketing",
-            prefer_keywords=("Social", "social", "shorts", "video"),
+            prefer_keywords=("YouTube Shorts", "shorts", "video"),
         )
         if hub_id:
             try:
@@ -889,6 +892,43 @@ async def get_marketing_analysis(
     except Exception:
         log.exception("get_marketing_analysis LLM call failed")
         analysis_text = "분석 중 오류가 발생했습니다."
+
+    # 분석 결과를 artifact로 저장 → "성과 분석" 서브허브 컬럼에 표시
+    try:
+        from datetime import date as _date
+        from app.core.supabase import get_supabase
+        from app.agents._artifact import pick_sub_hub_id
+
+        sb = get_supabase()
+        today_str = _date.today().strftime("%Y-%m-%d")
+        artifact_title = f"마케팅 성과 분석 — {today_str}"
+
+        res = sb.table("artifacts").insert({
+            "account_id": account_id,
+            "domains": ["marketing"],
+            "kind": "artifact",
+            "type": "marketing_report",
+            "title": artifact_title,
+            "content": analysis_text,
+            "status": "active",
+            "metadata": {"period_days": days, "analyzed_date": today_str},
+        }).execute()
+
+        if res.data:
+            artifact_id = res.data[0]["id"]
+            hub_id = pick_sub_hub_id(
+                sb, account_id, "marketing",
+                prefer_keywords=("성과 분석", "분석", "report"),
+            )
+            if hub_id:
+                sb.table("artifact_edges").insert({
+                    "account_id": account_id,
+                    "parent_id": hub_id,
+                    "child_id": artifact_id,
+                    "relation": "contains",
+                }).execute()
+    except Exception:
+        log.exception("get_marketing_analysis artifact save failed")
 
     return {
         "data": {

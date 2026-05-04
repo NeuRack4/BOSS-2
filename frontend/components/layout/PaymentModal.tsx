@@ -12,7 +12,7 @@ const PLANS = [
   {
     id: "free",
     name: "Free",
-    price: "무료",
+    price: "₩0",
     priceNote: "",
     description: "개인 사용자 또는 기능 체험용",
     features: [
@@ -31,7 +31,7 @@ const PLANS = [
     id: "pro",
     name: "Pro",
     price: "29,900",
-    priceNote: "원 / 월",
+    priceNote: "₩ / Month",
     description: "모든 기능을 제한 없이 사용",
     features: [
       "AI 채팅 무제한",
@@ -52,7 +52,7 @@ const PLANS = [
     id: "business",
     name: "Enterprise",
     price: "99,900",
-    priceNote: "원 / 월",
+    priceNote: "₩ / Month",
     description: "팀 단위 사용 및 기업 고객용",
     features: [
       "Pro 플랜 모든 기능 포함",
@@ -269,6 +269,7 @@ const PaymentMethodModal = ({
       onClose={onClose}
       title="결제 수단 선택"
       widthClass="w-[400px]"
+      variant="white"
     >
       <p className="text-[13px] text-[#6b7280] mb-4">
         {planInfo.label} 플랜 ·{" "}
@@ -396,7 +397,7 @@ export const PaymentModal = ({ open, onClose }: Props) => {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="요금제" widthClass="w-[720px]">
+    <Modal open={open} onClose={onClose} title="요금제" widthClass="w-[720px]" variant="white">
       {/* 현재 플랜 */}
       <div className="mb-5 flex items-center gap-3 rounded-lg bg-[#f9fafb] border border-[#e5e7eb] px-4 py-3">
         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
@@ -446,35 +447,23 @@ export const PaymentModal = ({ open, onClose }: Props) => {
           return (
             <div
               key={plan.id}
-              className={`relative flex flex-col rounded-xl border px-4 py-5 gap-4 ${
-                isCurrent || plan.highlight
-                  ? "border-[#111827] shadow-md"
-                  : "border-[#e5e7eb]"
-              }`}
+              className="relative flex flex-col rounded-xl border border-[#e5e7eb] px-4 py-5 gap-4"
             >
-              {(isCurrent || plan.highlight) && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#111827] text-white text-[11px] font-semibold px-3 py-0.5 rounded-full">
-                  {isCurrent ? "사용 중" : "추천"}
-                </span>
-              )}
 
               <div>
-                <p className="text-[13px] font-semibold text-[#374151]">
+                <p className="text-[18px] font-bold text-[#111827]">
                   {plan.name}
                 </p>
-                <div className="mt-1 flex items-baseline gap-1">
+                <div className="mt-1 flex min-h-[36px] items-baseline gap-1">
                   <span className="text-[22px] font-bold text-[#111827]">
                     {plan.price}
                   </span>
                   {plan.priceNote && (
-                    <span className="text-[12px] text-[#9ca3af]">
+                    <span className="text-[15px] font-medium text-[#374151]">
                       {plan.priceNote}
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-[12px] text-[#6b7280]">
-                  {plan.description}
-                </p>
               </div>
 
               <div className="border-t border-[#f3f4f6]" />

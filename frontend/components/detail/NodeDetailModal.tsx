@@ -345,9 +345,9 @@ const SnsPreview = ({
         )}
         {finalHashtags.length > 0 && (
           <div className="flex flex-wrap gap-1 border-t border-[#f0ece4] px-3 py-2">
-            {finalHashtags.map((t) => (
+            {finalHashtags.map((t, i) => (
               <span
-                key={t}
+                key={`${t}-${i}`}
                 className="rounded-full bg-[#e8f0f9] px-2 py-0.5 text-[11px] text-[#3b7aba]"
               >
                 #{t}
@@ -398,9 +398,9 @@ const BlogPreview = ({
         )}
         {parsed.tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1 border-t border-[#030303]/[0.06] pt-3">
-            {parsed.tags.map((t) => (
+            {parsed.tags.map((t, i) => (
               <span
-                key={t}
+                key={`${t}-${i}`}
                 className="rounded-full bg-[#eaf4ea] px-2 py-0.5 text-[11px] text-[#2d7a2d]"
               >
                 #{t}
@@ -653,9 +653,9 @@ const ShortsVideoPreview = ({
         )}
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {tags.map((t) => (
+            {tags.map((t, i) => (
               <span
-                key={t}
+                key={`${t}-${i}`}
                 className="rounded-full bg-[#030303]/5 px-2 py-0.5 text-[11px] text-[#030303]/70"
               >
                 #{t}

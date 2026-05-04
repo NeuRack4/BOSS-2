@@ -116,24 +116,34 @@ export const InstagramPostCard = ({
     }
   };
 
-  // 이모티콘만 단독으로 한 줄 차지하는 경우 앞 줄에 붙임
-  const normalizeCaption = (text: string) =>
-    text
+  const prepareCaption = (text: string): string => {
+    // 문장 끝(! ? ~ .) 뒤 공백에 줄바꿈 삽입
+    // 마침표는 숫자·영문 약어 오탐 방지를 위해 뒤에 한글/이모지가 올 때만 적용
+    const withBreaks = text
+      .replace(/([!?~！？])\s+(?=\S)/g, "$1\n")
+      .replace(/([.])\s+(?=[가-힣\uD83C-􏰀-\uDFFF])/g, "$1\n")
+      .trim();
+
+    return withBreaks
       .split("\n")
       .reduce<string[]>((acc, line) => {
         const trimmed = line.trim();
-        const isEmojiOnly =
-          trimmed.length > 0 && !/[\w가-힣a-zA-Z0-9]/.test(trimmed);
+        if (!trimmed) return acc;
+        // 해시태그만 있는 줄 제거 (styled chips로 별도 표시)
+        if (/^(#[\w가-힣A-Za-z0-9]+\s*)+$/.test(trimmed)) return acc;
+        // 이모지만 있는 줄은 앞 줄에 붙임
+        const isEmojiOnly = !/[\w가-힣a-zA-Z0-9]/.test(trimmed);
         if (isEmojiOnly && acc.length > 0) {
           acc[acc.length - 1] = acc[acc.length - 1].trimEnd() + " " + trimmed;
         } else {
-          acc.push(line);
+          acc.push(trimmed);
         }
         return acc;
       }, [])
       .join("\n");
+  };
 
-  const caption = normalizeCaption(payload.caption || "");
+  const caption = prepareCaption(payload.caption || "");
   const hashtags = payload.hashtags || [];
 
   const isCarousel = previewUrls.length > 1;
@@ -267,8 +277,8 @@ export const InstagramPostCard = ({
               <span
                 className={
                   captionExpanded
-                    ? "whitespace-pre-line"
-                    : "line-clamp-2 whitespace-pre-line"
+                    ? "block whitespace-pre-wrap"
+                    : "line-clamp-2 block whitespace-pre-wrap"
                 }
               >
                 {caption}
