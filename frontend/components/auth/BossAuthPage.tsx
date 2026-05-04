@@ -16,13 +16,6 @@ function GoogleIcon() {
     </svg>
   );
 }
-function AppleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-      <path d="M16.365 1.43c0 1.14-.49 2.18-1.21 2.95-.78.83-2.04 1.47-3.05 1.39-.13-1.07.42-2.18 1.13-2.92.79-.83 2.16-1.46 3.13-1.42zM20.5 17.4c-.55 1.27-.81 1.83-1.52 2.95-.99 1.56-2.39 3.51-4.13 3.52-1.55.02-1.95-1.01-4.05-1-2.1.01-2.55 1.02-4.1 1-1.74-.01-3.06-1.77-4.05-3.33-2.78-4.36-3.07-9.47-1.36-12.18 1.22-1.93 3.14-3.06 4.95-3.06 1.84 0 2.99 1.01 4.51 1.01 1.47 0 2.36-1.01 4.49-1.01 1.61 0 3.32.88 4.54 2.4-3.99 2.18-3.34 7.88.72 8.7z"/>
-    </svg>
-  );
-}
 function GithubIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
@@ -30,11 +23,19 @@ function GithubIcon() {
     </svg>
   );
 }
+function KakaoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" rx="5" fill="#FEE500"/>
+      <path fill="#3C1E1E" d="M12 5.5c-4.14 0-7.5 2.69-7.5 6 0 2.12 1.41 3.99 3.56 5.08l-.9 3.37a.25.25 0 0 0 .38.27l3.93-2.6c.17.01.35.02.53.02 4.14 0 7.5-2.69 7.5-6s-3.36-6-7.5-6z"/>
+    </svg>
+  );
+}
 
 const OAUTH = [
-  { label: "Google", Icon: GoogleIcon },
-  { label: "Apple",  Icon: AppleIcon  },
-  { label: "GitHub", Icon: GithubIcon },
+  { label: "Google", Icon: GoogleIcon, provider: "google" as const },
+  { label: "GitHub", Icon: GithubIcon, provider: "github" as const },
+  { label: "Kakao",  Icon: KakaoIcon,  provider: "kakao"  as const },
 ];
 
 // ── Password strength ────────────────────────────────────────
@@ -69,17 +70,16 @@ function StrengthMeter({ pw }: { pw: string }) {
 }
 
 // ── OAuthRow ─────────────────────────────────────────────────
-function OAuthRow() {
+function OAuthRow({ onOAuth }: { onOAuth: (provider: string) => void }) {
   return (
     <div className="ba-oauth">
-      {OAUTH.map(({ label, Icon }) => (
+      {OAUTH.map(({ label, Icon, provider }) => (
         <button
           key={label}
           type="button"
           className="ba-oauth-btn"
-          disabled
-          title="Coming soon"
-          aria-label={`Continue with ${label} (coming soon)`}
+          onClick={() => onOAuth(provider)}
+          aria-label={`Continue with ${label}`}
         >
           <Icon /> {label}
         </button>
@@ -99,6 +99,14 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleOAuth = async (provider: string) => {
+    await supabase.auth.signInWithOAuth({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      provider: provider as any,
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+  };
 
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -139,7 +147,7 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={submit} style={{ display: "flex", flexDirection: "column" }}>
-      <OAuthRow />
+      <OAuthRow onOAuth={handleOAuth} />
       <div className="ba-divider">or use email</div>
 
       <div className="ba-field">
@@ -194,6 +202,14 @@ function CreateForm() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const handleOAuth = async (provider: string) => {
+    await supabase.auth.signInWithOAuth({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      provider: provider as any,
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+  };
+
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     setError(""); setMessage("");
@@ -220,7 +236,7 @@ function CreateForm() {
 
   return (
     <form onSubmit={submit} style={{ display: "flex", flexDirection: "column" }}>
-      <OAuthRow />
+      <OAuthRow onOAuth={handleOAuth} />
       <div className="ba-divider">or continue with email</div>
 
       <div className="ba-field">

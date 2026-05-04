@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ModalVariant = "sand" | "dashboard";
+type ModalVariant = "sand" | "dashboard" | "white";
 
 type ModalProps = {
   open: boolean;
@@ -37,6 +37,12 @@ const VARIANT_STYLES: Record<
     title: "text-[#030303]",
     closeBtn:
       "text-[#030303]/60 hover:bg-[#030303]/[0.05] hover:text-[#030303]",
+  },
+  white: {
+    panel: "rounded-xl border border-[#e5e7eb] bg-[#ffffff]",
+    header: "border-b border-[#e5e7eb]",
+    title: "text-[#111827]",
+    closeBtn: "text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]",
   },
 };
 

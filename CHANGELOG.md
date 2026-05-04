@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] — 2026-05-04
+
+### Added — 소셜 로그인, 마케팅 UX 전면 개선, AI 성과 분석 저장
+
+#### 인증
+- **`BossAuthPage.tsx`** — Google · GitHub · Kakao 소셜 로그인 버튼 추가. `supabase.auth.signInWithOAuth` 호출, `/auth/callback` 리다이렉트 처리.
+- **`frontend/app/auth/callback/route.ts`** — OAuth 콜백 라우트 신규 생성. 코드 교환 후 `/dashboard` 리다이렉트.
+
+#### 마케팅 에이전트 (backend)
+- **`marketing.py`** — 인스타그램/SNS 게시물 요청 시 주제 없으면 `[[SNS_POST_FORM]]` 즉시 반환하는 pre-routing 숏컷 추가 (`_SNS_FORM_TRIGGER_RE`, `_needs_sns_post_form`).
+- **`marketing.py`** — 블로그 폼 트리거 정규식 확장: `네이버 블로그`, `기획` 패턴 추가.
+- **`marketing.py`** — YouTube Shorts 요청 시 `[[SHORTS_WIZARD]]` 즉시 반환하는 기존 숏컷 정상 동작 확인.
+
+#### 마케팅 라우터 (backend)
+- **`routers/marketing.py`** — Shorts artifact 저장 시 sub-hub을 `"Social"` → `"YouTube Shorts"`로 수정. 쇼츠가 인스타그램 컬럼 대신 유튜브 쇼츠 컬럼에 표시.
+- **`routers/marketing.py`** — YouTube 업로드 시 제목·설명에 `#Shorts` 자동 삽입. YouTube Shorts 피드 노출 보장.
+- **`routers/marketing.py`** — AI 성과 분석 결과를 `marketing_report` 타입 artifact로 저장 → `"성과 분석"` 서브허브 컬럼에 자동 표시.
+
+#### 프론트엔드
+- **`modal.tsx`** — `"white"` variant 추가 (`bg-[#ffffff]`, 흰색 배경).
+- **`PaymentModal.tsx`** — 모달 배경 `#ffffff` 적용, Free 플랜 `"무료"` → `"₩0"`, 플랜명 폰트 `text-[18px] font-bold`로 확대, `Won → ₩`, 설명 텍스트 제거, 사용 중·추천 배지 및 검은 테두리 제거, 정렬 통일.
+- **`InstagramPostCard.tsx`** — 캡션 줄바꿈 수정 (`block whitespace-pre-wrap`). 문장 끝(`! ? ~ .`) 뒤 자동 줄바꿈 삽입. 캡션 내 해시태그 전용 줄 필터링으로 해시태그 중복 제거.
+- **`ShortsWizardCard.tsx`** — 기본 공개 설정 `"비공개"` → `"공개"`로 변경.
+- **`NodeDetailModal.tsx`** — 해시태그 `map` key 중복 오류 수정 (`key={t}` → `key={\`${t}-${i}\``).
+- **`OverviewTab.tsx`** — YouTube 일별 조회수 최근 15일만 표시 (`slice(-15)`). AI 성과 분석 결과 접기/펼치기 토글 추가.
+
 ## [4.2.3] — 2026-05-04
 
 ### Fixed — Sales 매출 목표 저장 미동작 + 체크리스트 칸반 모달 미생성 수정

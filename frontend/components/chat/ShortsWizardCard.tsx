@@ -78,7 +78,7 @@ export const ShortsWizardCard = ({
   const [aiMetaFilled, setAiMetaFilled] = useState(false);
   const [duration, setDuration] = useState(payload.duration ?? 3);
   const [privacy, setPrivacy] = useState<"private" | "unlisted" | "public">(
-    "private",
+    "public",
   );
 
   // youtube 연결 상태

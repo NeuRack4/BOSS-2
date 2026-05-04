@@ -1797,8 +1797,26 @@ def describe(account_id: str) -> list[dict]:
 
 
 # ── 폼 pre-routing 패턴 ──────────────────────────────────────────────────
+_SNS_FORM_TRIGGER_RE = _re.compile(
+    r"(인스타(그램)?\s*(피드|게시물|포스트|콘텐츠|글)?\s*(기획|만들어|만들어줘|만들어\s*줘|작성|작성해줘|써줘|써\s*줘|부탁|요청)"
+    r"|sns\s*(게시물|포스트|피드|콘텐츠)?\s*(기획|만들어|작성|써줘|부탁|요청))",
+    _re.IGNORECASE,
+)
+_SNS_TOPIC_PRESENT_RE = _re.compile(
+    r"(주제\s*[:：]|바로\s*완성|아래\s*정보로|키워드\s*[:：]|제품\s*[:：]|상품\s*[:：]|메뉴\s*[:：])",
+    _re.IGNORECASE,
+)
+
+
+def _needs_sns_post_form(message: str) -> bool:
+    """주제 없이 SNS/인스타 게시물을 요청하는 메시지인지 판별."""
+    return bool(_SNS_FORM_TRIGGER_RE.search(message)) and not bool(
+        _SNS_TOPIC_PRESENT_RE.search(message)
+    )
+
+
 _BLOG_FORM_TRIGGER_RE = _re.compile(
-    r"블로그\s*(포스트|글|게시글|포스팅|작성|써줘|써\s*줘|작성해줘|만들어줘|만들어\s*줘|부탁|요청)",
+    r"(네이버\s*)?블로그\s*(포스트|글|게시글|포스팅|작성|써줘|써\s*줘|작성해줘|만들어줘|만들어\s*줘|기획|기획해줘|기획해\s*줘|부탁|요청)",
     _re.IGNORECASE,
 )
 _BLOG_TOPIC_PRESENT_RE = _re.compile(
@@ -1812,6 +1830,17 @@ def _needs_blog_post_form(message: str) -> bool:
     return bool(_BLOG_FORM_TRIGGER_RE.search(message)) and not bool(
         _BLOG_TOPIC_PRESENT_RE.search(message)
     )
+
+
+_SHORTS_TRIGGER_RE = _re.compile(
+    r"(유튜브\s*(쇼츠|shorts|영상|동영상)|쇼츠\s*(만들|작성|제작|영상|부탁|요청)|shorts\s*(만들|작성|제작))",
+    _re.IGNORECASE,
+)
+
+
+def _needs_shorts_wizard(message: str) -> bool:
+    """쇼츠/유튜브 영상 제작 요청 메시지인지 판별."""
+    return bool(_SHORTS_TRIGGER_RE.search(message))
 
 
 _REPORT_TRIGGER_RE = _re.compile(
@@ -1838,6 +1867,26 @@ async def run(
     image_urls: list[str] | None = None,
     allow_naver_upload: bool = False,
 ) -> str:
+    # 쇼츠/유튜브 영상 요청 → 마법사 즉시 반환
+    if _needs_shorts_wizard(message):
+        return await run_shorts_wizard(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
+    # 인스타그램/SNS 게시물 요청인데 주제 없음 → 폼 즉시 반환
+    if _needs_sns_post_form(message):
+        return await run_sns_post_form(
+            account_id=account_id,
+            message=message,
+            history=history,
+            long_term_context=long_term_context,
+            rag_context=rag_context,
+        )
+
     # 블로그 포스트 요청인데 주제 없음 → 폼 즉시 반환
     if _needs_blog_post_form(message):
         return await run_blog_post_form(

@@ -1,7 +1,8 @@
 // frontend/components/marketing/tabs/OverviewTab.tsx
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Sparkles } from "lucide-react";
+import { useState } from "react";
 import type {
   DailyInstagramData,
   DailyYoutubeData,
@@ -226,6 +227,8 @@ function AnalysisPanel({
   analysis: MarketingAnalysis | null;
   loading: boolean;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   if (loading) {
     return (
       <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50 p-5">
@@ -248,60 +251,72 @@ function AnalysisPanel({
     <div className="space-y-5">
       {/* AI 분석 텍스트 */}
       <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
-        <div className="mb-2 flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-          <span className="text-xs font-semibold text-violet-500">AI 분석</span>
-        </div>
-        <div className="prose prose-sm max-w-none text-slate-700 [&_h2]:mb-1 [&_h2]:mt-3 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-slate-700 [&_p]:mb-2 [&_p]:text-sm [&_p]:leading-relaxed [&_strong]:text-slate-800 [&_ul]:mb-2 [&_ul]:pl-4 [&_li]:text-sm">
-          {analysis.text.split("\n").map((line, i) => {
-            if (line.startsWith("## ") || line.startsWith("### ")) {
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="mb-2 flex w-full items-center justify-between gap-1.5"
+        >
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+            <span className="text-xs font-semibold text-violet-500">AI 분석</span>
+          </div>
+          {collapsed
+            ? <ChevronDown className="h-3.5 w-3.5 text-violet-400" />
+            : <ChevronUp className="h-3.5 w-3.5 text-violet-400" />
+          }
+        </button>
+        {!collapsed && (
+          <div className="prose prose-sm max-w-none text-slate-700 [&_h2]:mb-1 [&_h2]:mt-3 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-slate-700 [&_p]:mb-2 [&_p]:text-sm [&_p]:leading-relaxed [&_strong]:text-slate-800 [&_ul]:mb-2 [&_ul]:pl-4 [&_li]:text-sm">
+            {analysis.text.split("\n").map((line, i) => {
+              if (line.startsWith("## ") || line.startsWith("### ")) {
+                return (
+                  <p
+                    key={i}
+                    className="mt-3 mb-1 text-sm font-semibold text-slate-700"
+                  >
+                    {line.replace(/^#+\s/, "")}
+                  </p>
+                );
+              }
+              if (line.startsWith("**") && line.endsWith("**")) {
+                return (
+                  <p key={i} className="text-sm font-semibold text-slate-700">
+                    {line.slice(2, -2)}
+                  </p>
+                );
+              }
+              if (line.startsWith("- ")) {
+                return (
+                  <p key={i} className="flex gap-1.5 text-sm text-slate-700">
+                    <span className="shrink-0 text-slate-400">•</span>
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: line
+                          .slice(2)
+                          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                      }}
+                    />
+                  </p>
+                );
+              }
+              if (line.trim() === "") return <div key={i} className="h-1" />;
               return (
                 <p
                   key={i}
-                  className="mt-3 mb-1 text-sm font-semibold text-slate-700"
-                >
-                  {line.replace(/^#+\s/, "")}
-                </p>
+                  className="text-sm leading-relaxed text-slate-700"
+                  dangerouslySetInnerHTML={{
+                    __html: line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                  }}
+                />
               );
-            }
-            if (line.startsWith("**") && line.endsWith("**")) {
-              return (
-                <p key={i} className="text-sm font-semibold text-slate-700">
-                  {line.slice(2, -2)}
-                </p>
-              );
-            }
-            if (line.startsWith("- ")) {
-              return (
-                <p key={i} className="flex gap-1.5 text-sm text-slate-700">
-                  <span className="shrink-0 text-slate-400">•</span>
-                  <span
-                    dangerouslySetInnerHTML={{
-                      __html: line
-                        .slice(2)
-                        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
-                    }}
-                  />
-                </p>
-              );
-            }
-            if (line.trim() === "") return <div key={i} className="h-1" />;
-            return (
-              <p
-                key={i}
-                className="text-sm leading-relaxed text-slate-700"
-                dangerouslySetInnerHTML={{
-                  __html: line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
-                }}
-              />
-            );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
 
       {/* 일별 데이터 표 */}
-      <YoutubeTable rows={analysis.youtube_daily} />
-      <InstagramTable rows={analysis.instagram_daily} />
+      {!collapsed && <YoutubeTable rows={analysis.youtube_daily.slice(-15)} />}
+      {!collapsed && <InstagramTable rows={analysis.instagram_daily} />}
     </div>
   );
 }
