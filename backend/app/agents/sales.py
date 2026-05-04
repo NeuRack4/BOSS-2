@@ -735,7 +735,18 @@ async def run_sales_checklist(
         f"'{topic}' 주제로 매출·운영 체크리스트(checklist)를 작성해주세요. write_checklist로 저장하세요.\n\n"
         f"원본 사용자 요청: {message}"
     )
-    return await _run_sales_agent(account_id, synthetic, history, rag_context, long_term_context, system)
+    title = f"{topic} 체크리스트"
+    await _run_sales_agent(
+        account_id, synthetic, history, rag_context, long_term_context, system,
+        fallback_result_data={
+            "action": "write_checklist",
+            "title": title,
+            "content": "",
+            "topic": topic,
+            "sub_domain": "Reports",
+        },
+    )
+    return f"**{title}**을 저장했습니다. 칸반 Reports에서 상세 내용을 확인하세요."
 
 
 @_traceable(name="sales.run_cost_entry")
@@ -1447,20 +1458,38 @@ async def run_set_revenue_goal(
     """월 매출 목표를 profiles.profile_meta.monthly_sales_goal 에 저장."""
     from app.core.supabase import get_supabase
 
-    # 플래너가 monthly_goal을 못 넘긴 경우 message에서 직접 파싱
+    # 플래너가 monthly_goal을 못 넘긴 경우 message + history에서 직접 파싱
     if not monthly_goal:
-        full_text = message + " " + " ".join(
-            m.get("content", "") for m in (history or [])[-4:] if isinstance(m.get("content"), str)
-        )
         import re as _re
-        m = _re.search(r"(\d+(?:\.\d+)?)\s*(억|천만|백만|만)\s*원?", full_text)
-        if m:
-            num, unit = float(m.group(1)), m.group(2)
-            monthly_goal = int(num * {"억": 100_000_000, "천만": 10_000_000, "백만": 1_000_000, "만": 10_000}[unit])
-        else:
-            m2 = _re.search(r"(\d{4,})\s*원", full_text)
-            if m2:
-                monthly_goal = int(m2.group(1))
+        search_parts = [message]
+        for hist_msg in (history or [])[-6:]:
+            content = hist_msg.get("content", "")
+            if isinstance(content, str):
+                search_parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        search_parts.append(block.get("text", ""))
+        full_text = " ".join(search_parts)
+
+        # 큰 단위부터 순서대로 시도 (천만 > 백만 > 만 순으로 매칭해야 오파싱 방지)
+        _AMOUNT_PATTERNS = [
+            (r"(\d+(?:\.\d+)?)\s*억", 100_000_000),
+            (r"(\d+(?:\.\d+)?)\s*천\s*만", 10_000_000),
+            (r"(\d+(?:\.\d+)?)\s*백\s*만", 1_000_000),
+            (r"(\d+(?:\.\d+)?)\s*만", 10_000),
+            (r"(\d{4,})", 1),
+        ]
+        for _pat, _mul in _AMOUNT_PATTERNS:
+            _m = _re.search(_pat, full_text)
+            if _m:
+                try:
+                    _val = int(float(_m.group(1)) * _mul)
+                    if _val > 0:
+                        monthly_goal = _val
+                        break
+                except (ValueError, OverflowError):
+                    continue
 
     try:
         monthly_goal = int(monthly_goal)
@@ -1503,8 +1532,10 @@ def describe(account_id: str) -> list[dict]:
             "name": "sales_set_revenue_goal",
             "description": (
                 "이번 달 매출 목표 금액을 저장. "
-                "'이번 달 목표 500만원', '매출 목표 설정', '목표 1000만원으로 해줘' 등 "
-                "목표 금액이 포함된 설정 요청 시 호출."
+                "'이번 달 목표 500만원', '매출 목표 설정', '목표 1000만원으로 해줘', "
+                "'500만원 목표', '이번달 목표 300만', '목표 설정해줘 500만' 등 "
+                "목표 금액이 포함된 설정 요청 시 호출. "
+                "monthly_goal은 반드시 원(KRW) 단위 정수로 변환: 500만원→5000000, 1000만원→10000000"
             ),
             "handler": run_set_revenue_goal,
             "parameters": {
@@ -1512,7 +1543,7 @@ def describe(account_id: str) -> list[dict]:
                 "properties": {
                     "monthly_goal": {
                         "type": "integer",
-                        "description": "월 목표 매출 금액 (원 단위 정수). 예: 500만원 → 5000000",
+                        "description": "월 목표 매출 금액 (원 단위 정수). 예: 500만원 → 5000000, 1000만원 → 10000000, 3억 → 300000000",
                     },
                 },
                 "required": ["monthly_goal"],

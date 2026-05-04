@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.3] — 2026-05-04
+
+### Fixed — Sales 매출 목표 저장 미동작 + 체크리스트 칸반 모달 미생성 수정
+
+- **`sales.py`** — `run_set_revenue_goal`: history content가 list 형식(멀티모달 메시지)일 때 금액 파싱 실패하던 문제 수정. 단일 regex 대신 억→천만→백만→만→숫자 순서로 패턴을 순차 시도하는 방식으로 교체. capability description에 `'500만원 목표'`, `'이번달 목표 300만'` 등 예시 추가 및 `monthly_goal` 단위 변환 안내 명시.
+- **`sales.py`** — `run_sales_checklist`: `fallback_result_data` 없이 `_run_sales_agent`를 호출해 DeepAgent가 `write_checklist` tool을 미호출 시 artifact가 저장되지 않던 문제 수정. `run_price_strategy`와 동일한 패턴으로 `fallback_result_data` 추가, 항상 artifact가 저장되도록 보장. 반환 메시지를 "칸반 Reports에서 확인하세요" 고정 문구로 변경.
+
 ## [4.2.2] — 2026-05-03
 
 ### Fixed — Sales 서비스 매출 입력 흐름 미동작 수정
