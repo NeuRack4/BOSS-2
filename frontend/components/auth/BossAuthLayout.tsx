@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { DM_Sans, DM_Mono, Instrument_Serif } from "next/font/google";
 
 const dmSans = DM_Sans({
@@ -77,8 +78,7 @@ export const BossAuthLayout = ({
         {/* top row */}
         <div className="ba-stage-top">
           <div className="ba-logo">
-            <span className="ba-mark">B</span>
-            <span>BOSS</span>
+            <Image src="/boss-logo.png" alt="BOSS" width={120} height={32} style={{ objectFit: "contain" }} />
           </div>
           <div className="ba-pill">
             <span className="ba-pill-dot" />

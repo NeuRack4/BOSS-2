@@ -1,8 +1,42 @@
-# BOSS-2
+# BOSS - Agent Harness 기반 창업자 가게/회사 자율 운영 플랫폼
 
 ![version](https://img.shields.io/badge/version-4.2.0-blue)
 
 > AI 기반 소상공인 자율 운영 플랫폼. 채팅 하나로 채용·마케팅·매출·서류를 자동 관리합니다.
+
+## Team
+
+<table border="1" cellpadding="20" cellspacing="0" style="border-collapse:collapse; width:100%;">
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/members/1.png" width="120" height="120" alt="송진우" /><br/><br/>
+      <b>송진우</b><br/>
+      <sub>Song Jinu</sub><br/>
+      <sup>Agent Developer</sup><br/><br/>
+      성결대학교 컴퓨터공학전공<br/>
+      자바 풀스택 개발자<br/>
+      팀 프로젝트 팀장 다수 경험
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/members/2.png" width="120" height="120" alt="김재현" /><br/><br/>
+      <b>김재현</b><br/>
+      <sub>Kim Jae Hyeon</sub><br/>
+      <sup>Project Leader</sup><br/><br/>
+      숭실대학교 철학 석사<br/>
+      IBMxREDHAT 개발자 과정 수료<br/>
+      전) ZIPIDA — AI 연구원
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/members/3.png" width="120" height="120" alt="이민혜" /><br/><br/>
+      <b>이민혜</b><br/>
+      <sub>Lee Min Hye</sub><br/>
+      <sup>Agent Developer</sup><br/><br/>
+      새올행정시스템 유지보수<br/>
+      자바 풀스택 개발자<br/>
+      UI 사업부 프로젝트 참여
+    </td>
+  </tr>
+</table>
 
 ![Architecture](docs/architectures.png)
 ![Dashboard](docs/dashboard-layout-1.png)
